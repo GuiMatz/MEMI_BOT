@@ -4,31 +4,30 @@ MeMi BOT na bandeja do Windows.
 Coloque este arquivo na MESMA pasta do memi_bot.py e do token.txt.
 
 Instalar as dependências (uma vez):
-    pip install pystray pillow
+    python -m pip install -r requirements-tray.txt
 
 Comandos:
     python memi_tray.py                -> roda agora (com ícone na bandeja)
     python memi_tray.py --instalar     -> passa a abrir sozinho quando o Windows ligar
     python memi_tray.py --desinstalar  -> deixa de abrir sozinho
 
-Sem janela de console: os erros vão para o arquivo memi.log (menu do ícone -> "Ver log").
+Sem janela de console: o log é o mesmo do memi_bot.py, o arquivo memi_bot.log
+(menu do ícone -> "Ver log"). O tray e o `python memi_bot.py` usam a mesma trava, então
+não dá para abrir os dois ao mesmo tempo.
 """
 
 import asyncio
 import logging
 import os
-import socket
 import sys
 import threading
-import traceback
 from pathlib import Path
 
 PASTA = Path(__file__).resolve().parent
 os.chdir(PASTA)  # token.txt e memi.db são procurados na pasta do bot
 sys.path.insert(0, str(PASTA))
 
-ARQ_LOG = PASTA / "memi.log"
-PORTA_UNICA = 47653  # impede abrir o bot duas vezes (senão ele responderia em dobro)
+ARQ_LOG = PASTA / "memi_bot.log"
 NOME_ATALHO = "MeMiBOT.vbs"
 
 
@@ -66,18 +65,15 @@ if len(sys.argv) > 1:
     sys.exit(0)
 
 # --- a partir daqui: rodar de verdade --------------------------------------
-# sem console (pythonw) não existe stdout/stderr: manda tudo pro memi.log
-_log = open(ARQ_LOG, "a", encoding="utf-8", buffering=1)
+import memi_bot  # noqa: E402  (só importa; o bot não roda sozinho)
+
+memi_bot.configurar_log(ARQ_LOG)  # o mesmo log rotativo do memi_bot.py
+# sem console (pythonw) não existe stdout/stderr: cada linha impressa vira um registro no log
 if sys.stdout is None or sys.stderr is None or Path(sys.executable).name.lower() == "pythonw.exe":
-    sys.stdout = sys.stderr = _log
-logging.basicConfig(
-    level=logging.WARNING, stream=_log, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
-)
+    sys.stdout = sys.stderr = memi_bot.FluxoLog()
 
 import pystray  # noqa: E402
 from PIL import Image, ImageDraw  # noqa: E402
-
-import memi_bot  # noqa: E402  (só importa; o bot não roda sozinho)
 
 estado = {"loop": None, "icone": None}
 
@@ -94,10 +90,11 @@ def rodar_bot():
     async def principal():
         estado["loop"] = asyncio.get_running_loop()
         try:
-            async with memi_bot.bot:
-                await memi_bot.bot.start(memi_bot.TOKEN)
+            await memi_bot.conectar()
+        except memi_bot.discord.PrivilegedIntentsRequired:
+            logging.error(memi_bot.MSG_INTENT_MENSAGENS)
         except Exception:  # noqa: BLE001
-            traceback.print_exc()
+            logging.exception("O bot não pôde continuar.")
 
     asyncio.run(principal())
     if estado["icone"]:  # o bot parou sozinho (ex.: token errado): fecha o ícone também
@@ -124,14 +121,12 @@ def ver_log(icone, item):
 
 def main():
     if not memi_bot.TOKEN or memi_bot.TOKEN == "COLE_SEU_TOKEN_AQUI":
-        print("Falta o token.txt na pasta do bot.")
+        logging.error("Falta o token.txt na pasta do bot.")
         return
 
-    trava = socket.socket()
-    try:
-        trava.bind(("127.0.0.1", PORTA_UNICA))
-    except OSError:
-        print("O MeMi BOT já está rodando.")
+    trava = memi_bot.travar_instancia()  # mantida viva até o fim do main()
+    if trava is None:
+        logging.error("O MeMi BOT já está rodando.")
         return
 
     threading.Thread(target=rodar_bot, daemon=True).start()
