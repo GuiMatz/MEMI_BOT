@@ -25,6 +25,15 @@ LARGURA = 1200
 PASTA_FONTES = Path(__file__).with_name("assets") / "fonts"
 FONTE_MANROPE = PASTA_FONTES / "Manrope.ttf"
 FONTE_DEJAVU = PASTA_FONTES / "DejaVuSans.ttf"
+PASTA_BANNERS = Path(__file__).with_name("assets") / "banners"
+FUNDO_CARTAO = PASTA_BANNERS / "cartao.jpg"  # fundo fixo do mm!cartao (1200x400)
+BANNER_AJUDA = PASTA_BANNERS / "ajuda.jpg"  # banner do mm!help (1200x400)
+# Lentes dos óculos no fundo do cartão: (centro x, centro y, raio). O avatar entra na direita.
+LENTE_DIREITA = (238.5, 199.5, 88.5)
+LENTE_ESQUERDA = (1.5, 204.5, 88.5)
+LOGO_CARTAO = (930, 0, 1200, 64)  # área do logo no fundo: fica fora do véu escuro
+# O Discord mostra a imagem de 1200 px com ~440 px: nenhum texto abaixo deste corpo.
+TEXTO_MINIMO = 24
 PESOS = {"fino": 300, "medio": 500, "semi": 600, "negrito": 700, "forte": 800}
 
 TINTA = (16, 17, 24)
@@ -146,7 +155,7 @@ def _cortar_largura(txt, peso, tam, maximo, tracking=0):
     return txt
 
 
-def ajustar(txt, peso, tam, maximo, minimo=14):
+def ajustar(txt, peso, tam, maximo, minimo=TEXTO_MINIMO):
     """Reduz o corpo (e, por último, corta com …) até caber em `maximo` px. Devolve (texto, corpo)."""
     txt = limpo(txt)
     corpo = tam
@@ -280,29 +289,52 @@ def _disco(base, cx, cy, raio, avatar, acento, giro=30):
     return base
 
 
-def _rotulo(base, xy, txt, acento):
+def _rotulo(base, xy, txt, acento, tam=26):
     """Marcador de seção: filete de acento + texto espaçado."""
     camada = _camada(base)
     ImageDraw.Draw(camada).rounded_rectangle(
-        (_s(xy[0]), _s(xy[1] - 12), _s(xy[0] + 22), _s(xy[1] - 9)),
-        radius=_s(1.5),
+        (_s(xy[0]), _s(xy[1] - tam * 0.62), _s(xy[0] + 30), _s(xy[1] - tam * 0.44)),
+        radius=_s(2),
         fill=_rgba(acento),
     )
     base = Image.alpha_composite(base, camada)
-    return texto_espacado(base, (xy[0] + 32, xy[1]), txt, "negrito", 14, SLATE, 2.6)
+    return texto_espacado(base, (xy[0] + 42, xy[1]), txt, "negrito", tam, SLATE, 3)
 
 
-def _etiqueta(base, xy, txt, acento, maximo=520):
-    """Etiqueta de borda fina, sem preenchimento (título, gênero, comando); corta se for longa."""
-    txt = _cortar_largura(limpo(txt).upper(), "semi", 16, maximo, 1.6)
+def _etiqueta(base, xy, txt, acento, maximo=560, icone=None, tam=26):
+    """Etiqueta de borda fina (título, gênero, patente) com a insígnia opcional à esquerda;
+    corta o texto se for longo. `xy` = canto superior esquerdo."""
     x, y = xy
-    caixa = (x, y - 24, x + largura(txt, "semi", 16, 1.6) + 28, y + 9)
+    altura = tam + 26
+    lado = altura - 10 if icone else 0
+    folga = 16 + (lado + 10 if icone else 0)
+    txt = _cortar_largura(limpo(txt).upper(), "semi", tam, maximo - folga - 16, 1.6)
+    caixa = (x, y, x + folga + largura(txt, "semi", tam, 1.6) + 16, y + altura)
     camada = _camada(base)
     ImageDraw.Draw(camada).rounded_rectangle(
-        [_s(v) for v in caixa], radius=_s(9), outline=_rgba(acento, 200), width=max(1, _s(1.4))
+        [_s(v) for v in caixa],
+        radius=_s(altura / 2),
+        fill=_rgba(TINTA, 150),
+        outline=_rgba(acento, 220),
+        width=max(1, _s(1.6)),
     )
     base = Image.alpha_composite(base, camada)
-    return texto_espacado(base, (x + 14, y - 3), txt, "semi", 16, acento, 1.6)
+    if icone:
+        try:
+            img = Image.open(io.BytesIO(icone)).convert("RGBA")
+            img.thumbnail((_s(lado), _s(lado)), Image.LANCZOS)
+            base.alpha_composite(
+                img,
+                (
+                    _s(x + 10) + (_s(lado) - img.width) // 2,
+                    _s(y + 5) + (_s(lado) - img.height) // 2,
+                ),
+            )
+        except Exception:  # noqa: BLE001 - insígnia inválida: só o texto
+            pass
+    return texto_espacado(
+        base, (x + folga, y + altura / 2 + tam * 0.36), txt, "semi", tam, acento, 1.6
+    )
 
 
 def _barra(base, x, y, larg, alt, prop, acento):
@@ -334,7 +366,7 @@ def _cantos(img, raio):
 def _selo(base, acento):
     """Assinatura discreta no canto superior direito."""
     w = base.width // SS
-    base = texto_espacado(base, (w - 44, 44), "MEMI BOT", "negrito", 13, SLATE, 2.8, "r")
+    base = texto_espacado(base, (w - 46, 47), "MEMI BOT", "negrito", 22, SLATE, 3, "r")
     camada = _camada(base)
     ImageDraw.Draw(camada).ellipse((_s(w - 34), _s(34), _s(w - 26), _s(42)), fill=_rgba(acento))
     return Image.alpha_composite(base, camada)
@@ -427,10 +459,65 @@ def _prop(avanco, meta, nivel=1):
     return 1.0 if nivel >= 100 or meta <= 0 else avanco / meta
 
 
+def _foto(caminho, w, h):
+    """Imagem de fundo redimensionada para a escala de desenho, ou None se faltar/for inválida."""
+    try:
+        return Image.open(caminho).convert("RGBA").resize((_s(w), _s(h)), Image.LANCZOS)
+    except Exception:  # noqa: BLE001 - sem o arquivo, o fundo desenhado assume
+        return None
+
+
+def _veu(base, inicio, fim, alfa):
+    """Escurece da esquerda para a direita (de `inicio` a `fim` px): contraste sobre a foto."""
+    W, H = base.size
+    linha = Image.new("L", (W, 1), 0)
+    for x in range(W):
+        t = (x / SS - inicio) / max(1, fim - inicio)
+        linha.putpixel((x, 0), int(alfa * max(0.0, min(1.0, t))))
+    veu = Image.new("RGBA", (W, H), _rgba(TINTA))
+    veu.putalpha(linha.resize((W, H)))
+    return Image.alpha_composite(base, veu)
+
+
+def _lente(base, lente, avatar, acento):
+    """Avatar recortado dentro da lente, com um aro fino na cor de acento."""
+    cx, cy, r = lente
+    lado = _s(2 * r)
+    base.alpha_composite(_avatar_redondo(avatar, lado, acento), (_s(cx - r), _s(cy - r)))
+    camada = _camada(base)
+    ImageDraw.Draw(camada).ellipse(
+        (_s(cx - r), _s(cy - r), _s(cx + r), _s(cy + r)),
+        outline=_rgba(acento, 230),
+        width=max(1, _s(3)),
+    )
+    return Image.alpha_composite(base, camada)
+
+
+def _lente_escura(base, lente):
+    """Lente de vidro escuro com um reflexo suave."""
+    cx, cy, r = lente
+    camada = _camada(base)
+    d = ImageDraw.Draw(camada)
+    d.ellipse((_s(cx - r), _s(cy - r), _s(cx + r), _s(cy + r)), fill=(14, 14, 20, 245))
+    d.arc(
+        (_s(cx - r * 0.72), _s(cy - r * 0.72), _s(cx + r * 0.72), _s(cy + r * 0.72)),
+        200,
+        260,
+        fill=_rgba(BRANCO, 60),
+        width=_s(5),
+    )
+    return Image.alpha_composite(base, camada)
+
+
+def _legenda_xp(nivel, avanco, meta):
+    return "nível máximo" if nivel >= 100 else f"{_milhar(avanco)} / {_milhar(meta)} XP"
+
+
 # ------------------------------------------------------------------ imagens
 def gerar_cartao(dados, avatar_bytes=None):
-    """Cartão de perfil (1200x400). `dados`: nome, nome_alt, titulo, nivel, avanco, meta, mensagens,
-    pedidos, roletadas, pos_mensagens, pos_pedidos, pos_mudae, cor (int RGB ou None)."""
+    """Cartão de perfil (1200x400) sobre o fundo fixo, com o avatar na lente dos óculos.
+    `dados`: nome, nome_alt, titulo, insignia (PNG ou None), nivel, avanco, meta, patente,
+    cor_patente, mensagens, pedidos, roletadas, cor (int RGB ou None)."""
     _exigir()
     acento = _rgb(dados.get("cor"))
     nivel, avanco, meta = (
@@ -438,70 +525,90 @@ def gerar_cartao(dados, avatar_bytes=None):
         int(dados.get("avanco", 0)),
         int(dados.get("meta", 1)),
     )
-    base = _fundo(1200, 400, acento)
-    base = _disco(base, 240, 200, 168, avatar_bytes, acento)
-    x = 500
-    nome, corpo = _nome(dados, 620, "forte", 52)
+    foto = _foto(FUNDO_CARTAO, 1200, 400)
+    if foto is None:
+        base = _veu(_fundo(1200, 400, acento), 330, 620, 170)
+    else:
+        base = _veu(foto, 330, 620, 170)
+        # Recoloca só as letras do logo (pixels claros), sem o retângulo do fundo.
+        logo = tuple(_s(v) for v in LOGO_CARTAO)
+        recorte = foto.crop(logo)
+        mascara = recorte.convert("L").point(lambda v: 255 if v > 120 else 0)
+        base.paste(recorte, logo[:2], mascara.filter(ImageFilter.GaussianBlur(1)))
+    base = _lente(base, LENTE_DIREITA, avatar_bytes, acento)
+    base = _lente_escura(base, LENTE_ESQUERDA)
+    x, direita = 410, 1160
+    nome, corpo = _nome(dados, direita - x, "forte", 62)
     base = texto(base, (x, 106), nome, "forte", corpo)
-    if limpo(dados.get("titulo")):
-        base = _etiqueta(base, (x, 156), dados["titulo"], acento)
-    base = texto_espacado(base, (x, 202), "NÍVEL", "negrito", 14, SLATE, 2.6)
-    base = texto(base, (x - 3, 262), str(nivel), "forte", 62)
-    lar = largura(str(nivel), "forte", 62)
-    base = _barra(base, x + lar + 24, 240, 600 - lar - 24, 7, _prop(avanco, meta, nivel), acento)
-    legenda = "nível máximo" if nivel >= 100 else f"{avanco}/{meta} XP"
-    base = texto(base, (x + 600, 226), legenda, "medio", 15, SLATE, "rs")
+    patente = limpo(dados.get("patente"))
+    chip = limpo(dados.get("titulo")) or patente
+    if chip:
+        icone = dados.get("insignia") if limpo(dados.get("titulo")) else None
+        base = _etiqueta(base, (x, 122), chip, acento, direita - x, icone)
+    base = texto_espacado(base, (x, 214), "NÍVEL", "negrito", 24, SLATE, 3)
+    base = texto(base, (x - 4, 286), str(nivel), "forte", 76)
+    bx = x + largura(str(nivel), "forte", 76) + 28
+    if patente:
+        cor_patente = _rgb(dados.get("cor_patente") or 0x9AA0A6)
+        patente_ok, corpo_p = ajustar(patente, "negrito", 32, direita - bx)
+        base = texto(base, (bx, 234), patente_ok, "negrito", corpo_p, cor_patente)
+    base = _barra(base, bx, 248, direita - bx, 12, _prop(avanco, meta, nivel), acento)
+    base = texto(base, (direita, 286), _legenda_xp(nivel, avanco, meta), "medio", 26, SLATE, "rs")
     colunas = (
-        ("mensagens", dados.get("mensagens", 0), dados.get("pos_mensagens", "")),
-        ("pedidos", dados.get("pedidos", 0), dados.get("pos_pedidos", "")),
-        ("roletadas", dados.get("roletadas", 0), dados.get("pos_mudae", "")),
+        (dados.get("mensagens", 0), "mensagens"),
+        (dados.get("pedidos", 0), "músicas"),
+        (dados.get("roletadas", 0), "roletadas"),
     )
-    for i, (rotulo, valor, posicao) in enumerate(colunas):
-        cx = x + i * 205
-        base = texto(base, (cx, 330), _milhar(valor), "forte", 34)
-        base = texto(base, (cx, 355), rotulo, "medio", 15, SLATE)
-        if limpo(posicao):
-            base = texto(base, (cx, 378), posicao, "semi", 14, acento)
-    return _png(_finalizar(_selo(base, acento)))
+    for i, (valor, rotulo) in enumerate(colunas):
+        cx = x + i * 255
+        numero, corpo_n = ajustar(_milhar(valor), "forte", 44, 235)
+        base = texto(base, (cx, 342), numero, "forte", corpo_n)
+        base = texto(base, (cx, 376), rotulo, "medio", 26, SLATE)
+    return _png(_finalizar(base))
 
 
 def gerar_nivel(dados, avatar_bytes=None):
-    """Aviso de level up (1200x400). `dados`: nome, nome_alt, nivel (o anunciado), atual, avanco,
-    meta, patente, cor_patente, trocou (nova patente), cor."""
+    """Aviso de level up (1200x400). `dados`: nome, nome_alt, nivel (o anunciado), patente,
+    cor_patente, patente_minimo, trocou (nova patente), cor. Aceita também atual/avanco/meta
+    (ignorados: a barra fica no texto da mensagem)."""
     _exigir()
     acento = _rgb(dados.get("cor"))
     anunciado = int(dados.get("nivel", 1))
-    nivel, avanco, meta = (
-        int(dados.get("atual", anunciado)),
-        int(dados.get("avanco", 0)),
-        int(dados.get("meta", 1)),
-    )
     base = _fundo(1200, 400, acento)
-    base = _disco(base, 240, 200, 168, avatar_bytes, acento)
-    x = 500
-    base = _rotulo(base, (x, 84), "Nova patente" if dados.get("trocou") else "Level up", acento)
+    base = _disco(base, 225, 200, 160, avatar_bytes, acento)
+    x = 470
+    base = _rotulo(base, (x, 80), "Nova patente" if dados.get("trocou") else "Level up", acento)
     numero = str(anunciado)
-    base = texto(base, (x - 6, 246), numero, "forte", 176)
-    lar = largura(numero, "forte", 176)
-    base = texto_espacado(base, (x + lar + 22, 246), "NÍVEL", "negrito", 30, acento, 5)
-    nome, corpo = _nome(dados, 640, "negrito", 32)
-    base = texto(base, (x, 306), nome, "negrito", corpo)
-    base = _barra(base, x, 326, 560, 7, _prop(avanco, meta, nivel), acento)
-    legenda = (
-        "Nível máximo" if nivel >= 100 else f"Nível {nivel}  ·  {avanco}/{meta} XP para o próximo"
-    )
-    base = texto(base, (x, 364), legenda, "medio", 17, SLATE)
+    base = texto(base, (x - 6, 236), numero, "forte", 164)
+    lar = largura(numero, "forte", 164)
+    base = texto_espacado(base, (x + lar + 22, 236), "NÍVEL", "negrito", 36, acento, 5)
+    nome, corpo = _nome(dados, 680, "negrito", 44)
+    base = texto(base, (x, 298), nome, "negrito", corpo)
+    patente = limpo(dados.get("patente"))
+    if patente:
+        cor_patente = dados.get("cor_patente") or 0x9AA0A6
+        emblema = gerar_emblema(
+            {"cor": cor_patente, "minimo": dados.get("patente_minimo", "")}, _s(56)
+        )
+        base.alpha_composite(Image.open(io.BytesIO(emblema)).convert("RGBA"), (_s(x), _s(318)))
+        patente_ok, corpo_p = ajustar(patente, "negrito", 34, 600)
+        base = texto(base, (x + 70, 360), patente_ok, "negrito", corpo_p, _rgb(cor_patente))
     return _png(_finalizar(_selo(base, acento)))
 
 
 def gerar_ajuda(cor=None):
-    """Banner da ajuda (1200x400). É sempre igual para a mesma cor, então fica em cache."""
+    """Banner da ajuda (1200x400): o banner pronto (assets/banners/ajuda.jpg) ou, sem ele ou com
+    uma cor pedida, o desenhado. Fica em cache."""
     _exigir()
     return _ajuda_bytes(cor)
 
 
 @lru_cache(maxsize=8)
 def _ajuda_bytes(cor):
+    if cor is None:
+        pronto = _foto(BANNER_AJUDA, 600, 200)  # 600x200 lógicos = 1200x400 reais
+        if pronto is not None:
+            return _png(pronto.convert("RGB"))
     acento = _rgb(cor)
     base = _fundo(1200, 400, acento)
     base = _disco(base, 1190, 215, 240, _rotulo_marca(acento), acento, giro=140)
@@ -510,8 +617,8 @@ def _ajuda_bytes(cor):
     base = texto(base, (x, 226), "MeMi", "forte", 118)
     lar = largura("MeMi", "forte", 118)
     base = texto(base, (x + lar + 16, 226), "BOT", "fino", 118, acento)
-    base = texto(base, (x + 4, 282), "Resenha, música e ranking do servidor.", "medio", 25, SLATE)
-    base = _etiqueta(base, (x + 4, 346), "mm!help", acento)
+    base = texto(base, (x + 4, 282), "Resenha, música e ranking.", "medio", 30, SLATE)
+    base = _etiqueta(base, (x + 4, 312), "mm!help", acento)
     return _png(_finalizar(base))
 
 
@@ -524,48 +631,49 @@ def gerar_resumo(dados, avatar_dj=None, avatar_tagarela=None, capa=None):
     ano_tipo = dados.get("tipo") == "ano"
     periodo = "ano" if ano_tipo else "mês"
     base = _fundo(1200, 480, acento)
-    x = 64
-    rotulo = "Resumo do ano" if ano_tipo else f"Resumo do mês · {dados.get('ano', '')}"
-    base = _rotulo(base, (x, 92), rotulo, acento)
-    titulo, corpo = ajustar(dados.get("titulo") or "—", "forte", 92, 380)
-    base = texto(base, (x - 3, 196), titulo, "forte", corpo)
-    base = texto(base, (x, 380), str(dados.get("mensagens", "0")), "forte", 34)
-    base = texto(base, (x, 406), f"mensagens no {periodo}", "medio", 16, SLATE)
-    base = texto(base, (x + 200, 380), str(dados.get("pedidos", "0")), "forte", 34)
-    base = texto(base, (x + 200, 406), "pedidos de música", "medio", 16, SLATE)
+    x = 60
+    rotulo = "Resumo do ano" if ano_tipo else f"Resumo · {dados.get('ano', '')}"
+    base = _rotulo(base, (x, 88), rotulo, acento, 24)
+    titulo, corpo = ajustar(dados.get("titulo") or "—", "forte", 96, 400)
+    base = texto(base, (x - 3, 194), titulo, "forte", corpo)
+    for i, (valor, legenda) in enumerate(
+        ((dados.get("mensagens", "0"), "mensagens"), (dados.get("pedidos", "0"), "músicas"))
+    ):
+        numero, corpo_n = ajustar(str(valor), "forte", 50, 200)
+        base = texto(base, (x + i * 215, 350), numero, "forte", corpo_n)
+        base = texto(base, (x + i * 215, 386), legenda, "medio", 26, SLATE)
     ganhadores = (
-        (585, dados.get("dj"), f"DJ do {periodo}", avatar_dj, acento),
-        (795, dados.get("tagarela"), f"Tagarela do {periodo}", avatar_tagarela, LILAS),
+        (585, dados.get("dj"), "DJ", avatar_dj, acento),
+        (800, dados.get("tagarela"), "Resenhex", avatar_tagarela, LILAS),
     )
     for cx, ganhador, rotulo_g, avatar, cor in ganhadores:
         nome, detalhe = ganhador if ganhador else ("—", "")
         nome = limpo(nome) or "Membro"
-        base = _disco(base, cx, 178, 84, avatar, cor)
-        base = texto_espacado(base, (cx, 318), rotulo_g, "negrito", 13, cor, 2.2, "m")
-        nome_ok, corpo_n = ajustar(nome, "negrito", 24, 200)
-        base = texto(base, (cx, 356), nome_ok, "negrito", corpo_n, BRANCO, "ms")
-        base = texto(base, (cx, 384), detalhe, "medio", 16, SLATE, "ms")
-    base = _disco(base, 1090, 168, 102, _rotulo_marca(acento), acento, giro=200)
-    lado = 196
+        base = _disco(base, cx, 160, 82, avatar, cor)
+        base = texto_espacado(base, (cx, 290), rotulo_g, "negrito", 24, cor, 3, "m")
+        nome_ok, corpo_n = ajustar(nome, "negrito", 32, 205)
+        base = texto(base, (cx, 334), nome_ok, "negrito", corpo_n, BRANCO, "ms")
+        detalhe_ok, corpo_d = ajustar(detalhe, "medio", 26, 205)
+        base = texto(base, (cx, 370), detalhe_ok, "medio", corpo_d, SLATE, "ms")
+    lado = 200
     try:
         cover = Image.open(io.BytesIO(capa)).convert("RGBA")
     except Exception:  # noqa: BLE001 - sem capa ou capa inválida
         cover = Image.open(io.BytesIO(_capa_reserva(acento))).convert("RGBA")
-    cover = _cantos(cover.resize((_s(lado), _s(lado)), Image.LANCZOS), _s(12))
-    base = _sombra_caixa(base, (910, 72, 910 + lado, 72 + lado), 12)
-    base.alpha_composite(cover, (_s(910), _s(72)))
-    base = texto_espacado(
-        base, (910, 322), f"MÚSICA DO {periodo.upper()}", "negrito", 13, acento, 2.2
-    )
+    cover = _cantos(cover.resize((_s(lado), _s(lado)), Image.LANCZOS), _s(14))
+    cx0 = 920
+    base = _sombra_caixa(base, (cx0, 70, cx0 + lado, 70 + lado), 14)
+    base.alpha_composite(cover, (_s(cx0), _s(70)))
+    base = texto_espacado(base, (cx0, 310), "MÚSICA", "negrito", 24, acento, 3)
     musica = dados.get("musica")
     if musica:
         faixa, artista, vezes = musica
-        faixa_ok, corpo_f = ajustar(faixa, "negrito", 24, 230)
-        base = texto(base, (910, 354), faixa_ok, "negrito", corpo_f)
-        artista_ok, corpo_a = ajustar(f"{artista}  ·  {vezes}x", "medio", 17, 230)
-        base = texto(base, (910, 382), artista_ok, "medio", corpo_a, SLATE)
+        faixa_ok, corpo_f = ajustar(faixa, "negrito", 32, 240)
+        base = texto(base, (cx0, 350), faixa_ok, "negrito", corpo_f)
+        artista_ok, corpo_a = ajustar(f"{artista} · {vezes}x", "medio", 26, 240)
+        base = texto(base, (cx0, 386), artista_ok, "medio", corpo_a, SLATE)
     else:
-        base = texto(base, (910, 354), "Sem músicas", "negrito", 24)
+        base = texto(base, (cx0, 350), "Sem músicas", "negrito", 32)
     return _png(_finalizar(_selo(base, acento)))
 
 
@@ -617,56 +725,46 @@ def gerar_wrapped(dados, avatar_bytes=None):
     _exigir()
     acento = _rgb(dados.get("cor"))
     base = _fundo(1200, 630, acento)
-    base = _disco(base, 200, 190, 130, avatar_bytes, acento)
-    base = _rotulo(base, (64, 396), "Wrapped", acento)
-    nome, corpo = _nome(dados, 340, "negrito", 28)
-    base = texto(base, (64, 440), nome, "negrito", corpo)
-    base = texto(base, (64, 468), "seus últimos 12 meses", "medio", 17, SLATE)
-    base = texto(base, (454, 158), _milhar(dados.get("pedidos", 0)), "forte", 108)
+    base = _disco(base, 200, 186, 128, avatar_bytes, acento)
+    base = _rotulo(base, (60, 384), "Wrapped", acento, 24)
+    nome, corpo = _nome(dados, 340, "negrito", 36)
+    base = texto(base, (60, 432), nome, "negrito", corpo)
+    base = texto(base, (60, 468), "últimos 12 meses", "medio", 26, SLATE)
+    x = 450
+    base = texto(base, (x, 150), _milhar(dados.get("pedidos", 0)), "forte", 116)
     base = texto(
-        base, (458, 196), f"pedidos de música em {dados.get('dias', 0)} dias", "medio", 21, SLATE
+        base, (x + 4, 196), f"músicas pedidas em {dados.get('dias', 0)} dias", "medio", 30, SLATE
     )
     if limpo(dados.get("genero")):
-        base = _etiqueta(base, (458, 246), f"gênero · {dados['genero']}", LILAS)
-    base = _rotulo(base, (458, 306), "Mais pedidas", acento)
+        base = _etiqueta(base, (x + 4, 216), f"gênero · {dados['genero']}", LILAS, 680)
+    base = _rotulo(base, (x + 4, 318), "Mais pedidas", acento, 24)
     for i, (titulo, vezes) in enumerate(list(dados.get("top") or [])[:3], start=1):
-        y = 356 + (i - 1) * 46
-        base = texto(base, (458, y), f"0{i}", "negrito", 20, acento)
-        titulo_ok, corpo_t = ajustar(titulo, "semi", 23, 480)
-        base = texto(base, (506, y), titulo_ok, "semi", corpo_t)
-        base = texto(base, (1136, y), f"{vezes}x", "medio", 20, SLATE, "rs")
-        camada = _camada(base)
-        ImageDraw.Draw(camada).line(
-            (_s(458), _s(y + 16), _s(1136), _s(y + 16)), fill=_rgba(BRANCO, 20), width=_s(1)
-        )
-        base = Image.alpha_composite(base, camada)
+        y = 364 + (i - 1) * 44
+        base = texto(base, (x + 4, y), f"0{i}", "negrito", 28, acento)
+        titulo_ok, corpo_t = ajustar(titulo, "semi", 30, 560)
+        base = texto(base, (x + 56, y), titulo_ok, "semi", corpo_t)
+        base = texto(base, (1140, y), f"{vezes}x", "medio", 28, SLATE, "rs")
     meses = (list(dados.get("meses") or []) + [0] * 12)[:12]
     maior = max(meses) or 1
-    x0, base_y, larg, folga = 64, 596, 46, 47
+    x0, base_y, larg, folga = 60, 580, 50, 42
     camada = _camada(base)
     d = ImageDraw.Draw(camada)
-    d.line(
-        (_s(x0), _s(base_y - 26), _s(x0 + 12 * larg + 11 * folga), _s(base_y - 26)),
-        fill=_rgba(BRANCO, 30),
-        width=_s(1),
-    )
     for i, v in enumerate(meses):
-        alt = max(6, 78 * v / maior)
-        cor = acento if v == maior and v > 0 else LILAS
-        alfa = 255 if v == maior and v > 0 else 110
+        alt = max(6, 64 * v / maior)
+        destaque = v == maior and v > 0
         d.rounded_rectangle(
             (
                 _s(x0 + i * (larg + folga)),
-                _s(base_y - 26 - alt),
+                _s(base_y - alt),
                 _s(x0 + i * (larg + folga) + larg),
-                _s(base_y - 26),
+                _s(base_y),
             ),
             radius=_s(6),
-            fill=_rgba(cor, alfa),
+            fill=_rgba(acento if destaque else LILAS, 255 if destaque else 110),
         )
     base = Image.alpha_composite(base, camada)
     for i, letra in enumerate("JFMAMJJASOND"):
         base = texto(
-            base, (x0 + i * (larg + folga) + larg / 2, base_y), letra, "semi", 14, SLATE, "ms"
+            base, (x0 + i * (larg + folga) + larg / 2, 618), letra, "semi", 24, SLATE, "ms"
         )
     return _png(_finalizar(_selo(base, acento)))

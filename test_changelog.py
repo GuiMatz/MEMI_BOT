@@ -40,7 +40,7 @@ class DadosTests(unittest.TestCase):
         self.assertEqual(changelog.buscar("V2.0.0"), len(changelog.VERSOES) - 1)
         self.assertEqual(changelog.buscar(" 2.0 "), len(changelog.VERSOES) - 1)
         self.assertIsNone(changelog.buscar("9.9.9"))
-        self.assertIsNone(changelog.buscar("2"))  # prefixo ambíguo (2.1.0 e 2.0.0)
+        self.assertIsNone(changelog.buscar("2"))  # prefixo ambíguo (2.2.0, 2.1.0 e 2.0.0)
         self.assertIsNone(changelog.buscar(""))
         self.assertIsNone(changelog.buscar("abc"))
 

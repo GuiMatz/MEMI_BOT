@@ -9,6 +9,52 @@ SECOES = ("novidades", "melhorias", "correcoes", "admin")
 
 VERSOES = [
     {
+        "versao": "2.2.0",
+        "data": "30/09/2026",
+        "titulo": "Patentes, tags, Mudae tracker e imagens maiores",
+        "novidades": [
+            "Níveis de 1 a 100 com XP: 1 por mensagem, 25 por música pedida e ½ por roletada. "
+            "Subir fica mais difícil a cada nível.",
+            "Patentes a cada 10 níveis, de Figurante a Demiurgo Supremo (nível 100), com emblema "
+            "próprio. A patente também vira título.",
+            "Tags: títulos e insígnias viraram uma coisa só, com as insígnias novas como emojis "
+            "personalizados. `mm!tags [@pessoa]` lista as suas; `mm!tags todos` mostra todas e "
+            "como ganhar.",
+            "Mudae tracker: `mm!mudae` mostra o panorama do servidor, `mm!mudae @pessoa` os "
+            "números de alguém e `mm!mudae personagem NOME` tudo sobre um personagem.",
+            "Rankings do Mudae: roletadores, casamentos, kakera, personagens, séries, snipers e "
+            "azarados (`mm!mudae casamentos mes`, por exemplo).",
+            "Tags novas do Cartola e da comunidade: Premier League IOS, Copa IOS, Pintos Corridos, "
+            "Cartoleiro de Ouro, IOS World Cup, IOS Club WC e Papagaio da Call.",
+            "Atalhos: `mm!tg`, `mm!lvl`, `mm!md`, `mm!h`, `mm!msc`, `mm!w`, `mm!p`, `mm!t`, "
+            "`mm!th`, `mm!f`, `mm!fm`, `mm!c`, `mm!cl` e `mm!embedcolor`.",
+        ],
+        "melhorias": [
+            "Todo nível é anunciado; múltiplos de 5 e troca de patente saem com imagem.",
+            "Imagens com textos bem maiores. O cartão usa o fundo novo, com seu avatar na lente, "
+            "e sai maior no chat.",
+            "Perfil: o título aparece com a insígnia; a página 2 mostra as tags por categoria e "
+            "como você ganhou cada uma.",
+            "`mm!hall` em blocos por período, com nomes longos cortados.",
+            "`mm!tagarelas` mostra só pessoas; use `bots` para ver os bots.",
+            "`mm!musicas genero` mostra só o ranking de gêneros.",
+            "Resumo do mês e do ano com uma seção do Mudae.",
+            "Ajuda com o banner novo e as categorias Mudae e Personalização.",
+        ],
+        "admin": [
+            "Atualizar: `git pull` e `python -m pip install -r requirements.txt`. O banco migra "
+            "sozinho para a versão 4, com backup em `backups/migracao_*`.",
+            "Os níveis são recalculados na nova escala sem avisos retroativos. Títulos e "
+            "insígnias antigos viram tags, sem perder nada.",
+            "Ao ligar, o bot envia as insígnias como emojis da aplicação: não precisa subir "
+            "emoji no servidor. Imagens novas em `assets/insignias` são enviadas sozinhas.",
+            "Na primeira vez, o bot relê em segundo plano os canais do Mudae para montar o "
+            "histórico. O rodapé do `mm!mudae` avisa enquanto isso.",
+            "`mm!give @pessoa TAG` concede tags manuais. `mm!mudaedump [#canal]` exporta mensagens "
+            "do Mudae para conferir a leitura.",
+        ],
+    },
+    {
         "versao": "2.1.0",
         "data": "30/09/2026",
         "titulo": "Imagens, resumos automáticos e visual novo",

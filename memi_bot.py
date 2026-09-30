@@ -109,6 +109,8 @@ WRAPPED_TOP_GENERO = 10  # quantos pedidos mais feitos entram na conta do gêner
 LIMITE_BUSCA_NOMES = 150  # máx. de pessoas buscadas na API ao exportar (o resto sai só com o ID)
 
 POR_PAGINA = 10  # itens por página do ranking
+HALL_POR_PAGINA = 6  # períodos por página do mm!hall
+HALL_NOME_MAXIMO = 32  # nomes maiores são cortados com … no mm!hall
 ARQUIVO_BANCO = Path(__file__).with_name("memi.db")  # fica na mesma pasta do bot
 MANUTENCAO_INTERVALO = 15  # segundos entre passadas da manutenção (avisos, fechamento, backup)
 IMAGEM_TIMEOUT = 15  # segundos para gerar uma imagem (em thread) antes de desistir
@@ -1650,6 +1652,8 @@ class RankingView(discord.ui.View):
         subtitulo="",
         meu_indice=None,
         numerar=True,
+        por_pagina=POR_PAGINA,
+        separador="\n",
     ):
         super().__init__(timeout=180)
         self.titulo = titulo
@@ -1661,8 +1665,10 @@ class RankingView(discord.ui.View):
         self.subtitulo = subtitulo
         self.meu_indice = meu_indice
         self.numerar = numerar
+        self.por_pagina = por_pagina
+        self.separador = separador
         self.pagina = 0
-        self.total_paginas = max(1, -(-len(itens) // POR_PAGINA))
+        self.total_paginas = max(1, -(-len(itens) // por_pagina))
         self.message = None
         self._atualizar_botoes()
 
@@ -1671,12 +1677,13 @@ class RankingView(discord.ui.View):
             self.titulo,
             self.itens,
             pagina=self.pagina,
-            por_pagina=POR_PAGINA,
+            por_pagina=self.por_pagina,
             subtitulo=self.subtitulo,
             rodape_partes=self.rodape_partes,
             capa=self.capa,
             meu_indice=self.meu_indice,
             numerar=self.numerar,
+            separador=self.separador,
         )
 
     def _atualizar_botoes(self):
@@ -2331,6 +2338,7 @@ class Musicas(commands.Cog):
                             "meta": progresso[2],
                             "patente": patente["nome"],
                             "cor_patente": patente["cor"],
+                            "patente_minimo": patente["minimo"],
                             "trocou": trocou,
                             "cor": self.banco.perfil(uid)["cor"],
                         },
@@ -2470,19 +2478,29 @@ class Musicas(commands.Cog):
         subtitulo="",
         meu_indice=None,
         numerar=True,
+        por_pagina=POR_PAGINA,
+        separador="\n",
     ):
         """Envia um ranking paginado; acrescenta o aviso de importação enquanto ela não terminar."""
         partes = list(rodape_partes)
         if self.banco.estado("importacao_concluida") != "1":
             partes.append(f"{EMOJI['importando']} importando histórico")
         view = RankingView(
-            titulo, itens, partes, capa, subtitulo=subtitulo, meu_indice=meu_indice, numerar=numerar
+            titulo,
+            itens,
+            partes,
+            capa,
+            subtitulo=subtitulo,
+            meu_indice=meu_indice,
+            numerar=numerar,
+            por_pagina=por_pagina,
+            separador=separador,
         )
         view.message = await ctx.send(
             embed=view.montar_embed(), view=view, allowed_mentions=discord.AllowedMentions.none()
         )
 
-    @commands.command(name="musicas", aliases=["músicas", "ranking"])
+    @commands.command(name="musicas", aliases=["músicas", "ranking", "msc"])
     @commands.guild_only()
     async def musicas(self, ctx, *args):
         palavras = [sem_acento(x) for x in args]
@@ -2495,14 +2513,11 @@ class Musicas(commands.Cog):
             return
         periodo = periodos[0] if periodos else ""
         palavras = [x for x in palavras if x not in ("mes", "ano")]
-        genero = None
         if "genero" in palavras or "generos" in palavras:
-            indice = next(i for i, x in enumerate(palavras) if x in ("genero", "generos"))
-            if indice != 0:
-                await responder(ctx, "aviso", "Use mm!musicas genero [NOME] [mes|ano].")
+            if len(palavras) > 1:
+                await responder(ctx, "aviso", "Use mm!musicas genero [mes|ano].")
                 return
             tipo = "genero"
-            genero = " ".join(palavras[1:]) or None
         else:
             tipo = palavras[0] if palavras else ""
             validos = {
@@ -2510,20 +2525,14 @@ class Musicas(commands.Cog):
                 for x in NOMES_RANKING_MUSICA + NOMES_RANKING_ARTISTA + NOMES_RANKING_USUARIO
             }
             if len(palavras) > 1 or tipo not in validos:
-                await responder(
-                    ctx, "aviso", "Use mm!musicas [artista|ios|genero [NOME]] [mes|ano]."
-                )
+                await responder(ctx, "aviso", "Use mm!musicas [artista|ios|genero] [mes|ano].")
                 return
         desde, rotulo = intervalo(periodo)
         capa, meu_indice = "", None
         if tipo == "genero":
-            linhas = self.banco.ranking_generos(desde, genero)
-            if genero:
-                titulo = f"🎼 Músicas de {genero}"
-                itens = [linha_faixa(t, a, q) for t, a, q in linhas]
-            else:
-                titulo = "🎼 Ranking de gêneros"
-                itens = [f"**{g}** · {q} tocadas · {n} músicas diferentes" for g, q, n in linhas]
+            linhas = self.banco.ranking_generos(desde)
+            titulo = "🎼 Ranking de gêneros"
+            itens = [f"**{g}** · {q} tocadas · {n} músicas diferentes" for g, q, n in linhas]
             pendentes = self.banco.generos_pendentes(desde)
             partes = (
                 f"{pendentes} músicas sem gênero",
@@ -2584,7 +2593,7 @@ class Musicas(commands.Cog):
                 pendentes += 1
         return mais, (generos.most_common(1)[0][0] if generos else ""), pendentes
 
-    @commands.command(name="perfil")
+    @commands.command(name="perfil", aliases=["p"])
     @commands.guild_only()
     async def perfil(self, ctx, pessoa: discord.Member = None):
         pessoa = pessoa or ctx.author
@@ -2790,7 +2799,7 @@ class Musicas(commands.Cog):
         await ctx.send(embed=embed)
 
     # ----- mm!wrapped --------------------------------------------------------
-    @commands.command(name="wrapped")
+    @commands.command(name="wrapped", aliases=["w"])
     @commands.guild_only()
     @commands.cooldown(1, 10, commands.BucketType.user)
     async def wrapped(self, ctx: commands.Context):
@@ -3102,9 +3111,11 @@ class Atividade(commands.Cog):
             meu_indice=indice_do_usuario(linhas, ctx.author.id),
         )
 
-    @commands.command(name="tagarelas")
+    @commands.command(name="tagarelas", aliases=["tg"])
     @commands.guild_only()
     async def tagarelas(self, ctx, *args):
+        """Quem mais manda mensagem. Por padrão só pessoas; `bots` mostra os bots e `todos`
+        mistura os dois."""
         filtros = {
             "geral": None,
             "todos": None,
@@ -3123,19 +3134,18 @@ class Atividade(commands.Cog):
             elif arg in filtros:
                 tipos.append(filtros[arg])
             else:
-                await responder(ctx, "aviso", "Use mm!tagarelas [ios|bot] [mes|ano].")
+                await responder(ctx, "aviso", "Use mm!tagarelas [bots|todos] [mes|ano].")
                 return
         if len(set(tipos)) > 1:
-            await responder(ctx, "aviso", "Escolha ios, bot ou geral.")
+            await responder(ctx, "aviso", "Escolha só um: pessoas (padrão), bots ou todos.")
             return
-        filtro = tipos[0] if tipos else None
+        filtro = tipos[0] if tipos else False
         desde, rotulo = intervalo(periodo)
         linhas = self.musicas.ranking("mensagens", desde, filtro)
-        await self.mostrar_ranking(
-            ctx, "💬 Quem mais mandou mensagem", linhas, "mensagens", subtitulo=rotulo
-        )
+        titulo = "🤖 Bots que mais mandaram mensagem" if filtro else "💬 Quem mais mandou mensagem"
+        await self.mostrar_ranking(ctx, titulo, linhas, "mensagens", subtitulo=rotulo)
 
-    @commands.command(name="hall", aliases=["halldafama"])
+    @commands.command(name="hall", aliases=["halldafama", "h"])
     @commands.guild_only()
     async def hall(self, ctx, *args):
         palavras = [sem_acento(x) for x in args]
@@ -3145,23 +3155,28 @@ class Atividade(commands.Cog):
         tipo = "ano" if palavras and palavras[0].startswith("ano") else "mes"
 
         def quem(uid):
-            return self.musicas.nome_pessoa(uid) if uid is not None else "—"
+            if uid is None:
+                return "—"
+            return f"**{cortar(self.musicas.nome_pessoa(uid), HALL_NOME_MAXIMO)}**"
 
+        dj, resenhex = tags.icone(f"dj_{tipo}"), tags.icone(f"tagarela_{tipo}")
         itens = [
-            f"**{rotulo_periodo(tipo, periodo)}** · {EMOJI['musica']} {quem(dj)}"
-            f" · {EMOJI['mensagens']} {quem(tagarela)}"
-            for periodo, dj, tagarela in self.banco.hall(tipo)
+            f"**{rotulo_periodo(tipo, periodo)}**\n"
+            f"{dj} DJ · {quem(uid_dj)}\n{resenhex} Resenhex · {quem(uid_tagarela)}"
+            for periodo, uid_dj, uid_tagarela in self.banco.hall(tipo)
         ]
         await self.musicas.enviar_ranking(
             ctx,
             "🏛️ Hall da fama",
             itens,
             subtitulo="anos" if tipo == "ano" else "meses",
-            rodape_partes=(f"{len(itens)} períodos",),
+            rodape_partes=(plural(len(itens), "período", "períodos"),),
             numerar=False,
+            por_pagina=HALL_POR_PAGINA,
+            separador="\n\n",
         )
 
-    @commands.command(name="levels")
+    @commands.command(name="levels", aliases=["lvl", "niveis", "níveis"])
     @commands.guild_only()
     async def levels(self, ctx, *args):
         if args:
@@ -3617,7 +3632,7 @@ class Atividade(commands.Cog):
             embed=view.paginas[0], view=view, allowed_mentions=discord.AllowedMentions.none()
         )
 
-    @commands.command(name="cartao", aliases=["cartão", "card"])
+    @commands.command(name="cartao", aliases=["cartão", "card", "c"])
     @commands.guild_only()
     @commands.cooldown(1, 10, commands.BucketType.user)
     async def cartao(self, ctx, pessoa: discord.Member = None):
@@ -3650,12 +3665,10 @@ class Atividade(commands.Cog):
         if arquivo is None:
             await responder(ctx, "erro", "Não consegui gerar o cartão agora. Tente de novo.")
             return
-        cor = COR_PADRAO if dados["cor"] is None else dados["cor"]
-        embed = discord.Embed(color=cor)
-        embed.set_image(url="attachment://cartao.png")
-        await ctx.send(embed=embed, file=arquivo, allowed_mentions=discord.AllowedMentions.none())
+        # Anexo solto (sem embed): o Discord mostra a imagem maior.
+        await ctx.send(file=arquivo, allowed_mentions=discord.AllowedMentions.none())
 
-    @commands.command(name="frase")
+    @commands.command(name="frase", aliases=["f"])
     @commands.guild_only()
     async def frase(self, ctx, *, texto: str = ""):
         if len(texto) > 100:
@@ -3664,7 +3677,7 @@ class Atividade(commands.Cog):
         self.banco.salvar_perfil(ctx.author.id, frase=texto)
         await responder(ctx, "sucesso", "Frase salva.")
 
-    @commands.command(name="favorita")
+    @commands.command(name="favorita", aliases=["fm"])
     @commands.guild_only()
     async def favorita(self, ctx, *, texto: str):
         texto = texto.strip()
@@ -3687,7 +3700,7 @@ class Atividade(commands.Cog):
             ),
         )
 
-    @commands.command(name="ec")
+    @commands.command(name="ec", aliases=["embedcolor"])
     @commands.guild_only()
     async def ec(self, ctx, *, texto: str = ""):
         """Troca a cor do embed do seu perfil (mm!ec COR)."""
@@ -3728,31 +3741,46 @@ AJUDA = [
     (
         "🏆 Rankings",
         [
-            ("mm!tagarelas", "mensagens · flags: ios, bot, mes, ano"),
-            ("mm!levels", "níveis"),
-            ("mm!mudae", "roletadas do Mudae"),
-            ("mm!hall", "vencedores dos meses e anos anteriores · flag: ano"),
+            ("mm!tagarelas", "mensagens · flags: bots, todos, mes, ano"),
+            ("mm!levels", "níveis, patentes e XP"),
+            ("mm!hall", "vencedores dos meses anteriores · flag: ano"),
         ],
     ),
     (
         "🎵 Música",
         [
-            ("mm!musicas", "flags: artista, ios, genero [NOME], mes, ano"),
+            ("mm!musicas", "flags: artista, ios, genero, mes, ano"),
             ("mm!aleatoria", "sorteia uma música"),
             ("mm!wrapped", "seu resumo dos últimos 12 meses"),
         ],
     ),
     (
-        "👤 Perfil e conquistas",
+        "🎎 Mudae",
+        [
+            ("mm!mudae [@pessoa]", "panorama do servidor ou os números de alguém"),
+            ("mm!mudae personagem NOME", "quem rolou, quem casou e quanto vale"),
+            (
+                "mm!mudae roletadores",
+                "também casamentos, kakera, personagens, series, snipers, azarados · mes, ano",
+            ),
+        ],
+    ),
+    (
+        "👤 Perfil e tags",
         [
             ("mm!perfil [@pessoa]", "perfil em 3 páginas"),
-            ("mm!insignias [@pessoa]", "insígnias"),
-            ("mm!titulos [@pessoa]", "títulos"),
-            ("mm!titulo NOME", "escolhe um título que você possui"),
+            ("mm!cartao [@pessoa]", "cartão de perfil em imagem"),
+            ("mm!tags [@pessoa]", "títulos e insígnias conquistados"),
+            ("mm!tags todos", "todas as tags e como ganhar cada uma"),
+        ],
+    ),
+    (
+        "🎨 Personalização",
+        [
+            ("mm!favorita MÚSICA - ARTISTA", "sua música favorita"),
+            ("mm!titulo NOME", "escolhe o título exibido no perfil"),
             ("mm!frase TEXTO", "frase de até 100 caracteres"),
-            ("mm!favorita MÚSICA - ARTISTA", "música favorita"),
-            ("mm!cartao [@pessoa]", "seu cartão de perfil em imagem"),
-            ("mm!ec COR", "cor do seu perfil (#hex ou nome; padrao restaura)"),
+            ("mm!ec COR", "cor do perfil (#hex ou nome; padrao restaura)"),
         ],
     ),
     (
@@ -3823,7 +3851,7 @@ class Ajuda(commands.Cog):
         embed.set_image(url="attachment://ajuda.png")
         await ctx.send(embed=embed, file=arquivo)
 
-    @commands.command(name="changelog", aliases=["novidades", "versao", "versão"])
+    @commands.command(name="changelog", aliases=["novidades", "versao", "versão", "cl"])
     async def changelog(self, ctx, versao: str = ""):
         """Mudanças da versão mais recente; `mm!changelog 2.0.0` ou o menu mostram as anteriores."""
         indice = versoes_bot.buscar(versao) if versao else 0

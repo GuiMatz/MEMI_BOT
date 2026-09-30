@@ -888,16 +888,20 @@ class IntegracaoTests(CogBase):
                 self.assertEqual(candidato.get_command("ajuda"), candidato.get_command("help"))
                 self.assertIsNotNone(candidato.get_command("ec"))
 
-    async def test_32_flags_genero_com_espacos_e_periodo(self):
+    async def test_32_genero_mostra_so_o_ranking_de_generos(self):
         self.b.inserir([(sid(), 1, "Faixa", "Artista", "jockie")])
         self.b.salvar_cache_deezer(m.chave_deezer("Faixa Artista"), "", "Música Brasileira", 1)
         self.cog.deezer.info_seguro = AsyncMock(return_value=("", ""))
         ctx = NS(author=NS(id=10), send=AsyncMock())
         with patch.object(m, "intervalo", return_value=(0, "mês atual")):
-            await m.Musicas.musicas.callback(self.cog, ctx, "genero", "musica", "brasileira", "mes")
+            await m.Musicas.musicas.callback(self.cog, ctx, "genero", "mes")
         embed = ctx.send.call_args.kwargs["embed"]
-        self.assertIn("Faixa", embed.description)
+        self.assertEqual(embed.title, "🎼 Ranking de gêneros")
+        self.assertIn("**Música Brasileira** · 1 tocadas", embed.description)
         self.assertIn("0 músicas sem gênero", embed.footer.text)
+        ctx = NS(author=NS(id=10), send=AsyncMock())
+        await m.Musicas.musicas.callback(self.cog, ctx, "genero", "musica", "brasileira")
+        self.assertIn("mm!musicas genero [mes|ano]", texto_enviado(ctx))
 
     async def test_33_favorita_avisa_capa_e_frase_limite(self):
         social = m.Atividade(NS(get_cog=lambda _: self.cog))
@@ -1480,7 +1484,7 @@ class VisualTests(CogBase):
         ctx = NS(send=AsyncMock())
         await m.Ajuda.ajuda.callback(m.Ajuda(None), ctx)
         texto = embed_enviado(ctx).description
-        secoes = ("🏆 Rankings", "🎵 Música", "👤 Perfil e conquistas")
+        secoes = ("🏆 Rankings", "🎵 Música", "🎎 Mudae", "👤 Perfil e tags", "🎨 Personalização")
         posicoes = [texto.index(f"**{s}**") for s in secoes]
         self.assertEqual(posicoes, sorted(posicoes))
         for comando in (
@@ -1627,6 +1631,18 @@ class VisualTests(CogBase):
         embed = embed_enviado(ctx)
         self.assertLessEqual(len(embed), 6000)
         self.assertNotIn("<@", embed.description)
+        self.assertIn("**" + "N" * (m.HALL_NOME_MAXIMO - 1) + "…**", embed.description)
+
+    async def test_96b_hall_mostra_seis_periodos_por_pagina_separados(self):
+        with self.b.con:
+            for mes in range(1, 9):
+                self.b._conceder(10, "dj_mes", f"2025-{mes:02d}")
+        ctx = NS(send=AsyncMock(), author=pessoa(10))
+        await m.Atividade.hall.callback(self.social(), ctx)
+        embed = embed_enviado(ctx)
+        self.assertEqual(embed.description.count("DJ ·"), 6)
+        self.assertIn("\n\n**julho de 2025**", embed.description)
+        self.assertIn("página 1/2", embed.footer.text)
 
     async def test_83_manutencao_chama_o_envio_de_resumos(self):
         self.b.definir_estado("importacao_concluida", "1")
@@ -1649,10 +1665,13 @@ class VisualTests(CogBase):
         ctx = NS(send=AsyncMock(), author=pessoa(10))
         await m.Atividade.hall.callback(self.social(), ctx)
         embed = embed_enviado(ctx)
-        self.assertIn("**dezembro de 2025** · 🎧 Apelido 10 · 💬 Apelido 20", embed.description)
+        self.assertIn(
+            "**dezembro de 2025**\n🟣 DJ · **Apelido 10**\n🟪 Resenhex · **Apelido 20**",
+            embed.description,
+        )
         ctx = NS(send=AsyncMock(), author=pessoa(10))
         await m.Atividade.hall.callback(self.social(), ctx, "ano")
-        self.assertIn("**2025** · 🎧 ", embed_enviado(ctx).description)
+        self.assertIn("**2025**\n🔴 DJ · **Apelido 10**", embed_enviado(ctx).description)
         ctx = NS(send=AsyncMock(), author=pessoa(10))
         await m.Atividade.hall.callback(self.social(), ctx, "semana")
         self.assertEqual(embed_enviado(ctx).color.value, estilo.COR_AVISO)
@@ -1874,12 +1893,12 @@ class VisualTests(CogBase):
         return NS(send=AsyncMock(), author=alvo, typing=Typing)
 
     @unittest.skipUnless(imagens.disponivel(), "Pillow não instalado")
-    async def test_98_comando_cartao_envia_a_imagem_dentro_de_um_embed(self):
+    async def test_98_comando_cartao_envia_a_imagem_solta_para_sair_maior(self):
         ctx = self._ctx_do_cartao()
         await m.Atividade.cartao.callback(self.social(), ctx, None)
         kw = ctx.send.call_args.kwargs
         self.assertEqual(kw["file"].filename, "cartao.png")
-        self.assertEqual(kw["embed"].image.url, "attachment://cartao.png")
+        self.assertNotIn("embed", kw)
         self.assertEqual(kw["allowed_mentions"].to_dict(), {"parse": []})
 
     async def test_99_sem_pillow_o_cartao_cai_no_perfil_com_aviso(self):
@@ -2210,6 +2229,53 @@ def texto_mudae(seq, texto, canal=1):
     evento.author.name = "Mudae"
     evento.interaction_metadata = None
     return evento
+
+
+class AtalhosTests(CogBase):
+    def social(self):
+        return m.Atividade(NS(get_cog=lambda _: self.cog))
+
+    async def test_129_atalhos_da_lista_existem_e_nao_aparecem_na_ajuda(self):
+        atalhos = {
+            "tg": "tagarelas", "lvl": "levels", "md": "mudae", "h": "hall", "msc": "musicas",
+            "w": "wrapped", "p": "perfil", "i": "tags", "t": "tags", "th": "th", "f": "frase",
+            "fm": "favorita", "c": "cartao", "embedcolor": "ec", "cl": "changelog",
+        }  # fmt: skip
+        bot = m.criar_bot(False)
+        for cog in m.COGS:
+            await bot.add_cog(cog(bot) if cog is not m.Musicas else self.cog)
+        try:
+            for atalho, nome in atalhos.items():
+                with self.subTest(atalho):
+                    self.assertEqual(bot.get_command(atalho).name, nome)
+        finally:
+            await bot.remove_cog("Atividade")
+            await bot.remove_cog("Ajuda")
+        ctx = NS(send=AsyncMock())
+        await m.Ajuda.ajuda.callback(m.Ajuda(None), ctx)
+        texto = embed_enviado(ctx).description
+        for atalho in ("mm!tg", "mm!lvl", "mm!msc", "mm!fm", "mm!embedcolor", "mm!cl"):
+            self.assertNotIn(f"`{atalho}", texto)
+
+    async def test_130_tagarelas_mostra_so_pessoas_e_bots_so_com_a_flag(self):
+        self.b.receber(msg(10, 1))
+        self.b.receber(msg(5, 2, bot=True))
+        self.b.receber(msg(5, 3, bot=True))
+        for args, tem, nao_tem in (
+            ((), "Apelido 10", "Apelido 5"),
+            (("bots",), "Apelido 5", "Apelido 10"),
+            (("bot",), "Apelido 5", "Apelido 10"),
+        ):
+            ctx = NS(send=AsyncMock(), author=pessoa(10))
+            await m.Atividade.tagarelas.callback(self.social(), ctx, *args)
+            descricao = embed_enviado(ctx).description
+            self.assertIn(tem, descricao)
+            self.assertNotIn(nao_tem, descricao)
+        ctx = NS(send=AsyncMock(), author=pessoa(10))
+        await m.Atividade.tagarelas.callback(self.social(), ctx, "todos")
+        self.assertIn("Apelido 5", embed_enviado(ctx).description)
+        self.assertIn("Apelido 10", embed_enviado(ctx).description)
+        self.assertEqual(embed_enviado(ctx).title, "💬 Quem mais mandou mensagem")
 
 
 class MudaeBotTests(CogBase):

@@ -134,6 +134,7 @@ def embed_ranking(
     meu_indice=None,
     cor=COR_PADRAO,
     numerar=True,
+    separador="\n",
 ):
     """Uma página de ranking. `itens` são textos prontos ('**Nome** · detalhe'); a posição
     (medalha ou número) é acrescentada aqui. `meu_indice` é a posição (0-based) de quem pediu:
@@ -145,7 +146,7 @@ def embed_ranking(
         f"{prefixo_posicao(pos)} {item}" if numerar else item
         for pos, item in enumerate(itens[ini : ini + por_pagina], start=ini + 1)
     ]
-    texto = "\n".join(linhas) or "*Ninguém no ranking ainda.*"
+    texto = separador.join(linhas) or "*Ninguém no ranking ainda.*"
     if subtitulo:
         texto = f"*{subtitulo}*\n\n{texto}"
     if meu_indice is not None and not ini <= meu_indice < ini + por_pagina:
