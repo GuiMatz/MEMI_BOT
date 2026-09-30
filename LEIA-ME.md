@@ -1,9 +1,10 @@
 # MeMi BOT
 
 Bot para Discord com gêneros, mensagens em tempo real, recuperação offline, importação
-histórica, níveis 1–1000, rankings, Mudae, títulos, insígnias, Top 1 rotativo, fechamento de
-períodos, resumos automáticos, perfil em três páginas, imagens (cartão, level up, resumo e
-wrapped), permissões por ID e backups. `mm!changelog` mostra o que mudou em cada versão.
+histórica, níveis 1–100 com XP e patentes, rankings, Mudae tracker, tags (títulos e insígnias
+com emojis próprios), Top 1 rotativo, fechamento de períodos, resumos automáticos, perfil em
+três páginas, imagens (cartão, level up, resumo e wrapped), permissões por ID e backups.
+`mm!changelog` mostra o que mudou em cada versão.
 
 Os testes automáticos usam dados simulados e não conectam ao Discord; a validação ao vivo
 está descrita no fim deste arquivo. O perfil ainda não tem a seção One Hit Wonders
@@ -22,9 +23,20 @@ python memi_bot.py
 
 Na primeira abertura o bot migra o banco sozinho e guarda uma cópia do estado anterior em
 `backups/migracao_DATA_HORA/`. Quem prefere copiar arquivos: encerre o bot, faça uma cópia da
-pasta e coloque os novos `memi_bot.py`, `estilo.py`, `imagens.py`, `changelog.py` e a pasta
-`assets/` (mais o `memi_tray.py`, se usar a bandeja) junto do seu `memi.db` e do `token.txt`. Não
-apague nem substitua o banco por um arquivo vazio.
+pasta e coloque todos os `.py` novos (`memi_bot.py`, `estilo.py`, `imagens.py`, `changelog.py`,
+`progressao.py`, `tags.py`, `emojis.py`, `mudae.py` e, se usar a bandeja, `memi_tray.py`) e a
+pasta `assets/` junto do seu `memi.db` e do `token.txt`. Não apague nem substitua o banco por um
+arquivo vazio.
+
+Ao atualizar para a 2.2, acontece sozinho, sem nenhum passo manual:
+
+- os níveis passam para a escala de 1 a 100 (XP) sem avisos retroativos; o primeiro nível de
+  cada pessoa é gravado em silêncio e só as subidas seguintes são anunciadas;
+- títulos e insígnias já conquistados viram tags (título e insígnia ao mesmo tempo);
+- o bot envia as insígnias e os emblemas das patentes como emojis da aplicação (veja
+  "Emojis personalizados");
+- o bot relê uma vez, em segundo plano, os canais onde o Mudae já falou, para montar o
+  histórico do Mudae tracker. O rodapé do `mm!mudae` avisa enquanto isso.
 
 ## Instalar do zero (Windows)
 
@@ -145,42 +157,66 @@ Manrope não cobre), com as licenças ao lado. Se elas faltarem, o texto das ima
 acentos. Emojis não são desenhados; nomes em alfabetos que nenhuma fonte cobre (japonês, árabe,
 hebraico…) usam o nome de usuário, ou "Membro" se também não der.
 
+O cartão usa o fundo `assets/banners/cartao.jpg` (o avatar entra na lente direita dos óculos) e
+o `mm!help` usa o banner `assets/banners/ajuda.jpg`. Para trocar, substitua os arquivos mantendo
+1200x400 px; se a posição das lentes mudar, ajuste `LENTE_DIREITA` em `imagens.py`. Sem esses
+arquivos, o bot desenha um fundo próprio. O Discord mostra as imagens reduzidas, então nenhum
+texto delas fica abaixo de 24 px.
+
 ## Aparência das mensagens
 
 Cores e emojis do bot ficam no topo de `estilo.py` (`EMOJI`, `COR_PADRAO`, `COR_SUCESSO`,
-`COR_AVISO`, `COR_ERRO`). Para usar um emoji do servidor, troque o valor por `<:nome:ID>` e
-reinicie o bot. Confirmações aparecem em verde (✅), avisos em amarelo (⚠️) e erros em vermelho (❌);
-o perfil usa a cor escolhida com `mm!ec`.
+`COR_AVISO`, `COR_ERRO`). Confirmações aparecem em verde (✅), avisos em amarelo (⚠️) e erros em
+vermelho (❌); o perfil usa a cor escolhida com `mm!ec`.
+
+### Emojis personalizados
+
+Ao ligar, o bot envia como **emojis da aplicação** (do próprio bot, sem ocupar espaço nem pedir
+permissão no servidor):
+
+- as insígnias das tags, de `assets/insignias/` (o arquivo de cada tag está em `tags.py`);
+- os emblemas das patentes: `assets/patentes/<id>.png`, se existir, ou um emblema desenhado pelo
+  bot (escudo na cor da patente com o nível);
+- qualquer `assets/emojis/<chave>.png`, em que `<chave>` é um nome de `EMOJI` em `estilo.py`
+  (por exemplo `musica.png`, `mensagens.png`, `mudae.png`): ele substitui o emoji padrão nas
+  mensagens. Rodapés e títulos de embed continuam com o emoji padrão, porque o Discord não
+  desenha emojis personalizados neles.
+
+Cada imagem só é reenviada quando o arquivo muda. Use PNG quadrado de até 256 KB (o limite do
+Discord). Se o envio falhar (rede, limite), o bot segue com os emojis padrão e registra o motivo
+no log. Os emojis do bot aparecem no Developer Portal, em "Emojis" do aplicativo.
 
 ## Comandos
 
 | Comando | Comportamento |
 | --- | --- |
-| `mm!musicas` | Faixas mais tocadas |
+| `mm!musicas` (`mm!msc`) | Faixas mais tocadas |
 | `mm!musicas artista` | Artistas por quantidade de faixas diferentes |
 | `mm!musicas ios` | Pessoas por pedidos de música |
-| `mm!musicas genero` | Um flag como os outros: gêneros por tocadas e quantidade de faixas diferentes |
-| `mm!musicas genero musica brasileira mes` | Faixas do gênero; aceita espaços e ignora acentos |
+| `mm!musicas genero` | Ranking de gêneros por tocadas e quantidade de faixas diferentes |
 | `mm!musicas [tipo] mes/ano` | Use um período: mês atual ou ano atual (não há ranking semanal) |
-| `mm!tagarelas [ios/bot] [mes/ano]` | Mensagens; sem filtro inclui pessoas e bots |
-| `mm!levels` | Níveis de pessoas, por total histórico |
-| `mm!mudae` | Roletadas de pessoas, por total histórico |
-| `mm!hall [mes/ano]` | Vencedores (DJ e Tagarela) dos meses ou anos já fechados |
-| `mm!perfil [@pessoa]` | Três páginas, botões públicos com timeout de três minutos |
-| `mm!insignias [@pessoa]` | Insígnias, incluindo quantidades acumuladas |
-| `mm!titulos [@pessoa]` | Todos os títulos possuídos |
-| `mm!frase TEXTO` | Frase de até 100 caracteres (aparece em itálico no perfil); sem texto limpa |
-| `mm!cartao [@pessoa]` | Cartão de perfil em imagem (precisa do Pillow; sem ele mostra o perfil comum) |
-| `mm!ec COR` | Cor do embed do seu perfil: `#ff8800`, `ff8800` ou um nome (vermelho, laranja, amarelo, dourado, verde, ciano, azul, roxo, rosa, marrom, cinza, branco, preto); `mm!ec padrao` restaura |
-| `mm!favorita MÚSICA - ARTISTA` | Salva a favorita e informa se encontrou a capa |
-| `mm!titulo NOME` | Seleciona um título possuído, ignorando acentos e caixa |
+| `mm!tagarelas [bots/todos] [mes/ano]` (`mm!tg`) | Mensagens de pessoas; `bots` mostra só os bots e `todos` mistura os dois |
+| `mm!levels` (`mm!lvl`) | Nível, patente e XP de cada pessoa |
+| `mm!hall [mes/ano]` (`mm!h`) | Vencedores (DJ e Resenhex) dos meses ou anos já fechados, seis por página |
+| `mm!mudae [@pessoa]` (`mm!md`) | Panorama do Mudae no servidor, ou os números de alguém |
+| `mm!mudae personagem NOME` | Quantas vezes saiu, quem mais rolou, quem casou e o maior valor |
+| `mm!mudae roletadores [mes/ano]` | Quem mais rola (também: `casamentos`, `kakera`, `personagens`, `series`, `snipers`, `azarados`) |
+| `mm!perfil [@pessoa]` (`mm!p`) | Três páginas, botões públicos com timeout de três minutos |
+| `mm!cartao [@pessoa]` (`mm!c`) | Cartão de perfil em imagem (precisa do Pillow; sem ele mostra o perfil comum) |
+| `mm!tags [@pessoa]` (`mm!t`, `mm!titulos`, `mm!insignias`, `mm!i`) | Tags por categoria, com como ganhou e quantas vezes |
+| `mm!tags todos` (`mm!th`) | Todas as tags, uma categoria por página, marcando as que você tem |
+| `mm!titulo NOME` | Escolhe o título exibido (qualquer tag sua), ignorando acentos e caixa |
+| `mm!frase TEXTO` (`mm!f`) | Frase de até 100 caracteres (aparece em itálico no perfil); sem texto limpa |
+| `mm!favorita MÚSICA - ARTISTA` (`mm!fm`) | Salva a favorita e informa se encontrou a capa |
+| `mm!ec COR` (`mm!embedcolor`) | Cor do seu perfil e das suas imagens: `#ff8800`, `ff8800` ou um nome (vermelho, laranja, amarelo, dourado, verde, ciano, azul, roxo, rosa, marrom, cinza, branco, preto); `mm!ec padrao` restaura |
 | `mm!aleatoria` | Sorteia uma faixa e mostra o comando de play |
-| `mm!wrapped` | Resumo dos últimos 12 meses, preservado |
-| `mm!help` (ou `mm!ajuda`, `mm!comandos`) | Ajuda pública |
-| `mm!changelog [versão]` (ou `mm!novidades`) | Mudanças da versão mais recente, com um menu para ver as anteriores; `mm!changelog 2.0.0` abre uma versão direto |
+| `mm!wrapped` (`mm!w`) | Resumo dos últimos 12 meses |
+| `mm!help` (ou `mm!ajuda`, `mm!comandos`) | Ajuda pública, com o banner |
+| `mm!changelog [versão]` (`mm!cl`, `mm!novidades`) | Mudanças da versão mais recente, com um menu para ver as anteriores; `mm!changelog 2.1.0` abre uma versão direto |
 
-As barras da tabela indicam alternativas; não são digitadas. Exemplos:
-`mm!tagarelas ios mes`, `mm!musicas artista ano`, `mm!musicas genero rock mes`.
+As barras da tabela indicam alternativas; não são digitadas. Os atalhos entre parênteses não
+aparecem na ajuda. Exemplos: `mm!tagarelas bots mes`, `mm!musicas artista ano`,
+`mm!mudae casamentos ano`.
 
 Somente o ID definido em `owner_id` em `config.json` pode usar:
 
@@ -190,34 +226,75 @@ mm!read tudo
 mm!read #canal1 #canal2
 mm!scan
 mm!exportar
-mm!give titulo @pessoa NOME
-mm!give insignia @pessoa NOME
+mm!give @pessoa TAG
+mm!mudaedump [#canal] [quantidade]
 ```
 
 `mm!exportar` envia os mesmos cinco CSVs de música do bot original. Como eles trazem IDs,
 nomes e o texto dos pedidos de todos os membros, o comando é restrito ao dono (no bot
 original qualquer membro podia usá-lo).
 
-`read`, `scan`, `give` e `exportar` não aparecem na ajuda pública.
-Concessões manuais não enviam aviso de desbloqueio.
+`mm!give @pessoa TAG` concede uma tag manual (as do Cartola e da comunidade); aceita o nome atual
+ou o antigo, sem acentos, e o formato antigo `mm!give titulo @pessoa NOME`. Tags automáticas
+(rankings, metas, patentes) não podem ser dadas à mão. Concessões manuais não enviam aviso.
 
-## Catálogo e pendências do dono
+`mm!mudaedump` exporta em JSON as últimas mensagens do Mudae e os comandos `$` de um canal (300
+por padrão, até 2000), dizendo como o tracker entendeu cada uma. Serve para conferir a leitura
+e para enviar amostras a quem for ajustar o tracker. O arquivo traz nomes de membros: não o
+publique.
 
-Edite o bloco `CATALOGO`, perto do começo do código, e reinicie o bot. Os identificadores
-são persistentes: mantenha-os quando trocar o nome ou o emoji de um item já concedido.
-Um emoji comum pode ser substituído por `<:nome:ID>` ou `<a:nome:ID>`.
+`read`, `scan`, `give`, `exportar` e `mudaedump` não aparecem na ajuda pública.
 
-Cartola/Cartoleiro, WPlace/Pintador, BONGAS e Bréca Games estão cadastrados com os nomes
-provisórios da especificação. Conceda o título e a insígnia com os respectivos comandos.
-Para um troféu de Cartola que precise conceder ambos juntos, adicione uma entrada com
-`titulo=True`, `insignia=True`, `manual=True` e `vinculado=True`. Nenhum troféu foi inventado.
+## Níveis, patentes e tags
 
-Os 12 comandos curtos do Mudae estão em `COMANDOS_MUDAE`. Os nomes por extenso não
-foram ativados porque a especificação exige confirmação no servidor. Acrescente-os
-à constante depois dessa confirmação. O prefixo está em `PREFIXO_MUDAE`.
+**XP** = 1 por mensagem + 25 por música pedida + ½ por roletada do Mudae, sempre calculado a
+partir dos totais históricos. O nível N exige `20 × (N − 1)²` de XP: o nível 10 pede 1.620 XP,
+o 50 pede 48.020 e o 100 (máximo) 196.020. Ritmo, pesos e nomes ficam em `progressao.py`.
 
-Ainda faltam os emojis definitivos, os nomes finais dos itens manuais e a lista de
-troféus do Cartola. Esses dados não impedem o funcionamento dos demais recursos.
+A cada 10 níveis a pessoa sobe de **patente**: Figurante (1–9), Ouvinte da Call, Resenheiro,
+Veterano da Call, Brabo da Resenha, Patrão do Clubex, Lenda Viva, Entidade, Mito do Clubex,
+Divindade (90–99) e Demiurgo Supremo (100). Cada patente vira uma tag da categoria Level e pode
+ser usada como título. Para renomear, troque só o `nome` em `progressao.py` (o `id` identifica a
+tag já concedida).
+
+Todo nível novo é anunciado no canal de avisos. Múltiplos de 5 e trocas de patente saem com
+imagem; a troca de patente tem título e cor próprios. Se alguém sobe vários níveis de uma vez
+(bot desligado), sai só o nível mais alto, e as trocas de patente do caminho também.
+
+**Tags** juntam títulos e insígnias: cada tag é as duas coisas. O catálogo fica em `tags.py`, com
+nome, categoria, "como ganhar", emoji padrão e imagem. Os identificadores são persistentes:
+mantenha-os ao trocar nome, emoji ou imagem. Para criar uma tag manual nova, acrescente uma
+entrada com `manual=True` e, se quiser, a imagem em `assets/insignias/`; ela passa a valer para
+o `mm!give` e vira emoji sozinha na próxima vez que o bot ligar. Brécagames e Demiurgo do
+Clubex ainda usam o emoji padrão porque não têm imagem.
+
+Os 12 comandos curtos de roleta do Mudae estão em `COMANDOS_MUDAE`; o prefixo está em
+`PREFIXO_MUDAE`.
+
+## Mudae tracker
+
+O bot só lê as mensagens do Mudae; nunca interage com ele. Ele reconhece:
+
+- **rolls**: o embed do personagem (nome, série, rank de claims/likes, valor em kakera e se está
+  livre ou tem dono). O roll vai para quem usou o comando: no comando de barra, o Discord informa
+  quem foi; no `$`, é o comando mais antigo ainda sem resposta no mesmo canal, nos 10 segundos
+  anteriores (o Mudae responde na ordem). Recusas do Mudae ("**fulano**, a roleta está
+  limitada…") consomem o comando de quem foi recusado;
+- **casamentos**: "💖 **X** e **Personagem** agora são casados! 💖" (também em inglês e
+  espanhol), ligados ao roll mais recente daquele personagem no canal. Casar com o roll de outra
+  pessoa conta como snipe;
+- **kakera**: as coletas do tipo "**fulano +401** ($k)".
+
+Limites: o Mudae mostra as pessoas pelo nome, não pelo ID. O bot resolve o nome pelos nomes que
+já viu no servidor (usuário, nome global e apelido); nome ambíguo ou de quem nunca falou fica sem
+dono nas estatísticas por pessoa, mas conta nas do servidor. Kakera e ranks só aparecem se
+estiverem ligados no Mudae do servidor. Textos personalizados com `$renameclaim` não são
+reconhecidos. As roletadas do `mm!mudae roletadores` continuam contando os comandos, como antes.
+
+Os textos em português foram escritos com base na documentação do Mudae e em bots que o leem.
+Se algo não for reconhecido no seu servidor, rode `mm!mudaedump` no canal do Mudae: o resumo
+mostra quantas mensagens foram entendidas como roll, casamento, kakera ou recusa e quantas não
+foram reconhecidas.
 
 ## Como os dados são tratados
 
@@ -248,12 +325,15 @@ troféus do Cartola. Esses dados não impedem o funcionamento dos demais recurso
   pequenos; gêneros e capas desconhecidos não bloqueiam os comandos. O rodapé mostra
   quantas faixas ainda não têm gênero. O gênero favorito considera todos os pedidos de
   faixas já classificados, com peso pela frequência, e informa os que ainda faltam.
-- Ao alcançar um novo marco de nível (10, 20, 30…) a pessoa ganha um aviso no canal de avisos.
-  Só pessoas; a importação inicial e o `mm!scan` atualizam o marco em silêncio, e quem já tinha
-  nível alto quando o bot foi atualizado não recebe aviso dos marcos antigos. Se alguém cruza
-  vários marcos de uma vez (bot desligado), avisa só o mais alto.
+- Ao subir de nível a pessoa ganha um aviso no canal de avisos (veja "Níveis, patentes e
+  tags"). Só pessoas; a importação inicial e o `mm!scan` atualizam o nível em silêncio, e quem já
+  tinha nível alto quando o bot foi atualizado não recebe aviso dos níveis antigos.
+- O Mudae tracker guarda, por roll, o personagem, a série, os ranks, o valor e quem rolou; por
+  casamento, quem casou, com quem e o roll ligado; por coleta, quem coletou e quanto. Também
+  guarda os nomes (usuário, global e apelido) de quem fala no servidor, só para identificar as
+  pessoas nas mensagens do Mudae. Ler de novo o mesmo trecho não duplica nada.
 - Quando um mês ou ano fecha com o bot ligado, ele posta sozinho um resumo no canal de avisos
-  (DJ, Tagarela, música mais tocada e totais; no ano, os tops). O fechamento da importação
+  (DJ, Resenhex, música mais tocada, Mudae e totais; no ano, os tops). O fechamento da importação
   inicial e do `mm!scan` é silencioso e não gera resumo, nem retroativo. Períodos sem nenhuma
   atividade de pessoas não geram resumo.
 - Os avisos usam nomes e desativam menções. Para evitar duplicações após uma queda, o
@@ -267,9 +347,10 @@ troféus do Cartola. Esses dados não impedem o funcionamento dos demais recurso
 python -m unittest discover -v -p "test_*.py"
 ```
 
-Os testes rodam sem conectar uma conta ao Discord e cobrem contagens, níveis, títulos,
-períodos, migração, backups, transações, reconexão, threads arquivadas, gêneros, perfil,
-permissões, a leitura que cruza a meia-noite e a manutenção (repetição após falhas). O
+Os testes rodam sem conectar uma conta ao Discord e cobrem contagens, XP, níveis, patentes,
+tags, emojis, o Mudae tracker, períodos, migração, backups, transações, reconexão, threads
+arquivadas, gêneros, perfil, imagens, permissões, a leitura que cruza a meia-noite e a manutenção
+(repetição após falhas). O
 resultado de cada alteração é o da integração contínua no GitHub. Os avisos impressos vêm
 de falhas simuladas e do bot de teste sem intents privilegiados.
 
@@ -280,14 +361,24 @@ Validação ao vivo que falta realizar no seu servidor:
 3. Desligar, enviar mensagens e pedidos, religar e conferir a recuperação.
 4. Executar `mm!scan` e conferir usuários com histórico conhecido, sem avisos de importação.
 5. Testar os pedidos de música, uma playlist e `m!loop`.
-6. Testar `$w`, `$wa`, `$h`, `$m` e conferir `mm!mudae`.
+6. Testar `$w`, `$wa`, `$h`, `$m` e conferir `mm!mudae roletadores`.
 7. Conferir as três páginas, a favorita e a navegação por outra pessoa.
-8. Conferir um desbloqueio no canal de avisos, sem menção.
+8. Conferir um desbloqueio de tag no canal de avisos, sem menção e com a insígnia como emoji.
 9. Conferir que quem saiu some de todos os rankings e reaparece ao voltar (com Members Intent).
 10. Conferir `mm!help`, `mm!cartao` e `mm!wrapped` com imagem, e sem Pillow (mensagem só em texto).
-11. Avançar alguém para um marco de nível (10, 20…) e conferir o aviso com imagem, uma vez só.
-12. Fechar um mês no servidor de teste e conferir o resumo automático com imagem.
-13. `mm!changelog`: versão mais recente, menu com a anterior e `mm!changelog 2.0.0`.
+11. Subir alguém de nível: um nível comum sai em texto; um múltiplo de 5 e uma troca de patente
+    saem com imagem, uma vez só.
+12. Fechar um mês no servidor de teste e conferir o resumo automático com imagem e a seção do Mudae.
+13. `mm!changelog`: versão mais recente, menu com as anteriores e `mm!changelog 2.1.0`.
+14. Depois de atualizar: conferir no log "Emojis personalizados prontos" e as insígnias como
+    emoji no `mm!tags`, no `mm!perfil` e no `mm!hall`.
+15. Conferir `mm!levels` (nível, patente e XP) e o `mm!cartao` com o fundo novo e o título com a
+    insígnia.
+16. Rolar no Mudae e casar: conferir `mm!mudae`, `mm!mudae @pessoa` e `mm!mudae personagem NOME`.
+    Rodar `mm!mudaedump` no canal do Mudae e conferir que nada importante ficou como "não
+    reconhecida".
+17. Conferir `mm!tagarelas` (só pessoas) e `mm!tagarelas bots`, `mm!give @pessoa Papagaio da
+    Call` e os atalhos (`mm!tg`, `mm!lvl`, `mm!p`, `mm!c`, `mm!cl`).
 
 A cópia do código original está em `original/memi_bot_original.py` neste repositório.
 Para reverter uma migração, pare o bot e restaure juntos o código antigo e o banco do

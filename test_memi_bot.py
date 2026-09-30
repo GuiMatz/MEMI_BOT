@@ -88,7 +88,7 @@ class BancoTests(unittest.TestCase):
             [self.b.total_usuario(10, "mensagens", d) for d in (0, mes, ano)], [1, 1, 1]
         )
         self.assertEqual(self.b.ranking_atividade(), [(10, 1)])
-        self.assertEqual(m.nivel(1), 1)
+        self.assertEqual(self.b.xp_usuario(10), 1)
         self.b.con.close()
         self.b = m.Banco(self.path)
         self.assertEqual(self.b.total_usuario(10, "mensagens"), 1)
@@ -104,19 +104,13 @@ class BancoTests(unittest.TestCase):
         )
         self.assertEqual(self.b.con.execute("SELECT COUNT(*) FROM avisos").fetchone()[0], 2)
 
-    def test_03_niveis_e_progresso_todos_limites(self):
-        for total, esperado in m.PONTOS_NIVEL:
-            with self.subTest(total=total):
-                self.assertEqual(m.nivel(total), esperado)
-                if total:
-                    self.assertEqual(m.nivel(total - 1), esperado - 1)
-                if total < 200000:
-                    self.assertEqual(m.nivel(total + 1), esperado)
-        self.assertEqual(m.progresso_nivel(75500), (277, "100/200"))
-        self.assertEqual(m.progresso_nivel(50500), (250, "500/1000"))
-        self.assertEqual(m.progresso_nivel(0), (1, "0/21"))
-        self.assertEqual(m.nivel(200001), 1000)
-        self.assertEqual(m.nivel(9999999), 1000)
+    def test_03_xp_do_banco_combina_as_tres_fontes(self):
+        self.lote(10, 100)
+        self.lote(10, 4, "pedidos")
+        self.lote(10, 9, "mudae")
+        self.assertEqual(self.b.xp_usuario(10), 100 + 4 * 25 + 4)
+        self.assertEqual(self.b.xp_usuario(999), 0)
+        self.assertEqual(m.xp_de({"mensagens": 100, "pedidos": 4, "mudae": 9}), 204)
 
     def test_04_desempate_ultima_ocorrencia_e_nao_id_usuario(self):
         for item in [msg(20, seq=1), msg(10, seq=2), msg(10, seq=4), msg(20, seq=3)]:
@@ -130,25 +124,26 @@ class BancoTests(unittest.TestCase):
         self.lote(5, 1000, bot=True)
         self.b.receber(msg(10))
         self.b.reconciliar(avisar=True)
-        self.assertEqual(m.nivel(self.b.total_usuario(5, "mensagens")), 50)
+        self.assertEqual(self.b.ranking_xp(eh_bot=True), [(5, 1000)])
+        self.assertEqual(self.b.ranking_xp(), [(10, 1)])
         self.assertEqual(self.b.ranking_atividade(False), [(10, 1)])
         self.assertEqual(self.b.ranking_atividade(True), [(5, 1000)])
         self.assertEqual(self.b.itens(5, "titulo"), [])
         with self.assertRaises(ValueError):
-            self.b.conceder_manual(5, "titulo", "BONGAS", True)
+            self.b.conceder_manual(5, "BONGAS", True)
 
     def test_06_titulos_mensagens_cada_limite(self):
-        for i, (limite, item, _) in enumerate(m.TITULOS_MENSAGENS):
+        for i, (limite, item) in enumerate(m.tags.METAS_MENSAGENS):
             uid = 100 + i
             self.lote(uid, limite - 1, date=f"2026-09-{i+1:02}T00:00:00")
             self.b.reconciliar()
             self.assertFalse(self.possui(uid, item))
             self.b.receber(msg(uid, seq=i), recompensar=True)
             self.assertTrue(self.possui(uid, item))
-            self.assertTrue(all(self.possui(uid, k) for _, k, _ in m.TITULOS_MENSAGENS[: i + 1]))
+            self.assertTrue(all(self.possui(uid, k) for _, k in m.tags.METAS_MENSAGENS[: i + 1]))
 
     def test_07_titulos_musicas_cada_limite(self):
-        for i, (limite, item, _) in enumerate(m.TITULOS_MUSICAS):
+        for i, (limite, item) in enumerate(m.tags.METAS_MUSICAS):
             uid = 200 + i
             self.lote(uid, limite - 1, "pedidos", date=f"2026-09-{i+1:02}T00:00:00")
             self.b.reconciliar()
@@ -215,18 +210,47 @@ class BancoTests(unittest.TestCase):
 
     def test_12_give_catalogo_deduplicacao_sem_aviso(self):
         with self.assertRaises(ValueError):
-            self.b.conceder_manual(10, "titulo", "Não existe")
-        self.assertTrue(self.b.conceder_manual(10, "titulo", "BONGAS"))
-        self.assertFalse(self.b.conceder_manual(10, "titulo", "bongas"))
-        self.assertTrue(self.b.conceder_manual(10, "insignia", "BONGAS"))
+            self.b.conceder_manual(10, "Não existe")
+        with self.assertRaises(ValueError):
+            self.b.conceder_manual(10, "DJ da Call")  # automática: não se dá à mão
+        self.assertTrue(self.b.conceder_manual(10, "BONGAS"))  # nome antigo ainda vale
+        self.assertFalse(self.b.conceder_manual(10, "bongador"))
         self.assertEqual(dict(self.b.itens(10, "insignia")), {"bongas": 1})
+        self.assertEqual(dict(self.b.itens(10, "titulo")), {"bongas": 1})
         self.assertEqual(self.b.con.execute("SELECT COUNT(*) FROM avisos").fetchone()[0], 0)
 
     def test_13_titulo_possuido_sem_acento(self):
-        self.assertFalse(self.b.selecionar_titulo(10, "Bréca Games"))
-        self.b.conceder_manual(10, "titulo", "breca games")
-        self.assertTrue(self.b.selecionar_titulo(10, "BRECA GAMES"))
+        self.assertFalse(self.b.selecionar_titulo(10, "Brécagames"))
+        self.b.conceder_manual(10, "bréca games")
+        self.assertTrue(self.b.selecionar_titulo(10, "BRECAGAMES"))
         self.assertEqual(self.b.perfil(10)["titulo"], "breca")
+
+    def test_13b_tags_da_pessoa_na_ordem_das_categorias_com_ultimo_periodo(self):
+        self.b.conceder_manual(10, "Papagaio da Call")
+        with self.b.con:
+            self.b._conceder(10, "dj_mes", "2026-07")
+            self.b._conceder(10, "dj_mes", "2026-08")
+            self.b._conceder(10, "resenha_torta")
+        self.assertEqual(
+            self.b.tags_usuario(10),
+            [("dj_mes", 2, "2026-08"), ("papagaio", 1, "manual"), ("resenha_torta", 1, "")],
+        )
+
+    def test_13c_patentes_sao_concedidas_ao_alcancar_o_nivel(self):
+        self.lote(10, m.progressao.xp_minimo(20))
+        self.b.reconciliar(avisar=True)
+        tem = dict(self.b.itens(10))
+        self.assertIn("patente_figurante", tem)
+        self.assertIn("patente_ouvinte_call", tem)
+        self.assertIn("patente_resenheiro", tem)
+        self.assertNotIn("patente_veterano_call", tem)
+        # patente não gera o aviso genérico de tag: o aviso de nível já a anuncia
+        self.assertEqual(
+            self.b.con.execute(
+                "SELECT COUNT(*) FROM avisos WHERE item LIKE 'patente_%'"
+            ).fetchone()[0],
+            0,
+        )
 
     def test_14_playlist_um_pedido_tres_faixas(self):
         playlist = "https://open.spotify.com/playlist/abc"
@@ -458,7 +482,8 @@ class BancoTests(unittest.TestCase):
         self.b.receber(msg(20, 3, date="2025-11-07T10:00:00"))
         self._preparar_dezembro()
         self.b.fechar_periodos(datetime(2026, 3, 1, tzinfo=m.FUSO))
-        self.b.conceder_manual(30, "titulo", "DJ do Mês")  # posse manual não entra no hall
+        with self.b.con:  # posse sem período não entra no hall
+            self.b._conceder(30, "dj_mes", "manual")
         meses = self.b.hall("mes")
         self.assertEqual([p for p, _, _ in meses], ["2025-12", "2025-11"])
         self.assertEqual(meses[0][1:], (20, 10))  # DJ 20, Tagarela 10
@@ -483,69 +508,86 @@ class BancoTests(unittest.TestCase):
         ).fetchone()
         return linha[0] if linha else None
 
-    def test_47_primeira_avaliacao_so_grava_o_marco(self):
-        self.lote(10, 500)  # nível 25 (marco 2) antes de existir controle de marcos
+    def test_47_primeira_avaliacao_so_grava_o_nivel(self):
+        self.lote(10, 2000)  # nível 11 antes de existir controle de nível
         self.b.receber(msg(10, 1), recompensar=True, avisar=True)
         self.assertEqual(self.avisos_de_nivel(), [])
-        self.assertEqual(self.marco_guardado(10), 2)
+        self.assertEqual(self.marco_guardado(10), 11)
 
-    def test_48_cruzar_marco_avisa_uma_vez(self):
-        self.lote(10, 500)
-        self.b.receber(msg(10, 1), recompensar=True, avisar=True)  # grava marco 2 em silêncio
-        self.lote(10, 100, date="2026-08-01T00:00:00")  # ~nível 30: marco 3
+    def test_48_subir_de_nivel_avisa_uma_vez(self):
+        self.lote(10, 2000)
+        self.b.receber(msg(10, 1), recompensar=True, avisar=True)  # grava nível 11 em silêncio
+        self.lote(10, 420, date="2026-08-01T00:00:00")  # 2.421 XP: nível 12
         self.b.receber(msg(10, 2), recompensar=True, avisar=True)
-        self.b.receber(msg(10, 3), recompensar=True, avisar=True)  # mesmo marco: nada novo
-        self.assertEqual(self.avisos_de_nivel(), [(10, 3)])
+        self.b.receber(msg(10, 3), recompensar=True, avisar=True)  # mesmo nível: nada novo
+        self.assertEqual(self.avisos_de_nivel(), [(10, 12)])
 
-    def test_49_varios_marcos_de_uma_vez_geram_so_o_mais_alto(self):
-        self.lote(10, 100)
-        self.b.receber(msg(10, 1), recompensar=True, avisar=True)  # marco 1 gravado
-        self.lote(10, 900, date="2026-08-01T00:00:00")  # salta para o nível ~50
+    def test_49_varios_niveis_de_uma_vez_geram_so_o_mais_alto(self):
+        self.lote(10, 2000)
+        self.b.receber(msg(10, 1), recompensar=True, avisar=True)  # nível 11 gravado
+        self.lote(10, 2000, date="2026-08-01T00:00:00")  # 4.001 XP: nível 15
         self.b.receber(msg(10, 2), recompensar=True, avisar=True)
-        self.assertEqual(self.avisos_de_nivel(), [(10, 5)])
+        self.assertEqual(self.avisos_de_nivel(), [(10, 15)])
+
+    def test_49b_salto_que_cruza_patente_anuncia_a_troca_e_o_nivel_final(self):
+        self.lote(10, 1000)  # nível 8
+        self.b.receber(msg(10, 1), recompensar=True, avisar=True)
+        self.lote(10, 7000, date="2026-08-01T00:00:00")  # 8.001 XP: nível 21
+        self.b.receber(msg(10, 2), recompensar=True, avisar=True)
+        self.assertEqual(self.avisos_de_nivel(), [(10, 10), (10, 20), (10, 21)])
 
     def test_50_sem_avisos_ou_bot_so_atualiza_ou_ignora(self):
-        self.lote(10, 100)
+        self.lote(10, 2000)
         self.b.receber(msg(10, 1), recompensar=True, avisar=True)
-        self.lote(10, 900, date="2026-08-01T00:00:00")
+        self.lote(10, 2000, date="2026-08-01T00:00:00")
         self.b.receber(msg(10, 2), recompensar=True, avisar=False)  # importação silenciosa
         self.assertEqual(self.avisos_de_nivel(), [])
-        self.assertEqual(self.marco_guardado(10), 5)
+        self.assertEqual(self.marco_guardado(10), 15)
         self.lote(5, 1000, bot=True, date="2026-07-01T00:00:00")
         self.b.receber(msg(5, 3, bot=True), recompensar=True, avisar=True)
         self.assertEqual(self.avisos_de_nivel(), [])
         self.assertIsNone(self.marco_guardado(5))
 
-    def test_51b_recuperacao_offline_repassa_mensagens_e_avisa_so_o_marco_mais_alto(self):
-        self.lote(10, 190)  # nível 10: marco 1
+    def test_51b_recuperacao_offline_repassa_mensagens_e_avisa_so_o_nivel_mais_alto(self):
+        self.lote(10, 1999)  # nível 10
         self.b.receber(msg(10, 0), recompensar=True, avisar=True)
-        for i in range(1, 431):  # cruza os marcos 2 e 3 uma mensagem por vez
+        for i in range(1, 450):  # cruza os níveis 11 e 12 uma mensagem por vez
             self.b.receber(msg(10, i), recompensar=True, avisar=True)
-        self.assertEqual(self.marco_guardado(10), 3)
-        self.assertEqual(self.avisos_de_nivel(), [(10, 3)])
+        self.assertEqual(self.marco_guardado(10), 12)
+        self.assertEqual(self.avisos_de_nivel(), [(10, 12)])
 
-    def test_51c_aviso_ja_reservado_nao_e_apagado_ao_subir_de_marco(self):
-        self.lote(10, 190)
-        self.b.receber(msg(10, 0), recompensar=True, avisar=True)
-        for i in range(1, 250):  # marco 2 (nível 20)
+    def test_51c_aviso_ja_reservado_nao_e_apagado_ao_subir_de_nivel(self):
+        self.lote(10, 1999)
+        self.b.receber(msg(10, 0), recompensar=True, avisar=True)  # 2.000 XP: nível 11
+        for i in range(1, 30):
             self.b.receber(msg(10, i), recompensar=True, avisar=True)
-        ((aviso_id, _, marco),) = self.b.avisos_nivel_pendentes()
-        self.assertEqual(marco, 2)
+        self.assertEqual(self.avisos_de_nivel(), [])
+        self.lote(10, 400, date="2026-08-01T00:00:00")
+        self.b.receber(msg(10, 500), recompensar=True, avisar=True)  # nível 12
+        ((aviso_id, _, nivel),) = self.b.avisos_nivel_pendentes()
+        self.assertEqual(nivel, 12)
         self.b.marcar_aviso_nivel(aviso_id, "enviado")
-        for i in range(250, 431):  # marco 3
-            self.b.receber(msg(10, i), recompensar=True, avisar=True)
-        self.assertEqual(self.avisos_de_nivel(), [(10, 3)])
+        self.lote(10, 500, date="2026-07-01T00:00:00")
+        self.b.receber(msg(10, 501), recompensar=True, avisar=True)  # nível 13
+        self.assertEqual(self.avisos_de_nivel(), [(10, 13)])
         self.assertEqual(self.b.con.execute("SELECT COUNT(*) FROM avisos_nivel").fetchone()[0], 2)
 
     def test_51_estado_do_aviso_de_nivel(self):
-        self.lote(10, 100)
+        self.lote(10, 2000)
         self.b.receber(msg(10, 1), recompensar=True, avisar=True)
-        self.lote(10, 900, date="2026-08-01T00:00:00")
+        self.lote(10, 2000, date="2026-08-01T00:00:00")
         self.b.receber(msg(10, 2), recompensar=True, avisar=True)
-        ((aviso_id, uid, marco),) = self.b.avisos_nivel_pendentes()
-        self.assertEqual((uid, marco), (10, 5))
+        ((aviso_id, uid, nivel),) = self.b.avisos_nivel_pendentes()
+        self.assertEqual((uid, nivel), (10, 15))
         self.b.marcar_aviso_nivel(aviso_id, "reservado")
         self.assertEqual(self.b.avisos_nivel_pendentes(), [])
+
+    def test_51d_musicas_e_roletadas_tambem_sobem_de_nivel(self):
+        self.lote(10, 2000)
+        self.b.receber(msg(10, 1), recompensar=True, avisar=True)  # nível 11
+        self.lote(10, 17, "pedidos", date="2026-08-01T00:00:00")  # +425 XP
+        self.b.receber(msg(10, 2), recompensar=True, avisar=True)
+        self.assertEqual(self.avisos_de_nivel(), [(10, 12)])
 
     def _banco_da_versao_anterior(self):
         """Banco como a versão 2 deixava: sem as tabelas/coluna novas e com user_version=2."""
@@ -564,7 +606,7 @@ class BancoTests(unittest.TestCase):
         caminho = self._banco_da_versao_anterior()
         novo = m.Banco(caminho)
         try:
-            self.assertEqual(novo.con.execute("PRAGMA user_version").fetchone()[0], 3)
+            self.assertEqual(novo.con.execute("PRAGMA user_version").fetchone()[0], 4)
             tabelas = {r[0] for r in novo.con.execute("SELECT name FROM sqlite_master")}
             self.assertTrue({"resumos", "niveis_marco", "avisos_nivel"} <= tabelas)
             self.assertEqual(novo.total_usuario(10, "mensagens"), 1)
@@ -591,21 +633,47 @@ class BancoTests(unittest.TestCase):
         m.Banco(caminho).con.close()
         self.assertEqual(len(list(caminho.parent.glob("backups/migracao_*"))), 1)
 
-    def test_54_banco_novo_nasce_na_versao_3_sem_backup(self):
+    def test_54_banco_novo_nasce_na_versao_atual_sem_backup(self):
         caminho = Path(self.temp.name) / "novo.db"
         banco = m.Banco(caminho)
         try:
-            self.assertEqual(banco.con.execute("PRAGMA user_version").fetchone()[0], 3)
+            self.assertEqual(banco.con.execute("PRAGMA user_version").fetchone()[0], 4)
         finally:
             banco.con.close()
         self.assertFalse(list(caminho.parent.glob("backups/migracao_*")))
 
-    def test_39b_progresso_valores_e_texto_de_progresso(self):
-        self.assertEqual(m.progresso_valores(0), (1, 0, 21))
-        self.assertEqual(m.progresso_valores(75500), (277, 100, 200))
-        self.assertEqual(m.progresso_valores(200000), (1000, 1, 1))
-        self.assertEqual(m.progresso_nivel(75500), (277, "100/200"))
-        self.assertEqual(m.progresso_nivel(9999999), (1000, "Nível máximo"))
+    def test_55_migracao_da_versao_3_zera_niveis_unifica_tags_e_nao_avisa_nada(self):
+        caminho = Path(self.temp.name) / "v3.db"
+        antigo = m.Banco(caminho)
+        antigo.receber(msg(10, 1))
+        with antigo.con:
+            antigo.con.execute("INSERT INTO niveis_marco VALUES (10, 27)")  # escala antiga
+            antigo.con.execute("INSERT INTO avisos_nivel(usuario_id, marco) VALUES (10, 27)")
+            antigo.con.execute(
+                "INSERT INTO avisos_nivel(usuario_id, marco, estado) VALUES (10, 26, 'enviado')"
+            )
+            antigo.con.execute("INSERT INTO posses VALUES (10,'dj_piolho','',1,0,1)")
+            antigo.con.execute("INSERT INTO posses VALUES (10,'bongas','manual',0,1,2)")
+            antigo.con.execute("PRAGMA user_version=3")
+        antigo.salvar_perfil(10, titulo="dj_piolho")
+        antigo.con.close()
+        novo = m.Banco(caminho)
+        try:
+            self.assertEqual(novo.con.execute("PRAGMA user_version").fetchone()[0], 4)
+            self.assertEqual(novo.con.execute("SELECT COUNT(*) FROM niveis_marco").fetchone()[0], 0)
+            self.assertEqual(novo.con.execute("SELECT COUNT(*) FROM avisos_nivel").fetchone()[0], 0)
+            self.assertEqual(dict(novo.itens(10, "insignia")), {"dj_piolho": 1, "bongas": 1})
+            self.assertEqual(dict(novo.itens(10, "titulo")), {"dj_piolho": 1, "bongas": 1})
+            self.assertEqual(novo.perfil(10)["titulo"], "dj_piolho")
+            novo.receber(msg(10, 2), recompensar=True, avisar=True)
+            self.assertEqual(novo.avisos_nivel_pendentes(), [])  # nada retroativo
+            self.assertEqual(
+                novo.con.execute("SELECT marco FROM niveis_marco WHERE usuario_id=10").fetchone(),
+                (1,),
+            )
+        finally:
+            novo.con.close()
+        self.assertEqual(len(list(caminho.parent.glob("backups/migracao_*"))), 1)
 
 
 class Canal:
@@ -697,7 +765,7 @@ class IntegracaoTests(CogBase):
         paginas = self.cog.paginas_perfil(pessoa)
         self.assertEqual(len(paginas), 3)
         self.assertEqual(paginas[0].title, "APELIDO")
-        self.assertIn("0/21", str(paginas[0].to_dict()))
+        self.assertIn("0/20 XP", str(paginas[0].to_dict()))
         self.assertNotIn("sem dados", str([x.to_dict() for x in paginas]))
         # Recurso ainda não implementado não aparece como campo vazio.
         self.assertNotIn("One Hit", str([x.to_dict() for x in paginas]))
@@ -740,7 +808,8 @@ class IntegracaoTests(CogBase):
         args, kw = canal.send.call_args
         self.assertIn("Apelido 10", args[0])
         self.assertIn("Parabéns", args[0])
-        self.assertIn("Insígnia e Título desbloqueados", args[0])
+        self.assertIn("Nova tag: 💬 Resenhex do Clubex", args[0])
+        self.assertIn("Top 1 Mensagens", args[0])  # como ganhou
         self.assertNotIn("<@", args[0])
         self.assertEqual(kw["allowed_mentions"].to_dict(), {"parse": []})
 
@@ -819,16 +888,20 @@ class IntegracaoTests(CogBase):
                 self.assertEqual(candidato.get_command("ajuda"), candidato.get_command("help"))
                 self.assertIsNotNone(candidato.get_command("ec"))
 
-    async def test_32_flags_genero_com_espacos_e_periodo(self):
+    async def test_32_genero_mostra_so_o_ranking_de_generos(self):
         self.b.inserir([(sid(), 1, "Faixa", "Artista", "jockie")])
         self.b.salvar_cache_deezer(m.chave_deezer("Faixa Artista"), "", "Música Brasileira", 1)
         self.cog.deezer.info_seguro = AsyncMock(return_value=("", ""))
         ctx = NS(author=NS(id=10), send=AsyncMock())
         with patch.object(m, "intervalo", return_value=(0, "mês atual")):
-            await m.Musicas.musicas.callback(self.cog, ctx, "genero", "musica", "brasileira", "mes")
+            await m.Musicas.musicas.callback(self.cog, ctx, "genero", "mes")
         embed = ctx.send.call_args.kwargs["embed"]
-        self.assertIn("Faixa", embed.description)
+        self.assertEqual(embed.title, "🎼 Ranking de gêneros")
+        self.assertIn("**Música Brasileira** · 1 tocadas", embed.description)
         self.assertIn("0 músicas sem gênero", embed.footer.text)
+        ctx = NS(author=NS(id=10), send=AsyncMock())
+        await m.Musicas.musicas.callback(self.cog, ctx, "genero", "musica", "brasileira")
+        self.assertIn("mm!musicas genero [mes|ano]", texto_enviado(ctx))
 
     async def test_33_favorita_avisa_capa_e_frase_limite(self):
         social = m.Atividade(NS(get_cog=lambda _: self.cog))
@@ -1094,7 +1167,7 @@ class RankingsPerfilTests(CogBase):
         for comando, alvo, args in (
             (m.Atividade.tagarelas, social, ()),
             (m.Atividade.levels, social, ()),
-            (m.Atividade.mudae, social, ()),
+            (m.Atividade.mudae_roletadores, social, ()),
             (m.Musicas.musicas, self.cog, ("ios",)),
         ):
             ctx = NS(send=AsyncMock(), author=pessoa(10))
@@ -1173,36 +1246,108 @@ class RankingsPerfilTests(CogBase):
             self.assertIn("mes", texto_enviado(ctx))
             self.assertNotIn("semana|", texto_enviado(ctx))
 
-    async def test_60_sem_titulos_ou_insignias_mostra_aviso(self):
+    async def test_60_sem_tags_mostra_aviso(self):
         alvo, social = pessoa(10), self.social()
         self.assertEqual(
             self.cog.paginas_perfil(alvo)[1].description, "NÃO POSSUI TÍTULOS OU INSÍGNIAS"
         )
-        for comando, esperado in (
-            (m.Atividade.titulos, "NÃO POSSUI TÍTULOS"),
-            (m.Atividade.insignias, "NÃO POSSUI INSÍGNIAS"),
-        ):
-            ctx = NS(send=AsyncMock(), author=alvo)
-            await comando.callback(social, ctx, None)
-            self.assertEqual(embed_enviado(ctx).description, esperado)
-        self.b.conceder_manual(10, "insignia", "BONGAS")
-        self.assertEqual(self.cog.paginas_perfil(alvo)[1].description, "NÃO POSSUI TÍTULOS")
+        ctx = NS(send=AsyncMock(), author=alvo)
+        await m.Atividade.tags.callback(social, ctx)
+        self.assertEqual(embed_enviado(ctx).description, "NÃO POSSUI TÍTULOS OU INSÍGNIAS")
+        self.assertIn("mm!tags todos", embed_enviado(ctx).footer.text)
 
-    async def test_61_titulos_e_insignias_listam_itens_com_titulo_correto(self):
+    async def test_61_tags_listam_por_categoria_com_como_ganhou(self):
         alvo, social = pessoa(10), self.social()
-        self.b.conceder_manual(10, "titulo", "BONGAS")
-        self.b.conceder_manual(10, "insignia", "BONGAS")
-        self.assertEqual(self.cog.paginas_perfil(alvo)[1].description, "BONGAS")
-        for comando, titulo in (
-            (m.Atividade.titulos, "Títulos de Apelido 10"),
-            (m.Atividade.insignias, "Insígnias de Apelido 10"),
+        self.b.conceder_manual(10, "BONGAS")
+        with self.b.con:
+            self.b._conceder(10, "dj_mes", "2026-07")
+            self.b._conceder(10, "dj_mes", "2026-08")
+        p2 = self.cog.paginas_perfil(alvo)[1].description
+        self.assertEqual(
+            p2,
+            "**DJs e Resenhas**\n🟣 **DJ do Mês** — Top 1 Músicas do mês · ×2 · último: ago/2026"
+            "\n\n**Eventos e Comunidade**\n🫏 **Bongador** — Participar do BONGAS",
+        )
+        ctx = NS(send=AsyncMock(), author=alvo)
+        await m.Atividade.tags.callback(social, ctx)
+        embed = embed_enviado(ctx)
+        self.assertEqual(embed.title, "🏷️ Tags de Apelido 10")
+        self.assertEqual(embed.description, p2)
+        self.assertEqual(embed.footer.text, "MeMi BOT · 2 tags · 3 no total · mm!tags todos")
+
+    async def test_61b_tags_todos_mostra_o_catalogo_por_categoria(self):
+        alvo, social = pessoa(10), self.social()
+        self.b.conceder_manual(10, "Papagaio da Call")
+        for chamada in (
+            lambda ctx: m.Atividade.tags.callback(social, ctx, alvo="todos"),
+            lambda ctx: m.Atividade.th.callback(social, ctx),
         ):
             ctx = NS(send=AsyncMock(), author=alvo)
-            await comando.callback(social, ctx, None)
-            embed = embed_enviado(ctx)
-            self.assertEqual(embed.title, titulo)
-            self.assertIn("BONGAS", embed.description)
-            self.assertEqual(embed.footer.text.split(" · ")[-1], "1 item")
+            await chamada(ctx)
+            view = ctx.send.call_args.kwargs["view"]
+            self.assertEqual(len(view.paginas), len(m.tags.CATEGORIAS))
+            eventos = next(x for x in view.paginas if "Eventos" in x.title)
+            self.assertIn(
+                "✅ 🦜 **Papagaio da Call** — Ser Papagaio · dada pelo dono", eventos.description
+            )
+            self.assertIn("▫️ 🎨 **Pintador**", eventos.description)
+
+    async def test_61e_tags_de_outra_pessoa_e_nome_invalido(self):
+        social, outra = self.social(), pessoa(20)
+        conversor = AsyncMock(return_value=outra)
+        with patch.object(m.commands.MemberConverter, "convert", conversor):
+            ctx = NS(send=AsyncMock(), author=pessoa(10))
+            await m.Atividade.tags.callback(social, ctx, alvo="<@20>")
+            self.assertEqual(embed_enviado(ctx).title, "🏷️ Tags de Apelido 20")
+            ctx = NS(send=AsyncMock(), author=pessoa(10))
+            await m.Atividade.tags.callback(social, ctx, alvo="TODOS")
+            self.assertIn("Todas as tags", ctx.send.call_args.kwargs["view"].paginas[0].title)
+        conversor.assert_awaited_once()  # "todos" não gasta uma busca de membro
+        falha = AsyncMock(side_effect=m.commands.MemberNotFound("x"))
+        with patch.object(m.commands.MemberConverter, "convert", falha):
+            ctx = NS(send=AsyncMock(), author=pessoa(10))
+            await m.Atividade.tags.callback(social, ctx, alvo="ninguém")
+        self.assertIn("mm!tags [@pessoa]", texto_enviado(ctx))
+
+    async def test_61c_titulos_e_insignias_viraram_atalhos_de_tags(self):
+        self.assertIn("titulos", m.Atividade.tags.aliases)
+        self.assertIn("insignias", m.Atividade.tags.aliases)
+        self.assertIn("i", m.Atividade.tags.aliases)
+        self.assertIn("t", m.Atividade.tags.aliases)
+
+    async def test_61d_give_aceita_o_formato_novo_e_o_antigo(self):
+        social = self.social()
+        alvo = pessoa(10)
+        ctx = NS(
+            send=AsyncMock(),
+            author=NS(id=m.MEMI_ID),
+            guild=NS(get_member=lambda uid: alvo if uid == 10 else None),
+        )
+        await m.Atividade.give.callback(social, ctx, texto="<@10> papagaio da call")
+        self.assertIn("concedida", texto_enviado(ctx))
+        await m.Atividade.give.callback(social, ctx, texto="titulo <@10> BONGAS")
+        self.assertEqual(dict(self.b.itens(10)), {"papagaio": 1, "bongas": 1})
+        await m.Atividade.give.callback(social, ctx, texto="<@10> bongador")
+        self.assertIn("já possui", texto_enviado(ctx))
+        await m.Atividade.give.callback(social, ctx, texto="<@10> DJ da Call")
+        self.assertIn("Tags manuais", texto_enviado(ctx))
+        await m.Atividade.give.callback(social, ctx, texto="papagaio")
+        self.assertIn("mm!give @pessoa TAG", texto_enviado(ctx))
+
+    async def test_61f_give_busca_quem_nao_esta_em_cache(self):
+        social, alvo = self.social(), pessoa(30)
+        buscar = AsyncMock(return_value=alvo)
+        ctx = NS(
+            send=AsyncMock(),
+            author=NS(id=m.MEMI_ID),
+            guild=NS(get_member=lambda uid: None, fetch_member=buscar),
+        )
+        await m.Atividade.give.callback(social, ctx, texto="<@30> papagaio da call")
+        buscar.assert_awaited_once_with(30)
+        self.assertEqual(dict(self.b.itens(30)), {"papagaio": 1})
+        buscar.side_effect = discord.NotFound(NS(status=404, reason="x"), "sem")
+        await m.Atividade.give.callback(social, ctx, texto="<@31> papagaio da call")
+        self.assertIn("Não achei essa pessoa", texto_enviado(ctx))
 
     async def test_62_ec_troca_a_cor_do_perfil(self):
         alvo, social = pessoa(10), self.social()
@@ -1282,7 +1427,7 @@ class VisualTests(CogBase):
 
     async def test_66_ranking_vazio_mostra_mensagem(self):
         ctx = NS(send=AsyncMock(), author=pessoa(10))
-        await m.Atividade.mudae.callback(self.social(), ctx)
+        await m.Atividade.mudae_roletadores.callback(self.social(), ctx)
         self.assertIn("Ninguém no ranking ainda", embed_enviado(ctx).description)
 
     async def test_67_musicas_usa_subtitulo_do_periodo_e_linha_enxuta(self):
@@ -1301,10 +1446,12 @@ class VisualTests(CogBase):
         self.b.receber(msg(10, 1, content="$w"))
         ctx = NS(send=AsyncMock(), author=pessoa(10))
         await m.Atividade.levels.callback(self.social(), ctx)
-        self.assertIn("🥇 **Apelido 10** · nível 1 · 1 mensagens", embed_enviado(ctx).description)
+        self.assertIn(
+            "🥇 **Apelido 10** · Nv. 1 · 🎖️ Figurante · 1 XP", embed_enviado(ctx).description
+        )
         ctx = NS(send=AsyncMock(), author=pessoa(10))
-        await m.Atividade.mudae.callback(self.social(), ctx)
-        self.assertIn("🥇 **Apelido 10** · 1 roletadas", embed_enviado(ctx).description)
+        await m.Atividade.mudae_roletadores.callback(self.social(), ctx)
+        self.assertIn("🥇 **Apelido 10** · 1 roletada", embed_enviado(ctx).description)
 
     def todos_os_campos(self, paginas):
         return [(i, f.name, f.value) for i, p in enumerate(paginas) for f in p.fields]
@@ -1316,18 +1463,18 @@ class VisualTests(CogBase):
             self.assertNotEqual(valor, "​", (pagina, nome))
         nomes = [n for _, n, _ in self.todos_os_campos(paginas[:1])]
         self.assertNotIn("🏅 Insígnias", nomes)
-        self.assertIn("Nível 1", nomes)
+        self.assertIn("Nível 1 · Figurante", nomes)
 
     async def test_70_perfil_completo_tem_hierarquia_e_rodape_curto(self):
         self.b.receber(msg(10, 1, content="m!play a"))
         self.b.salvar_perfil(10, frase="Pain.", favorita="Música - Banda")
-        self.b.conceder_manual(10, "insignia", "BONGAS")
+        self.b.conceder_manual(10, "BONGAS")
         p1 = self.cog.paginas_perfil(
             pessoa(10), mais="[Faixa](https://x.test) — 6x", genero="Dance", pendentes=260
         )[0]
         nomes = [f.name for f in p1.fields]
         self.assertEqual(p1.description, "*Pain.*")
-        self.assertEqual(nomes[:3], ["🎧 Música", "💬 Mensagens", "Nível 1"])
+        self.assertEqual(nomes[:3], ["🎧 Música", "💬 Mensagens", "Nível 2 · Figurante"])
         self.assertIn("🎵 Música favorita", nomes)
         self.assertIn("🔥 Música mais colocada", nomes)
         self.assertIn("🎼 Gênero favorito", nomes)
@@ -1343,14 +1490,14 @@ class VisualTests(CogBase):
     async def test_71_barra_de_nivel_no_perfil_e_nivel_maximo(self):
         p1 = self.cog.paginas_perfil(pessoa(10))[0]
         nivel = next(f for f in p1.fields if f.name.startswith("Nível"))
-        self.assertEqual(nivel.value, "▱▱▱▱▱▱▱▱▱▱ 0/21")
+        self.assertEqual(nivel.value, "▱▱▱▱▱▱▱▱▱▱ 0/20 XP")
         with self.b.con:
             self.b.con.execute(
                 "INSERT OR REPLACE INTO totais(usuario_id, mensagens) VALUES (10, 250000)"
             )
         p1 = self.cog.paginas_perfil(pessoa(10))[0]
         nivel = next(f for f in p1.fields if f.name.startswith("Nível"))
-        self.assertEqual(nivel.name, "Nível 1000")
+        self.assertEqual(nivel.name, "Nível 100 · Demiurgo Supremo")
         self.assertEqual(nivel.value, "▰▰▰▰▰▰▰▰▰▰ nível máximo")
 
     async def test_72_perfil_no_pior_caso_respeita_os_limites_do_discord(self):
@@ -1369,7 +1516,7 @@ class VisualTests(CogBase):
         ctx = NS(send=AsyncMock())
         await m.Ajuda.ajuda.callback(m.Ajuda(None), ctx)
         texto = embed_enviado(ctx).description
-        secoes = ("🏆 Rankings", "🎵 Música", "👤 Perfil e conquistas")
+        secoes = ("🏆 Rankings", "🎵 Música", "🎎 Mudae", "👤 Perfil e tags", "🎨 Personalização")
         posicoes = [texto.index(f"**{s}**") for s in secoes]
         self.assertEqual(posicoes, sorted(posicoes))
         for comando in (
@@ -1397,12 +1544,17 @@ class VisualTests(CogBase):
         posicoes = {f.name: f.value for f in paginas[0].fields}
         self.assertIn("#1** de 1", posicoes["💬 Mensagens"])
 
-    async def test_79_titulos_e_insignias_nao_tem_medalha(self):
-        self.b.conceder_manual(10, "titulo", "BONGAS")
-        self.b.conceder_manual(10, "titulo", "Bréca Games")
+    async def test_79_tags_nao_tem_medalha_e_titulo_escolhido_aparece_no_perfil(self):
+        self.b.conceder_manual(10, "BONGAS")
+        self.b.conceder_manual(10, "Bréca Games")
         ctx = NS(send=AsyncMock(), author=pessoa(10))
-        await m.Atividade.titulos.callback(self.social(), ctx, None)
-        self.assertEqual(embed_enviado(ctx).description, "BONGAS\nBréca Games")
+        await m.Atividade.tags.callback(self.social(), ctx)
+        self.assertNotIn("🥇", embed_enviado(ctx).description)
+        self.b.selecionar_titulo(10, "bongador")
+        self.b.salvar_perfil(10, frase="oi")
+        self.assertEqual(
+            self.cog.paginas_perfil(pessoa(10))[0].description, "🫏 **Bongador**\n*oi*"
+        )
 
     def _fechar_dezembro(self):
         self.b.receber(msg(10, 1, date="2025-12-05T10:00:00", content="m!play a"))
@@ -1511,6 +1663,18 @@ class VisualTests(CogBase):
         embed = embed_enviado(ctx)
         self.assertLessEqual(len(embed), 6000)
         self.assertNotIn("<@", embed.description)
+        self.assertIn("**" + "N" * (m.HALL_NOME_MAXIMO - 1) + "…**", embed.description)
+
+    async def test_96b_hall_mostra_seis_periodos_por_pagina_separados(self):
+        with self.b.con:
+            for mes in range(1, 9):
+                self.b._conceder(10, "dj_mes", f"2025-{mes:02d}")
+        ctx = NS(send=AsyncMock(), author=pessoa(10))
+        await m.Atividade.hall.callback(self.social(), ctx)
+        embed = embed_enviado(ctx)
+        self.assertEqual(embed.description.count("DJ ·"), 6)
+        self.assertIn("\n\n**julho de 2025**", embed.description)
+        self.assertIn("página 1/2", embed.footer.text)
 
     async def test_83_manutencao_chama_o_envio_de_resumos(self):
         self.b.definir_estado("importacao_concluida", "1")
@@ -1533,21 +1697,29 @@ class VisualTests(CogBase):
         ctx = NS(send=AsyncMock(), author=pessoa(10))
         await m.Atividade.hall.callback(self.social(), ctx)
         embed = embed_enviado(ctx)
-        self.assertIn("**dezembro de 2025** · 🎧 Apelido 10 · 💬 Apelido 20", embed.description)
+        self.assertIn(
+            "**dezembro de 2025**\n🟣 DJ · **Apelido 10**\n🟪 Resenhex · **Apelido 20**",
+            embed.description,
+        )
         ctx = NS(send=AsyncMock(), author=pessoa(10))
         await m.Atividade.hall.callback(self.social(), ctx, "ano")
-        self.assertIn("**2025** · 🎧 ", embed_enviado(ctx).description)
+        self.assertIn("**2025**\n🔴 DJ · **Apelido 10**", embed_enviado(ctx).description)
         ctx = NS(send=AsyncMock(), author=pessoa(10))
         await m.Atividade.hall.callback(self.social(), ctx, "semana")
         self.assertEqual(embed_enviado(ctx).color.value, estilo.COR_AVISO)
 
-    def _com_aviso_de_nivel(self):
-        self.b.receber(msg(10, 1), recompensar=True, avisar=True)  # grava o marco 0
+    def _com_aviso_de_nivel(self, mensagens=3950):
+        """Nível 10 gravado em silêncio e depois um salto (padrão: nível 15, múltiplo de 5)."""
         with self.b.con:
             self.b.con.execute(
-                "INSERT OR REPLACE INTO totais(usuario_id, mensagens) VALUES (10, 2000)"
+                "INSERT OR REPLACE INTO totais(usuario_id, mensagens) VALUES (10, 1700)"
             )
-        self.b.receber(msg(10, 2), recompensar=True, avisar=True)  # 2001 mensagens: nível 62
+        self.b.receber(msg(10, 1), recompensar=True, avisar=True)  # grava o nível 10
+        with self.b.con:
+            self.b.con.execute(
+                "INSERT OR REPLACE INTO totais(usuario_id, mensagens) VALUES (10, ?)", (mensagens,)
+            )
+        self.b.receber(msg(10, 2), recompensar=True, avisar=True)
         canal = NS(send=AsyncMock())
         self.cog.bot.get_channel = lambda _: canal
         self.cog.recuperando = False
@@ -1562,10 +1734,40 @@ class VisualTests(CogBase):
         self.assertEqual(canal.send.await_count, 1)
         self.assertNotIn("file", canal.send.call_args.kwargs)
         embed = canal.send.call_args.kwargs["embed"]
-        self.assertEqual(embed.title, "🎉 Nível 60!")
+        self.assertEqual(embed.title, "⬆️ Nível 15")
         self.assertIn("**Apelido 10**", embed.description)
-        self.assertEqual(embed.fields[0].name, "Nível 62")
+        self.assertIn("Ouvinte da Call", embed.description)
+        self.assertEqual(embed.fields[0].name, "Nível 15")
         self.assertEqual(canal.send.call_args.kwargs["allowed_mentions"].to_dict(), {"parse": []})
+
+    async def test_85b_nivel_fora_dos_multiplos_de_5_sai_so_em_texto(self):
+        canal = self._com_aviso_de_nivel(mensagens=2100)  # nível 11
+        gerar = MagicMock(return_value=b"PNG")
+        with (
+            patch.object(imagens, "disponivel", return_value=True),
+            patch.object(imagens, "gerar_nivel", gerar),
+        ):
+            await self.cog.enviar_avisos_nivel()
+        gerar.assert_not_called()
+        kw = canal.send.call_args.kwargs
+        self.assertNotIn("file", kw)
+        self.assertEqual(kw["embed"].title, "⬆️ Nível 11")
+
+    async def test_85c_troca_de_patente_sai_com_imagem_e_destaque(self):
+        canal = self._com_aviso_de_nivel(mensagens=7300)  # nível 20: Resenheiro
+        gerar = MagicMock(return_value=b"PNG")
+        with (
+            patch.object(imagens, "disponivel", return_value=True),
+            patch.object(imagens, "gerar_nivel", gerar),
+        ):
+            await self.cog.enviar_avisos_nivel()
+        dados = gerar.call_args.args[0]
+        self.assertEqual(
+            (dados["nivel"], dados["patente"], dados["trocou"]), (20, "Resenheiro", True)
+        )
+        embed = canal.send.call_args.kwargs["embed"]
+        self.assertEqual(embed.title, "🎖️ Nova patente: Resenheiro")
+        self.assertEqual(embed.color.value, 0xCD7F32)
 
     @unittest.skipUnless(imagens.disponivel(), "Pillow não instalado")
     async def test_107_aviso_de_nivel_anexa_a_imagem_e_enxuga_o_embed(self):
@@ -1575,7 +1777,7 @@ class VisualTests(CogBase):
         kw = canal.send.call_args.kwargs
         self.assertEqual(kw["file"].filename, "nivel.png")
         self.assertEqual(kw["embed"].image.url, "attachment://nivel.png")
-        self.assertEqual(kw["embed"].title, "🎉 Nível 60!")
+        self.assertEqual(kw["embed"].title, "⬆️ Nível 15")
         self.assertEqual(len(kw["embed"].fields), 0)
         self.assertEqual(kw["allowed_mentions"].to_dict(), {"parse": []})
 
@@ -1591,8 +1793,8 @@ class VisualTests(CogBase):
             await self.cog.enviar_avisos_nivel()
         dados = gerar.call_args.args[0]
         self.assertEqual(
-            (dados["nome"], dados["marco"], dados["nivel"], dados["cor"]),
-            ("a*b_c", 6, 62, 0x2255FF),
+            (dados["nome"], dados["nivel"], dados["atual"], dados["cor"]),
+            ("a*b_c", 15, 15, 0x2255FF),
         )
         self.assertIn("a\\*b\\_c", canal.send.call_args.kwargs["embed"].description)  # texto escapa
 
@@ -1606,7 +1808,7 @@ class VisualTests(CogBase):
             await self.cog.enviar_avisos_nivel()
         kw = canal.send.call_args.kwargs
         self.assertNotIn("file", kw)
-        self.assertEqual(kw["embed"].fields[0].name, "Nível 62")  # embed completo como reserva
+        self.assertEqual(kw["embed"].fields[0].name, "Nível 15")  # embed completo como reserva
 
     async def test_110_reenvio_apos_falta_de_permissao_gera_arquivo_novo(self):
         canal = self._com_aviso_de_nivel()
@@ -1702,7 +1904,14 @@ class VisualTests(CogBase):
         dados = self.cog.dados_cartao(pessoa(10))
         self.assertEqual(dados["nome"], "Apelido 10")
         self.assertEqual((dados["mensagens"], dados["pedidos"], dados["roletadas"]), (1, 1, 0))
-        self.assertEqual((dados["nivel"], dados["avanco"], dados["meta"]), (1, 1, 21))
+        self.assertEqual((dados["nivel"], dados["avanco"], dados["meta"]), (2, 6, 60))
+        self.assertEqual((dados["xp"], dados["patente"]), (26, "Figurante"))
+        self.assertIsNone(dados["insignia"])  # sem título escolhido
+        self.b.conceder_manual(10, "Papagaio da Call")
+        self.b.selecionar_titulo(10, "papagaio da call")
+        dados = self.cog.dados_cartao(pessoa(10))
+        self.assertEqual(dados["titulo"], "Papagaio da Call")
+        self.assertTrue(dados["insignia"].startswith(b"\x89PNG"))
         self.assertEqual(dados["pos_mensagens"], "#1 de 1")
         self.assertEqual(dados["pos_mudae"], "")
         self.assertEqual(dados["cor"], 0xFF8800)
@@ -1716,12 +1925,12 @@ class VisualTests(CogBase):
         return NS(send=AsyncMock(), author=alvo, typing=Typing)
 
     @unittest.skipUnless(imagens.disponivel(), "Pillow não instalado")
-    async def test_98_comando_cartao_envia_a_imagem_dentro_de_um_embed(self):
+    async def test_98_comando_cartao_envia_a_imagem_solta_para_sair_maior(self):
         ctx = self._ctx_do_cartao()
         await m.Atividade.cartao.callback(self.social(), ctx, None)
         kw = ctx.send.call_args.kwargs
         self.assertEqual(kw["file"].filename, "cartao.png")
-        self.assertEqual(kw["embed"].image.url, "attachment://cartao.png")
+        self.assertNotIn("embed", kw)
         self.assertEqual(kw["allowed_mentions"].to_dict(), {"parse": []})
 
     async def test_99_sem_pillow_o_cartao_cai_no_perfil_com_aviso(self):
@@ -2026,6 +2235,320 @@ class VisualTests(CogBase):
         ctx.send.reset_mock()
         await bot.on_command_error(ctx, m.commands.CommandNotFound("x"))
         ctx.send.assert_not_called()
+
+
+KAKERA = "<:kakera:469835869059153940>"
+
+
+def roll_mudae(seq, personagem="Rem", serie="Re:Zero", kakera="300", dono="", canal=1):
+    e = discord.Embed(
+        description=f"{serie}\nClaims: #1.234\n**{kakera}**{KAKERA}\n"
+        + ("" if dono else "Reaja com qualquer emoji para casar!")
+    )
+    e.set_author(name=personagem)
+    e.set_image(url="https://mudae.test/x.png")
+    if dono:
+        e.set_footer(text=f"Pertence a {dono}.")
+    evento = msg(m.mudae_tracker.MUDAE_ID, seq, content="", bot=True, channel=canal)
+    evento.author.name = "Mudae"
+    evento.embeds = [e]
+    evento.interaction_metadata = None
+    return evento
+
+
+def texto_mudae(seq, texto, canal=1):
+    evento = msg(m.mudae_tracker.MUDAE_ID, seq, content=texto, bot=True, channel=canal)
+    evento.author.name = "Mudae"
+    evento.interaction_metadata = None
+    return evento
+
+
+class AtalhosTests(CogBase):
+    def social(self):
+        return m.Atividade(NS(get_cog=lambda _: self.cog))
+
+    async def test_129_atalhos_da_lista_existem_e_nao_aparecem_na_ajuda(self):
+        atalhos = {
+            "tg": "tagarelas", "lvl": "levels", "md": "mudae", "h": "hall", "msc": "musicas",
+            "w": "wrapped", "p": "perfil", "i": "tags", "t": "tags", "th": "th", "f": "frase",
+            "fm": "favorita", "c": "cartao", "embedcolor": "ec", "cl": "changelog",
+        }  # fmt: skip
+        bot = m.criar_bot(False)
+        for cog in m.COGS:
+            await bot.add_cog(cog(bot) if cog is not m.Musicas else self.cog)
+        try:
+            for atalho, nome in atalhos.items():
+                with self.subTest(atalho):
+                    self.assertEqual(bot.get_command(atalho).name, nome)
+        finally:
+            await bot.remove_cog("Atividade")
+            await bot.remove_cog("Ajuda")
+        ctx = NS(send=AsyncMock())
+        await m.Ajuda.ajuda.callback(m.Ajuda(None), ctx)
+        texto = embed_enviado(ctx).description
+        for atalho in ("mm!tg", "mm!lvl", "mm!msc", "mm!fm", "mm!embedcolor", "mm!cl"):
+            self.assertNotIn(f"`{atalho}", texto)
+
+    async def test_130_tagarelas_mostra_so_pessoas_e_bots_so_com_a_flag(self):
+        self.b.receber(msg(10, 1))
+        self.b.receber(msg(5, 2, bot=True))
+        self.b.receber(msg(5, 3, bot=True))
+        for args, tem, nao_tem in (
+            ((), "Apelido 10", "Apelido 5"),
+            (("bots",), "Apelido 5", "Apelido 10"),
+            (("bot",), "Apelido 5", "Apelido 10"),
+        ):
+            ctx = NS(send=AsyncMock(), author=pessoa(10))
+            await m.Atividade.tagarelas.callback(self.social(), ctx, *args)
+            descricao = embed_enviado(ctx).description
+            self.assertIn(tem, descricao)
+            self.assertNotIn(nao_tem, descricao)
+        ctx = NS(send=AsyncMock(), author=pessoa(10))
+        await m.Atividade.tagarelas.callback(self.social(), ctx, "todos")
+        self.assertIn("Apelido 5", embed_enviado(ctx).description)
+        self.assertIn("Apelido 10", embed_enviado(ctx).description)
+        self.assertEqual(embed_enviado(ctx).title, "💬 Quem mais mandou mensagem")
+
+
+class EmojiRodapeTests(CogBase):
+    async def test_131_emoji_personalizado_nao_vaza_em_rodape_e_titulo(self):
+        originais = dict(estilo.EMOJI)
+        try:
+            estilo.EMOJI["importando"] = "<:mm_e_importando:1>"
+            estilo.EMOJI["mudae"] = "<:mm_e_mudae:2>"
+            ctx = NS(send=AsyncMock(), author=pessoa(10))
+            await m.Atividade.tagarelas.callback(m.Atividade(NS(get_cog=lambda _: self.cog)), ctx)
+            self.assertIn("⏳ importando histórico", embed_enviado(ctx).footer.text)
+            p1 = self.cog.paginas_perfil(pessoa(10))[0]
+            self.assertNotIn("<:", p1.footer.text)
+            ctx = NS(send=AsyncMock(), author=pessoa(10))
+            await m.Atividade.mudae.callback(m.Atividade(NS(get_cog=lambda _: self.cog)), ctx, None)
+            embed = embed_enviado(ctx)
+            self.assertEqual(embed.title, "🎎 Mudae no servidor")
+            self.assertNotIn("<:", embed.footer.text)
+        finally:
+            estilo.EMOJI.clear()
+            estilo.EMOJI.update(originais)
+
+
+class MudaeBotTests(CogBase):
+    def social(self):
+        return m.Atividade(NS(get_cog=lambda _: self.cog))
+
+    def jogar(self):
+        """10 rola Rem e Emilia; 20 casa com a Rem do 10 (snipe) e coleta kakera."""
+        self.b.receber(msg(10, 1, content="$wa"))
+        self.b.receber(roll_mudae(2, "Rem", kakera="300"))
+        self.b.receber(msg(10, 3, content="$wa"))
+        self.b.receber(roll_mudae(4, "Emilia", kakera="90"))
+        self.b.receber(msg(20, 5, content="oi"))
+        self.b.receber(texto_mudae(6, "💖 **Apelido 20** e **Rem** agora são casados! 💖"))
+        self.b.receber(texto_mudae(7, "<:kakeraY:1> **u20 +401** ($k)"))
+
+    async def test_121_receber_liga_o_roll_a_quem_rolou_e_guarda_casamento_e_kakera(self):
+        self.jogar()
+        con = self.b.con
+        self.assertEqual(
+            con.execute(
+                "SELECT personagem, roletador_id FROM mudae_rolls ORDER BY message_id"
+            ).fetchall(),
+            [("Rem", 10), ("Emilia", 10)],
+        )
+        self.assertEqual(
+            con.execute("SELECT usuario_id, roletador_id, kakera FROM mudae_casamentos").fetchone(),
+            (20, 10, 300),
+        )
+        self.assertEqual(
+            con.execute("SELECT usuario_id, valor FROM mudae_kakera").fetchone(), (20, 401)
+        )
+        self.assertEqual(self.b.total_usuario(10, "mudae"), 2)  # contagem antiga continua
+
+    async def test_122_panorama_pessoa_e_personagem(self):
+        self.jogar()
+        social = self.social()
+        ctx = NS(send=AsyncMock(), author=pessoa(10))
+        await m.Atividade.mudae.callback(social, ctx, None)
+        embed = embed_enviado(ctx)
+        self.assertEqual(embed.title, "🎎 Mudae no servidor")
+        self.assertIn("**2** rolls · **1** casamentos · **401** kakera", embed.description)
+        campos = {f.name: f.value for f in embed.fields}
+        self.assertIn("**Apelido 10** · 2 roletadas", campos["🎲 Quem mais rola"])
+        self.assertIn("**Apelido 20** · 1 casamento", campos["💍 Quem mais casa"])
+        self.assertIn(
+            "**Rem** · 300 kakera · por **Apelido 20**", campos["💎 Casamento mais valioso"]
+        )
+        self.assertIn("lendo o histórico do Mudae", embed.footer.text)
+
+        ctx = NS(send=AsyncMock(), author=pessoa(10))
+        await m.Atividade.mudae.callback(social, ctx, pessoa(20))
+        campos = {f.name: f.value for f in embed_enviado(ctx).fields}
+        self.assertEqual(campos["💍 Casamentos"], "**1**")
+        self.assertEqual(campos["🥷 Snipes"], "deu **1** · sofreu **0**")
+
+        ctx = NS(send=AsyncMock(), author=pessoa(10))
+        await m.Atividade.mudae_personagem.callback(social, ctx, nome="rem")
+        embed = embed_enviado(ctx)
+        self.assertEqual(embed.title, "⭐ Rem")
+        campos = {f.name: f.value for f in embed.fields}
+        self.assertIn("**Apelido 10** · 1x", campos["🙋 Quem mais rolou"])
+        self.assertEqual(campos["💍 Casou com"], "**Apelido 20**")
+
+        ctx = NS(send=AsyncMock(), author=pessoa(10))
+        await m.Atividade.mudae_personagem.callback(social, ctx, nome="Goku")
+        self.assertIn("Ainda não vi", texto_enviado(ctx))
+
+    async def test_122b_panorama_esconde_quem_saiu(self):
+        self.jogar()
+        membros = [pessoa(10)]
+        self.cog.bot.intents = NS(members=True)
+        self.cog.guild = lambda: NS(
+            chunked=True, members=membros, get_member=lambda uid: membros[0] if uid == 10 else None
+        )
+        ctx = NS(send=AsyncMock(), author=pessoa(10))
+        await m.Atividade.mudae.callback(self.social(), ctx, None)
+        campos = {f.name: f.value for f in embed_enviado(ctx).fields}
+        self.assertNotIn("💍 Quem mais casa", campos)  # só 20 casou, e 20 saiu
+        self.assertNotIn("por ", campos.get("💎 Casamento mais valioso", ""))
+
+    async def test_123_rankings_do_mudae_com_periodo_e_uso(self):
+        self.jogar()
+        social = self.social()
+        for comando, esperado in (
+            (m.Atividade.mudae_casamentos, "**Apelido 20** · 1 casamento"),
+            (m.Atividade.mudae_kakera, "**Apelido 20** · 401 kakera"),
+            (m.Atividade.mudae_snipers, "**Apelido 20** · 1 snipe"),
+            (m.Atividade.mudae_personagens, "**Rem** · Re:Zero · 1x"),
+            (m.Atividade.mudae_series, "**Re:Zero** · 2x"),
+        ):
+            ctx = NS(send=AsyncMock(), author=pessoa(10))
+            await comando.callback(social, ctx)
+            self.assertIn(esperado, embed_enviado(ctx).description)
+        ctx = NS(send=AsyncMock(), author=pessoa(10))
+        await m.Atividade.mudae_casamentos.callback(social, ctx, "semana")
+        self.assertIn("mm!mudae casamentos [mes|ano]", texto_enviado(ctx))
+        ctx = NS(send=AsyncMock(), author=pessoa(10))
+        await m.Atividade.mudae.callback(social, ctx, None, resto="qualquer")
+        self.assertIn("mm!mudae personagem NOME", texto_enviado(ctx))
+
+    async def test_124_edicao_do_roll_registra_o_dono(self):
+        self.b.receber(roll_mudae(2, "Rem"))
+        editado = roll_mudae(2, "Rem", dono="Apelido 20")
+        editado.guild = NS(id=self.cog.guild_id)
+        await self.cog.on_message_edit(None, editado)
+        self.assertEqual(
+            self.b.con.execute("SELECT dono FROM mudae_rolls").fetchone()[0], "Apelido 20"
+        )
+
+    async def test_125_historico_do_mudae_e_relido_uma_vez_e_retomado(self):
+        eventos = [
+            msg(10, 1, content="$wa"),
+            roll_mudae(2, "Rem"),
+            msg(10, 3, content="$wa"),
+            roll_mudae(4, "Ram"),
+        ]
+        with self.b.con:  # o que a versão anterior guardou: só comandos e contagem de mensagens
+            for e in eventos:
+                self.b.con.execute(
+                    "INSERT INTO mensagens VALUES (?,?,?,?)",
+                    (e.id, e.author.id, 1, int(e.author.bot)),
+                )
+                if not e.author.bot:
+                    self.b.con.execute("INSERT INTO mudae VALUES (?,?)", (e.id, 10))
+        canal = Canal(1, eventos)
+        self.cog.guild = lambda: NS(get_channel_or_thread=lambda cid: canal if cid == 1 else None)
+        self.assertTrue(await self.cog.ler_historico_mudae())
+        self.assertEqual(
+            self.b.con.execute(
+                "SELECT personagem, roletador_id FROM mudae_rolls ORDER BY message_id"
+            ).fetchall(),
+            [("Rem", 10), ("Ram", 10)],
+        )
+        self.assertEqual(self.b.estado("mudae_historico"), "1")
+        self.assertTrue(await self.cog.ler_historico_mudae())  # de novo: nada duplica
+        self.assertEqual(self.b.con.execute("SELECT COUNT(*) FROM mudae_rolls").fetchone()[0], 2)
+
+    async def test_125b_mensagem_que_quebra_nao_trava_o_historico(self):
+        eventos = [
+            msg(10, 1, content="$wa"),
+            roll_mudae(2, "Rem"),
+            msg(10, 3, content="$wa"),
+            roll_mudae(4, "Ram"),
+        ]
+        with self.b.con:
+            for e in eventos:
+                self.b.con.execute(
+                    "INSERT INTO mensagens VALUES (?,?,?,?)",
+                    (e.id, e.author.id, 1, int(e.author.bot)),
+                )
+                if not e.author.bot:
+                    self.b.con.execute("INSERT INTO mudae VALUES (?,?)", (e.id, 10))
+        canal = Canal(1, eventos)
+        self.cog.guild = lambda: NS(get_channel_or_thread=lambda cid: canal)
+        real = m.mudae_tracker.registrar
+
+        def quebra_no_rem(con, mensagem):
+            if mensagem.embeds and mensagem.embeds[0].author.name == "Rem":
+                raise OverflowError("número enorme")
+            return real(con, mensagem)
+
+        with (
+            patch.object(m.mudae_tracker, "registrar", quebra_no_rem),
+            self.assertLogs(level="ERROR"),
+        ):
+            self.assertTrue(await self.cog.ler_historico_mudae())
+        self.assertEqual(
+            self.b.con.execute("SELECT personagem FROM mudae_rolls").fetchall(), [("Ram",)]
+        )
+        self.assertEqual(self.b.estado("mudae_historico"), "1")
+
+    async def test_126_falha_passageira_nao_marca_o_historico_como_lido(self):
+        with self.b.con:
+            self.b.con.execute(
+                "INSERT INTO mensagens VALUES (?,?,?,1)", (sid(), m.mudae_tracker.MUDAE_ID, 2)
+            )
+        canal = CanalComFalha(2, [])
+        self.cog.guild = lambda: NS(get_channel_or_thread=lambda cid: canal)
+        with self.assertLogs(level="WARNING"):
+            self.assertFalse(await self.cog.ler_historico_mudae())
+        self.assertEqual(self.b.estado("mudae_historico"), "")
+
+    async def test_127_resumo_do_periodo_inclui_o_mudae(self):
+        self.jogar()
+        dados = self.b.resumo_periodo("mes", "2026-09")
+        self.assertEqual(dados["mudae"]["rolls"], 2)
+        self.assertEqual(dados["mudae"]["casamentos"], 1)
+        self.assertEqual(dados["mudae"]["personagem"], ["Rem", 1])
+        self.assertEqual(dados["mudae"]["roletador"], [10, 2])
+        embed = estilo.embed_resumo("mes", "2026-09", dados, lambda uid: f"P{uid}")
+        campo = next(f for f in embed.fields if f.name == "🎎 Mudae")
+        self.assertIn("2 rolls · 1 casamento", campo.value)
+        self.assertIn("**P10**", campo.value)
+
+    async def test_128_mudaedump_exporta_e_diz_o_que_entendeu(self):
+        eventos = [
+            msg(10, 1, content="$wa"),
+            roll_mudae(2, "Rem"),
+            texto_mudae(3, "Wishlist salva."),
+            msg(10, 4, content="oi"),
+        ]
+        canal = Canal(1, eventos)
+
+        async def historico(limit=None, **kw):
+            for e in sorted(eventos, key=lambda x: x.id, reverse=True)[:limit]:
+                yield e
+
+        canal.history = historico
+        ctx = NS(
+            send=AsyncMock(), author=NS(id=m.MEMI_ID), channel=canal, typing=Typing, guild=NS()
+        )
+        await m.Atividade.mudaedump.callback(self.social(), ctx)
+        texto = ctx.send.call_args.args[0]
+        self.assertIn("3 mensagens do Mudae e comandos", texto)
+        self.assertIn("roll: 1", texto)
+        self.assertIn("não reconhecida: 1", texto)
+        dados = json.loads(ctx.send.call_args.kwargs["file"].fp.read())
+        self.assertEqual([x["entendido_como"] for x in dados], ["comando", "roll", None])
+        self.assertEqual(dados[1]["embeds"][0]["author"]["name"], "Rem")
 
 
 class ChangelogComandoTests(unittest.IsolatedAsyncioTestCase):

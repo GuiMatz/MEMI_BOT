@@ -28,6 +28,8 @@ EMOJI = {
     "importando": "⏳",
     "posicao": "📍",
 }
+# Cópia dos emojis padrão: rodapés e títulos de embed não desenham emojis personalizados.
+EMOJI_PADRAO = dict(EMOJI)
 MEDALHAS = ("🥇", "🥈", "🥉")
 MESES_EXTENSO = (
     "janeiro",
@@ -52,6 +54,13 @@ LIMITE_DESCRICAO = 4096
 LIMITE_EMBED = 6000
 
 _COR_FEEDBACK = {"sucesso": COR_SUCESSO, "aviso": COR_AVISO, "erro": COR_ERRO}
+
+
+def emoji_simples(chave):
+    """Emoji para rodapés e títulos de embed, onde o Discord mostra '<:nome:id>' como texto:
+    o personalizado (assets/emojis) dá lugar ao padrão."""
+    atual = EMOJI.get(chave, "")
+    return EMOJI_PADRAO.get(chave, "") if atual.startswith("<") else atual
 
 
 def barra(atual, total, largura=10):
@@ -134,6 +143,7 @@ def embed_ranking(
     meu_indice=None,
     cor=COR_PADRAO,
     numerar=True,
+    separador="\n",
 ):
     """Uma página de ranking. `itens` são textos prontos ('**Nome** · detalhe'); a posição
     (medalha ou número) é acrescentada aqui. `meu_indice` é a posição (0-based) de quem pediu:
@@ -145,7 +155,7 @@ def embed_ranking(
         f"{prefixo_posicao(pos)} {item}" if numerar else item
         for pos, item in enumerate(itens[ini : ini + por_pagina], start=ini + 1)
     ]
-    texto = "\n".join(linhas) or "*Ninguém no ranking ainda.*"
+    texto = separador.join(linhas) or "*Ninguém no ranking ainda.*"
     if subtitulo:
         texto = f"*{subtitulo}*\n\n{texto}"
     if meu_indice is not None and not ini <= meu_indice < ini + por_pagina:
@@ -219,6 +229,20 @@ def embed_resumo(tipo, periodo, dados, nome, com_imagem=False):
             campo(embed, "💬 Tagarela do Mês", mensagens(tagarelas[0]), False)
         if musicas and not com_imagem:
             campo(embed, "🎵 Música do mês", linha_faixa(*musicas[0]), False)
+    jogo = dados.get("mudae") or {}
+    if jogo.get("rolls") or jogo.get("casamentos"):
+        # A imagem não traz o Mudae: o campo aparece com ou sem ela.
+        partes = [
+            f"{plural(jogo.get('rolls', 0), 'roll', 'rolls')}"
+            f" · {plural(jogo.get('casamentos', 0), 'casamento', 'casamentos')}"
+        ]
+        if jogo.get("roletador"):
+            uid, n = jogo["roletador"]
+            partes.append(f"🎲 **{nome(uid)}** · {plural(n, 'roletada', 'roletadas')}")
+        if jogo.get("personagem"):
+            personagem, n = jogo["personagem"]
+            partes.append(f"⭐ **{cortar(personagem, 80)}** saiu {n}x")
+        campo(embed, f"{EMOJI['mudae']} Mudae", "\n".join(partes), False)
     if not com_imagem:
         numeros = (
             f"{plural(dados.get('mensagens', 0), 'mensagem', 'mensagens')}"
@@ -229,19 +253,55 @@ def embed_resumo(tipo, periodo, dados, nome, com_imagem=False):
     return embed
 
 
-def embed_nivel(nome, marco, nivel, avanco, meta, avatar_url="", com_imagem=False):
-    """Aviso de que `nome` alcançou o marco (nível marco*10). Sem imagem, mostra o progresso e o
-    avatar; com imagem (que já traz os dois), o embed fica só com o texto."""
+def texto_progresso(nivel, avanco, meta, maximo=100):
+    """'▰▰▰▱▱ 120/380 XP' ou 'nível máximo'."""
+    if nivel >= maximo:
+        return f"{barra(1, 1)} nível máximo"
+    return f"{barra(avanco, meta)} {milhar(avanco)}/{milhar(meta)} XP"
+
+
+def embed_nivel(
+    nome,
+    nivel,
+    progresso,
+    patente,
+    *,
+    trocou=False,
+    icone="",
+    avatar_url="",
+    com_imagem=False,
+):
+    """Aviso de level up. `progresso` = (nível atual, avanço, meta); `patente` = dict com nome e
+    cor. Troca de patente ganha título e cor próprios. Sem imagem, mostra o progresso e o avatar;
+    com imagem (que já traz os dois), o embed fica só com o texto."""
+    marca = f"{icone} " if icone else ""
+    if trocou:
+        titulo = f"🎖️ Nova patente: {patente['nome']}"
+        texto = f"**{nome}** chegou ao nível **{nivel}** e agora é {marca}**{patente['nome']}**!"
+        cor = patente.get("cor") or COR_ANO
+    else:
+        titulo = f"⬆️ Nível {nivel}"
+        texto = f"**{nome}** subiu para o nível **{nivel}** · {marca}{patente['nome']}"
+        cor = COR_ANO
     embed = discord.Embed(
-        title=f"🎉 Nível {marco * 10}!",
-        description=cortar(f"**{nome}** chegou ao nível **{marco * 10}**!", LIMITE_DESCRICAO),
-        color=COR_ANO,
+        title=cortar(titulo, LIMITE_TITULO),
+        description=cortar(texto, LIMITE_DESCRICAO),
+        color=cor,
     )
+    atual, avanco, meta = progresso
     if not com_imagem:
-        campo(embed, f"Nível {nivel}", f"{barra(avanco, meta)} {avanco}/{meta}", False)
+        campo(embed, f"Nível {atual}", texto_progresso(atual, avanco, meta), False)
         if avatar_url:
             embed.set_thumbnail(url=avatar_url)
-    embed.set_footer(text=rodape("a cada 10 níveis"))
+        embed.set_footer(text=rodape("mm!levels"))
+    else:
+        # A imagem traz o nível e a patente; o quanto falta para o próximo vai no rodapé.
+        falta = (
+            "nível máximo"
+            if atual >= 100
+            else f"{milhar(avanco)}/{milhar(meta)} XP para o nível {atual + 1}"
+        )
+        embed.set_footer(text=rodape(falta, "mm!levels"))
     return embed
 
 

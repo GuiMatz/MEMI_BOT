@@ -31,7 +31,7 @@ Obrigado por considerar uma contribuição ao MeMi BOT. Issues e pull requests s
 
   ```powershell
   python -m pip install black==26.5.1
-  python -m black memi_bot.py memi_tray.py estilo.py imagens.py changelog.py test_memi_bot.py test_estilo.py test_imagens.py test_changelog.py
+  python -m black *.py
   ```
 
 - Antes de abrir o pull request, execute:

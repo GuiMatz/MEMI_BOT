@@ -11,6 +11,7 @@ import logging
 import os
 import shutil
 import socket
+import typing
 import unicodedata
 from logging.handlers import RotatingFileHandler
 import csv
@@ -27,25 +28,34 @@ from urllib.parse import parse_qs, urlparse
 import aiohttp
 import changelog as versoes_bot
 import discord
+import emojis
 import imagens
+import mudae as mudae_tracker
+import progressao
+import tags
 from discord.ext import commands
 from estilo import (
     BOT_NAME,
     COR_PADRAO,
     EMOJI,
+    LIMITE_CAMPO,
+    MEDALHAS,
+    LIMITE_DESCRICAO,
     MESES_EXTENSO,
-    barra,
     campo,
+    cortar,
     embed_ajuda,
     embed_changelog,
     embed_nivel,
     embed_ranking,
     embed_resumo,
+    emoji_simples,
     linha_faixa,
     milhar,
     plural,
     responder,
     rotulo_periodo,
+    texto_progresso,
 )
 from estilo import rodape as rodape_do_bot
 
@@ -100,6 +110,8 @@ WRAPPED_TOP_GENERO = 10  # quantos pedidos mais feitos entram na conta do gêner
 LIMITE_BUSCA_NOMES = 150  # máx. de pessoas buscadas na API ao exportar (o resto sai só com o ID)
 
 POR_PAGINA = 10  # itens por página do ranking
+HALL_POR_PAGINA = 6  # períodos por página do mm!hall
+HALL_NOME_MAXIMO = 32  # nomes maiores são cortados com … no mm!hall
 ARQUIVO_BANCO = Path(__file__).with_name("memi.db")  # fica na mesma pasta do bot
 MANUTENCAO_INTERVALO = 15  # segundos entre passadas da manutenção (avisos, fechamento, backup)
 IMAGEM_TIMEOUT = 15  # segundos para gerar uma imagem (em thread) antes de desistir
@@ -316,128 +328,12 @@ CANAL_AVISOS = _id_config("notice_channel_id", "MEMI_NOTICE_CHANNEL_ID")
 MEMBERS_INTENT = intent_membros(os.getenv("MEMI_MEMBERS_INTENT"))
 # Opcional se o bot só está em um servidor ou enxerga CANAL_AVISOS.
 SERVIDOR_ID = _id_config("guild_id", "MEMI_GUILD_ID")
+VERSAO_BANCO = 4  # PRAGMA user_version esperado; versões menores migram com backup
 PREFIXO_MUDAE = "$"
 COMANDOS_MUDAE = {"w", "wa", "wg", "wx", "h", "ha", "hg", "hx", "m", "ma", "mg", "mx"}
 # Acrescente waifu/husbando/marry somente depois de confirmar no servidor.
-PONTOS_NIVEL = [
-    (0, 1),
-    (1000, 50),
-    (5000, 100),
-    (10000, 150),
-    (25000, 200),
-    (50000, 250),
-    (75000, 275),
-    (100000, 400),
-    (125000, 500),
-    (150000, 650),
-    (175000, 800),
-    (200000, 1000),
-]
-TITULOS_MENSAGENS = [
-    (1000, "resenha_torta", "Resenha Torta"),
-    (10000, "resenha_reta", "Resenha Reta"),
-    (50000, "resenhudo", "Resenhudo"),
-    (75000, "cafetao_resenhas", "Cafetão das Resenhas"),
-    (100000, "rei_resenha", "Rei da Resenha"),
-    (200000, "demiurgo", "Demiurgo do Clubex"),
-]
-TITULOS_MUSICAS = [
-    (50, "dj_piolho", "DJ PIOLHO"),
-    (100, "dj_overload", "DJ OVERLOAD"),
-    (150, "dj_zettabytes", "DJ ZETTABYTES"),
-    (200, "dj_pancaked", "DJ PANCAKED KING"),
-    (300, "dj_cupcake", "DJ CUPCAKE PARTY"),
-    (500, "dj_roger", "DJ ROGER LAKE"),
-]
-
-# Catálogo editável. Não troque os identificadores de itens já concedidos.
-# Cada item pode ser título, insígnia ou ambos. Edite nomes/emojis aqui.
-CATALOGO = {
-    "dj_call": {
-        "nome": "DJ da Call",
-        "titulo": True,
-        "insignia": True,
-        "emoji": "🥇",
-        "manual": False,
-    },
-    "dj_mes": {
-        "nome": "DJ do Mês",
-        "titulo": True,
-        "insignia": True,
-        "emoji": "🟣",
-        "manual": False,
-    },
-    "dj_ano": {
-        "nome": "DJ do Ano",
-        "titulo": True,
-        "insignia": True,
-        "emoji": "🔴",
-        "manual": False,
-    },
-    "tagarela_chat": {
-        "nome": "Tagarela do Chat",
-        "titulo": True,
-        "insignia": True,
-        "emoji": "💬",
-        "manual": False,
-    },
-    "tagarela_mes": {
-        "nome": "Tagarela do Mês",
-        "titulo": True,
-        "insignia": True,
-        "emoji": "🟪",
-        "manual": False,
-    },
-    "tagarela_ano": {
-        "nome": "Tagarela do Ano",
-        "titulo": True,
-        "insignia": True,
-        "emoji": "🟥",
-        "manual": False,
-    },
-    "roletador": {
-        "nome": "Roletador",
-        "titulo": True,
-        "insignia": True,
-        "emoji": "🎎",
-        "manual": False,
-    },
-    "cartola": {
-        "nome": "Cartoleiro",
-        "nome_insignia": "CARTOLA",
-        "titulo": True,
-        "insignia": True,
-        "emoji": "🟠",
-        "manual": True,
-    },
-    "wplace": {
-        "nome": "Pintador",
-        "nome_insignia": "WPLACE",
-        "titulo": True,
-        "insignia": True,
-        "emoji": "🎨",
-        "manual": True,
-    },
-    "bongas": {"nome": "BONGAS", "titulo": True, "insignia": True, "emoji": "🫏", "manual": True},
-    "breca": {
-        "nome": "Bréca Games",
-        "titulo": True,
-        "insignia": True,
-        "emoji": "🧱",
-        "manual": True,
-    },
-    # Troféus do Cartola: adicione aqui depois de definir a lista, por exemplo
-    # "identificador_estavel": {"nome": "Nome definido pelo dono", "titulo": True,
-    #     "insignia": True, "emoji": "🏆", "manual": True},
-}
-for _limite, _identificador, _nome in TITULOS_MENSAGENS + TITULOS_MUSICAS:
-    CATALOGO[_identificador] = {
-        "nome": _nome,
-        "titulo": True,
-        "insignia": False,
-        "emoji": "",
-        "manual": False,
-    }
+# Tags (títulos + insígnias) ficam em tags.py; XP, níveis e patentes em progressao.py.
+CATALOGO = tags.CATALOGO
 
 
 def sem_acento(texto):
@@ -446,35 +342,9 @@ def sem_acento(texto):
     )
 
 
-def nivel(total):
-    total = max(0, int(total))
-    for (m0, n0), (m1, n1) in zip(PONTOS_NIVEL, PONTOS_NIVEL[1:]):
-        if total < m1:
-            return n0 + (total - m0) * (n1 - n0) // (m1 - m0)
-    return 1000
-
-
-def minimo_nivel(n):
-    if n <= 1:
-        return 0
-    for (m0, n0), (m1, n1) in zip(PONTOS_NIVEL, PONTOS_NIVEL[1:]):
-        if n <= n1:
-            return m0 + ((n - n0) * (m1 - m0) + (n1 - n0) - 1) // (n1 - n0)
-    return 200000
-
-
-def progresso_valores(total):
-    """(nível, avanço, meta) dentro do nível atual; no nível máximo, (1000, 1, 1)."""
-    atual = nivel(total)
-    if atual == 1000:
-        return atual, 1, 1
-    base = minimo_nivel(atual)
-    return atual, total - base, minimo_nivel(atual + 1) - base
-
-
-def progresso_nivel(total):
-    atual, avanco, meta = progresso_valores(total)
-    return atual, "Nível máximo" if atual == 1000 else f"{avanco}/{meta}"
+def xp_de(totais):
+    """XP a partir de um dicionário com os totais de mensagens, pedidos e mudae (roletadas)."""
+    return progressao.xp(totais["mensagens"], totais["pedidos"], totais["mudae"])
 
 
 def eh_mudae(msg):
@@ -819,7 +689,9 @@ class Banco(BancoLegado):
             with closing(sqlite3.connect(caminho)) as antes:
                 versao = antes.execute("PRAGMA user_version").fetchone()[0]
                 colunas = [r[1] for r in antes.execute("PRAGMA table_info(tocadas)")]
-            if versao < 3:  # 3: resumos, marcos de nível e cor do perfil (todas mudanças aditivas)
+            # 3: resumos, marcos de nível e cor do perfil; 4: níveis de 1 a 100, tags unificadas e
+            # Mudae tracker. Toda migração começa com uma cópia do banco e do código em backups/.
+            if versao < VERSAO_BANCO:
                 backup_antes_migracao(caminho)
             if colunas and "musica_id" not in colunas:
                 raise RuntimeError(
@@ -880,6 +752,7 @@ class Banco(BancoLegado):
                 chave TEXT PRIMARY KEY, texto TEXT NOT NULL, nome TEXT NOT NULL DEFAULT '',
                 genero TEXT NOT NULL DEFAULT '', consultado_em INTEGER NOT NULL DEFAULT 0);
         """)
+        mudae_tracker.criar_tabelas(self.con)
         if "cor" not in [r[1] for r in self.con.execute("PRAGMA table_info(perfil_usuario)")]:
             self.con.execute("ALTER TABLE perfil_usuario ADD COLUMN cor INTEGER")
         if versao < 2:
@@ -909,6 +782,15 @@ class Banco(BancoLegado):
         if versao < 3:
             with self.con:
                 self.con.execute("PRAGMA user_version=3")
+        if versao < 4:
+            with self.con:
+                # Níveis mudaram de escala (1-1000 -> 1-100): os marcos antigos não valem mais.
+                # Sem marco guardado, a próxima avaliação só grava o nível (nenhum aviso retroativo).
+                self.con.execute("DELETE FROM niveis_marco")
+                self.con.execute("DELETE FROM avisos_nivel")
+                # Tags unificadas: tudo que a pessoa já tem vira título e insígnia.
+                self.con.execute("UPDATE posses SET titulo=1, insignia=1")
+                self.con.execute("PRAGMA user_version=4")
 
     def estado(self, chave, padrao=""):
         row = self.con.execute("SELECT valor FROM estado WHERE chave=?", (chave,)).fetchone()
@@ -987,6 +869,10 @@ class Banco(BancoLegado):
                     "INSERT OR IGNORE INTO mudae VALUES (?,?)", (mid, uid)
                 ).rowcount:
                     self._incrementar(uid, "mudae", mid)
+            if not msg.author.bot:
+                mudae_tracker.registrar_nomes(self.con, msg.author)
+            elif mudae_tracker.eh_do_mudae(msg):
+                mudae_tracker.registrar(self.con, msg)
             musica = extrair_musica(msg)
             if musica:
                 t, a = musica
@@ -1109,7 +995,9 @@ class Banco(BancoLegado):
                     f"UPDATE perfil_usuario SET {campo}=? WHERE usuario_id=?", (valor, uid)
                 )
 
-    def itens(self, uid, tipo):
+    def itens(self, uid, tipo="titulo"):
+        """[(tag, quantidade)] da pessoa, na ordem em que foram ganhas. `tipo` existe por
+        compatibilidade: desde a v2.2 toda tag é título e insígnia."""
         if tipo not in ("titulo", "insignia"):
             raise ValueError("Tipo inválido")
         return [
@@ -1121,105 +1009,137 @@ class Banco(BancoLegado):
             if item in CATALOGO
         ]
 
+    def tags_usuario(self, uid):
+        """[(tag, quantidade, último detalhe)] na ordem das categorias do catálogo; o detalhe é
+        o período mais recente (ex.: '2026-08') das tags de mês/ano."""
+        linhas = self.con.execute(
+            "SELECT item, COUNT(*), MAX(detalhe), MIN(desbloqueado_em) FROM posses "
+            "WHERE usuario_id=? GROUP BY item",
+            (uid,),
+        ).fetchall()
+        ordem = {c: i for i, c in enumerate(tags.CATEGORIAS)}
+        posicao = {k: i for i, k in enumerate(CATALOGO)}
+        return [
+            (item, n, detalhe)
+            for item, n, detalhe, _ in sorted(
+                (x for x in linhas if x[0] in CATALOGO),
+                key=lambda x: (ordem[CATALOGO[x[0]]["categoria"]], posicao[x[0]]),
+            )
+        ]
+
     def selecionar_titulo(self, uid, nome):
-        for item, _ in self.itens(uid, "titulo"):
-            if sem_acento(CATALOGO[item]["nome"]) == sem_acento(nome):
-                self.salvar_perfil(uid, titulo=item)
-                return True
+        ident = tags.buscar(nome)
+        if ident and any(item == ident for item, _ in self.itens(uid)):
+            self.salvar_perfil(uid, titulo=ident)
+            return True
         return False
 
     def _conceder(self, uid, item, detalhe="", avisar=False, chave_aviso=None, tipo=None):
-        info = CATALOGO[item]
-        titulo, insignia = int(info["titulo"]), int(info["insignia"])
-        if tipo and not info.get("vinculado"):
-            titulo, insignia = int(tipo == "titulo"), int(tipo == "insignia")
+        """Registra a tag (título e insígnia). `tipo` é ignorado (compatibilidade)."""
+        CATALOGO[item]  # identificador desconhecido é erro de programação
         novo = self.con.execute(
-            "INSERT OR IGNORE INTO posses VALUES (?,?,?,?,?,?)",
-            (uid, item, detalhe, titulo, insignia, int(time.time())),
+            "INSERT OR IGNORE INTO posses VALUES (?,?,?,1,1,?)",
+            (uid, item, detalhe, int(time.time())),
         ).rowcount
         if not novo:
             return False
         if avisar:
             self.con.execute(
-                "INSERT OR IGNORE INTO avisos(chave,usuario_id,item,titulo,insignia,detalhe) VALUES (?,?,?,?,?,?)",
-                (chave_aviso or f"{uid}:{item}:{detalhe}", uid, item, titulo, insignia, detalhe),
+                "INSERT OR IGNORE INTO avisos(chave,usuario_id,item,titulo,insignia,detalhe) VALUES (?,?,?,1,1,?)",
+                (chave_aviso or f"{uid}:{item}:{detalhe}", uid, item, detalhe),
             )
         return True
 
-    def conceder_manual(self, uid, tipo, nome, eh_bot=False):
-        tipo = sem_acento(tipo)
-        if tipo not in ("titulo", "insignia") or eh_bot:
-            raise ValueError("Escolha titulo ou insignia e uma pessoa.")
-        item = next(
-            (
-                k
-                for k, v in CATALOGO.items()
-                if v.get(tipo)
-                and sem_acento(nome)
-                in {
-                    sem_acento(k),
-                    sem_acento(v["nome"]),
-                    sem_acento(v.get("nome_insignia", v["nome"])),
-                }
-            ),
-            None,
-        )
-        if item is None:
+    def conceder_manual(self, uid, nome, eh_bot=False):
+        """Concede uma tag manual (Cartola, eventos...). True se era nova; ValueError se o nome não
+        for de uma tag manual ou se o alvo for um bot."""
+        if eh_bot:
+            raise ValueError("Tags são só para pessoas, não para bots.")
+        item = tags.buscar(nome)
+        if item is None or not CATALOGO[item]["manual"]:
             raise ValueError(
-                "Item inexistente. Válidos: "
-                + ", ".join(
-                    v.get("nome_insignia", v["nome"]) if tipo == "insignia" else v["nome"]
-                    for v in CATALOGO.values()
-                    if v.get(tipo)
-                )
+                "Tag inexistente ou automática. Tags manuais: "
+                + ", ".join(CATALOGO[k]["nome"] for k in tags.manuais())
             )
         with self.con:
-            if any(k == item for k, _ in self.itens(uid, tipo)):
+            if self.con.execute(
+                "SELECT 1 FROM posses WHERE usuario_id=? AND item=?", (uid, item)
+            ).fetchone():
                 return False
-            # Uma única posse por item manual, com possibilidade de completar o outro tipo.
-            row = self.con.execute(
-                "SELECT 1 FROM posses WHERE usuario_id=? AND item=? AND detalhe='manual'",
-                (uid, item),
-            ).fetchone()
-            if row:
-                self.con.execute(
-                    f"UPDATE posses SET {tipo}=1 WHERE usuario_id=? AND item=? AND detalhe='manual'",
-                    (uid, item),
-                )
-                return True
-            return self._conceder(uid, item, "manual", tipo=tipo)
+            return self._conceder(uid, item, "manual")
+
+    def xp_usuario(self, uid):
+        row = self.con.execute(
+            "SELECT mensagens, pedidos, roletadas FROM totais WHERE usuario_id=?", (uid,)
+        ).fetchone()
+        return progressao.xp(*row) if row else 0
+
+    def ranking_xp(self, eh_bot=False, elegiveis=None):
+        """[(uid, xp)] do maior para o menor XP (desempate: quem chegou antes)."""
+        sql = (
+            "SELECT t.usuario_id, t.mensagens*? + t.pedidos*? + t.roletadas/? AS xp "
+            "FROM totais t LEFT JOIN autores a ON a.usuario_id=t.usuario_id "
+            "WHERE COALESCE(a.eh_bot,0)=? "
+            "ORDER BY xp DESC, MAX(t.ultima_msg, t.ultimo_pedido, t.ultima_roletada), t.usuario_id"
+        )
+        parametros = (
+            progressao.XP_POR_MENSAGEM,
+            progressao.XP_POR_PEDIDO,
+            progressao.ROLETADAS_POR_XP,
+            int(eh_bot),
+        )
+        return [
+            (uid, xp)
+            for uid, xp in self.con.execute(sql, parametros)
+            if xp > 0 and (elegiveis is None or uid in elegiveis)
+        ]
 
     def _avaliar_usuario(self, uid, avisar):
         autor = self.con.execute("SELECT eh_bot FROM autores WHERE usuario_id=?", (uid,)).fetchone()
         if autor and autor[0]:
             return
-        marco = nivel(self.total_usuario(uid, "mensagens")) // 10
+        atual = progressao.nivel(self.xp_usuario(uid))
         guardado = self.con.execute(
             "SELECT marco FROM niveis_marco WHERE usuario_id=?", (uid,)
         ).fetchone()
-        if guardado is None or marco > guardado[0]:
+        # niveis_marco.marco guarda o último nível avaliado (1 a 100).
+        if guardado is None or atual > guardado[0]:
             self.con.execute(
                 "INSERT INTO niveis_marco(usuario_id, marco) VALUES (?,?) "
                 "ON CONFLICT(usuario_id) DO UPDATE SET marco=excluded.marco",
-                (uid, marco),
+                (uid, atual),
             )
-            # A primeira avaliação só grava (evita avisar marcos antigos ao atualizar o bot).
-            if avisar and guardado is not None and marco > 0:
-                # Recuperação offline reaplica mensagem por mensagem: fica só o marco mais alto.
+            # A primeira avaliação só grava (evita avisar níveis antigos ao atualizar o bot).
+            if avisar and guardado is not None and atual > 1:
+                # Recuperação offline reaplica mensagem por mensagem: fica só o nível mais alto,
+                # mas uma troca de patente no meio do caminho continua sendo anunciada.
+                trocas = ",".join(str(int(x["minimo"])) for x in progressao.PATENTES)
                 self.con.execute(
-                    "DELETE FROM avisos_nivel WHERE usuario_id=? AND estado='pendente' AND marco<?",
-                    (uid, marco),
+                    "DELETE FROM avisos_nivel WHERE usuario_id=? AND estado='pendente' AND marco<? "
+                    f"AND marco NOT IN ({trocas})",
+                    (uid, atual),
                 )
+                for item in progressao.PATENTES:
+                    if guardado[0] < item["minimo"] < atual:
+                        self.con.execute(
+                            "INSERT OR IGNORE INTO avisos_nivel(usuario_id, marco) VALUES (?,?)",
+                            (uid, item["minimo"]),
+                        )
                 self.con.execute(
                     "INSERT OR IGNORE INTO avisos_nivel(usuario_id, marco) VALUES (?,?)",
-                    (uid, marco),
+                    (uid, atual),
                 )
-        for fonte, limites in (("mensagens", TITULOS_MENSAGENS), ("pedidos", TITULOS_MUSICAS)):
+        for item in progressao.patentes_ate(atual):
+            self._conceder(uid, tags.id_patente(item))  # o aviso de nível já anuncia a patente
+        for fonte, limites in (
+            ("mensagens", tags.METAS_MENSAGENS),
+            ("pedidos", tags.METAS_MUSICAS),
+        ):
             n = self.total_usuario(uid, fonte)
-            for limite, item, _ in limites:
+            for limite, item in limites:
                 if n >= limite:
                     self._conceder(uid, item, avisar=avisar)
-        if self.total_usuario(uid, "mudae") >= 1000:
+        if self.total_usuario(uid, "mudae") >= tags.ROLETADAS_ROLETADOR:
             self._conceder(uid, "roletador", avisar=avisar)
 
     def _rotativos(self, avisar, evento, elegiveis=None):
@@ -1276,6 +1196,7 @@ class Banco(BancoLegado):
             "pedidos": totais["pedidos"],
             "musicas": [[t, a, q] for t, a, q in self.ranking_musicas(desde, ate)[:5]],
             "artistas": [[a, n, q] for a, n, q in self.ranking_artistas(desde, ate)[:5]],
+            "mudae": mudae_tracker.resumo(self.con, desde, ate),
         }
 
     def _guardar_resumo(self, tipo, periodo, elegiveis=None):
@@ -1347,6 +1268,20 @@ class Banco(BancoLegado):
     def marcar_aviso_nivel(self, aviso_id, estado):
         with self.con:
             self.con.execute("UPDATE avisos_nivel SET estado=? WHERE id=?", (estado, aviso_id))
+
+    def atualizar_mudae(self, msg):
+        """Edição de uma mensagem do Mudae (o dono entra no rodapé do roll ao casar)."""
+        with self.con:
+            return mudae_tracker.atualizar_roll(self.con, msg)
+
+    def canais_do_mudae(self):
+        return [
+            r[0]
+            for r in self.con.execute(
+                "SELECT DISTINCT canal_id FROM mensagens WHERE autor_id=?",
+                (mudae_tracker.MUDAE_ID,),
+            )
+        ]
 
     def hall(self, tipo):
         """[(periodo, dj_uid, tagarela_uid)] dos períodos fechados, do mais recente ao mais antigo."""
@@ -1638,6 +1573,67 @@ def pode_anexar(canal):
         return True
 
 
+def periodo_curto(detalhe):
+    """'2026-08' -> 'ago/2026'; '2026' -> '2026'; outro texto -> ''."""
+    if re.fullmatch(r"\d{4}-\d{2}", detalhe or ""):
+        return f"{MESES[int(detalhe[5:7]) - 1]}/{detalhe[:4]}"
+    return detalhe if re.fullmatch(r"\d{4}", detalhe or "") else ""
+
+
+def linha_tag(item, n=1, detalhe=""):
+    """'<emoji> **Nome** — como ganhou · ×N · último: ago/2026'."""
+    info = CATALOGO[item]
+    extras = [info["como"]]
+    if n > 1:
+        extras.append(f"×{n}")
+    if periodo_curto(detalhe):
+        extras.append(f"último: {periodo_curto(detalhe)}")
+    return f"{tags.icone(item)} **{info['nome']}** — " + " · ".join(extras)
+
+
+def juntar_ate(partes, limite, separador="\n", resto="\n+{n} · use mm!tags para ver todas"):
+    """Junta partes inteiras até `limite` caracteres; o que sobrar vira '+N'."""
+    feitas, tamanho = [], 0
+    for i, parte in enumerate(partes):
+        extra = len(parte) + (len(separador) if feitas else 0)
+        if tamanho + extra > limite - 60:
+            return separador.join(feitas) + resto.format(n=len(partes) - i)
+        feitas.append(parte)
+        tamanho += extra
+    return separador.join(feitas)
+
+
+def blocos_por_categoria(posses):
+    """Linhas das tags agrupadas por categoria, com o nome da categoria em negrito."""
+    blocos = []
+    for categoria in tags.CATEGORIAS:
+        linhas = [
+            linha_tag(item, n, detalhe)
+            for item, n, detalhe in posses
+            if CATALOGO[item]["categoria"] == categoria
+        ]
+        if linhas:
+            blocos.append(f"**{categoria}**\n" + "\n".join(linhas))
+    return blocos
+
+
+def imagem_da_tag(ident):
+    """Bytes PNG da insígnia (arquivo da tag ou emblema da patente), ou None."""
+    info = CATALOGO.get(ident or "")
+    if not info:
+        return None
+    if info.get("imagem"):
+        caminho = tags.PASTA_INSIGNIAS / info["imagem"]
+        return caminho.read_bytes() if caminho.exists() else None
+    patente = next((x for x in progressao.PATENTES if tags.id_patente(x) == ident), None)
+    if patente and imagens.disponivel():
+        try:
+            return imagens.gerar_emblema(patente)
+        except Exception:  # noqa: BLE001 - enfeite
+            return None
+    return None
+
+
 def indice_do_usuario(linhas, uid):
     """Posição (0-based) de `uid` numa lista de linhas cujo 1º item é o ID; None se não estiver."""
     return next((i for i, linha in enumerate(linhas) if linha[0] == uid), None)
@@ -1657,6 +1653,8 @@ class RankingView(discord.ui.View):
         subtitulo="",
         meu_indice=None,
         numerar=True,
+        por_pagina=POR_PAGINA,
+        separador="\n",
     ):
         super().__init__(timeout=180)
         self.titulo = titulo
@@ -1668,8 +1666,10 @@ class RankingView(discord.ui.View):
         self.subtitulo = subtitulo
         self.meu_indice = meu_indice
         self.numerar = numerar
+        self.por_pagina = por_pagina
+        self.separador = separador
         self.pagina = 0
-        self.total_paginas = max(1, -(-len(itens) // POR_PAGINA))
+        self.total_paginas = max(1, -(-len(itens) // por_pagina))
         self.message = None
         self._atualizar_botoes()
 
@@ -1678,12 +1678,13 @@ class RankingView(discord.ui.View):
             self.titulo,
             self.itens,
             pagina=self.pagina,
-            por_pagina=POR_PAGINA,
+            por_pagina=self.por_pagina,
             subtitulo=self.subtitulo,
             rodape_partes=self.rodape_partes,
             capa=self.capa,
             meu_indice=self.meu_indice,
             numerar=self.numerar,
+            separador=self.separador,
         )
 
     def _atualizar_botoes(self):
@@ -1888,7 +1889,106 @@ class Musicas(commands.Cog):
             self.tarefas = [
                 asyncio.create_task(self.manter(), name="memi-manutencao"),
                 asyncio.create_task(self.classificar(), name="memi-generos"),
+                asyncio.create_task(self.preparar_emojis(), name="memi-emojis"),
+                asyncio.create_task(self.historico_mudae(), name="memi-mudae"),
             ]
+
+    async def historico_mudae(self):
+        """Espera a importação e relê, uma única vez, o histórico dos canais do Mudae (o que foi
+        lido antes desta versão só contava comandos). Falha passageira: tenta de novo depois."""
+        while not self.bot.is_closed():
+            try:
+                await self.bot.wait_until_ready()
+                if self.banco.estado("mudae_historico") == "1":
+                    return
+                if self.banco.estado("importacao_concluida") == "1" and not self.recuperando:
+                    if await self.ler_historico_mudae():
+                        return
+                    await asyncio.sleep(SYNC_REPETIR_APOS_ERRO)
+                    continue
+            except Exception:  # noqa: BLE001 - o tracker nunca derruba o bot
+                logging.exception("Falha ao ler o histórico do Mudae; tentando de novo depois.")
+                await asyncio.sleep(SYNC_REPETIR_APOS_ERRO)
+                continue
+            await asyncio.sleep(MANUTENCAO_INTERVALO)
+
+    async def ler_historico_mudae(self):
+        """Uma passada pelo histórico dos canais onde o Mudae já falou. True se terminou tudo."""
+        guild = self.guild()
+        if guild is None:
+            return False
+        corte = int(self.banco.estado("mudae_corte", "0") or 0)
+        if not corte:
+            corte = discord.utils.time_snowflake(discord.utils.utcnow())
+            self.banco.definir_estado("mudae_corte", corte)
+        con, completo, total = self.banco.con, True, 0
+        for canal_id in self.banco.canais_do_mudae():
+            canal = guild.get_channel_or_thread(canal_id)
+            if canal is None or not hasattr(canal, "history"):
+                continue  # canal apagado: o que já foi contado continua
+            linha = con.execute(
+                "SELECT ultimo_msg_id FROM progresso_mudae WHERE channel_id=?", (canal_id,)
+            ).fetchone()
+            marca = linha[0] if linha else 0
+            if marca >= corte - 1:
+                continue
+            try:
+                async for msg in canal.history(
+                    limit=None,
+                    after=discord.Object(id=marca) if marca else None,
+                    before=discord.Object(id=corte),
+                    oldest_first=True,
+                ):
+                    try:
+                        with con:
+                            if not msg.author.bot:
+                                mudae_tracker.registrar_nomes(con, msg.author)
+                            elif mudae_tracker.eh_do_mudae(msg):
+                                mudae_tracker.registrar(con, msg)
+                    except Exception:  # noqa: BLE001 - uma mensagem estranha não trava o resto
+                        logging.exception("Mensagem %s do Mudae ignorada na releitura.", msg.id)
+                    with con:
+                        total += 1
+                        if total % 200 == 0:
+                            self._marca_mudae(canal_id, msg.id)
+                    if total % 200 == 0:
+                        await asyncio.sleep(0)
+                with con:
+                    self._marca_mudae(canal_id, corte - 1)
+            except discord.Forbidden:
+                continue
+            except (discord.HTTPException, aiohttp.ClientError, asyncio.TimeoutError):
+                logging.warning("Falha ao reler o Mudae no canal %s", canal_id, exc_info=True)
+                completo = False
+        if completo:
+            self.banco.definir_estado("mudae_historico", "1")
+            logging.info("Histórico do Mudae lido: %s mensagens verificadas.", total)
+        return completo
+
+    def _marca_mudae(self, canal_id, msg_id):
+        self.banco.con.execute(
+            "INSERT INTO progresso_mudae VALUES (?,?) ON CONFLICT(channel_id) DO UPDATE "
+            "SET ultimo_msg_id=MAX(ultimo_msg_id, excluded.ultimo_msg_id)",
+            (canal_id, msg_id),
+        )
+
+    @commands.Cog.listener()
+    async def on_message_edit(self, antes, depois):
+        guild = getattr(depois, "guild", None)
+        if guild is None or guild.id != self.guild_id or not mudae_tracker.eh_do_mudae(depois):
+            return
+        self.banco.atualizar_mudae(depois)
+
+    async def preparar_emojis(self):
+        """Envia (uma vez por processo) as insígnias e emblemas como emojis da aplicação e passa a
+        usá-los nas mensagens. Sem sucesso, as mensagens seguem com os emojis padrão."""
+        try:
+            itens = await asyncio.to_thread(emojis.itens_para_enviar)
+            feitos = await emojis.sincronizar(self.bot, self.banco, itens)
+            emojis.aplicar(feitos)
+            logging.info("Emojis personalizados prontos: %s de %s.", len(feitos), len(itens))
+        except Exception:  # noqa: BLE001 - emoji é enfeite; nunca derruba o bot
+            logging.exception("Falha ao preparar os emojis personalizados.")
 
     @commands.Cog.listener()
     async def on_resumed(self):
@@ -2085,14 +2185,11 @@ class Musicas(commands.Cog):
                 nome = discord.utils.escape_markdown(
                     pessoa.display_name if pessoa else (row[0] if row else str(uid))
                 )
-                tipo = (
-                    "Insígnia e Título desbloqueados"
-                    if titulo and insignia
-                    else "Título desbloqueado" if titulo else "Insígnia desbloqueada"
-                )
-                texto = f"Parabéns, {nome}!!! {tipo}: {info['nome']}!"
+                texto = f"🏷️ Parabéns, **{nome}**! Nova tag: {tags.rotulo(item)}"
                 if detalhe and detalhe not in ("geral", "manual"):
-                    texto += f" ({detalhe})"
+                    tipo_periodo = "ano" if len(detalhe) == 4 else "mes"
+                    texto += f" · {rotulo_periodo(tipo_periodo, detalhe)}"
+                texto += f"\n-# {info['como']}"
                 # Reserva persistente antes de enviar: evita reenviar em caso de queda após o envio.
                 with self.banco.con:
                     self.banco.con.execute(
@@ -2218,7 +2315,8 @@ class Musicas(commands.Cog):
         )
 
     async def enviar_avisos_nivel(self):
-        """Posta no canal de avisos os level ups (a cada 10 níveis) pendentes."""
+        """Posta no canal de avisos os level ups pendentes: todo nível sai em texto; múltiplos de
+        5 e trocas de patente saem com imagem."""
         if self.recuperando or self.banco.estado("importacao_concluida") != "1":
             return
         async with self.avisos_lock:
@@ -2226,23 +2324,27 @@ class Musicas(commands.Cog):
             if canal is None:
                 return
             guild = self.guild()
-            for aviso_id, uid, marco in self.banco.avisos_nivel_pendentes():
+            for aviso_id, uid, nivel_aviso in self.banco.avisos_nivel_pendentes():
                 pessoa = guild.get_member(uid) if guild else None
-                nivel_atual, avanco, meta = progresso_valores(
-                    self.banco.total_usuario(uid, "mensagens")
-                )
+                progresso = progressao.progresso(self.banco.xp_usuario(uid))
+                patente = progressao.patente(nivel_aviso)
+                trocou = progressao.trocou_patente(nivel_aviso)
                 arquivo = None
-                if imagens.disponivel() and pode_anexar(canal):
+                if (trocou or nivel_aviso % 5 == 0) and imagens.disponivel() and pode_anexar(canal):
                     arquivo = await self.gerar_imagem(
                         imagens.gerar_nivel,
                         "nivel.png",
                         {
                             "nome": self.nome_puro(uid),
                             "nome_alt": getattr(pessoa, "name", ""),
-                            "marco": marco,
-                            "nivel": nivel_atual,
-                            "avanco": avanco,
-                            "meta": meta,
+                            "nivel": nivel_aviso,
+                            "atual": progresso[0],
+                            "avanco": progresso[1],
+                            "meta": progresso[2],
+                            "patente": patente["nome"],
+                            "cor_patente": patente["cor"],
+                            "patente_minimo": patente["minimo"],
+                            "trocou": trocou,
                             "cor": self.banco.perfil(uid)["cor"],
                         },
                         await self.baixar_avatar(pessoa),
@@ -2251,11 +2353,12 @@ class Musicas(commands.Cog):
                 avatar_url = pessoa.display_avatar.with_size(128).url if pessoa else ""
                 embed = embed_nivel(
                     self.nome_pessoa(uid),
-                    marco,
-                    nivel_atual,
-                    avanco,
-                    meta,
-                    avatar_url,
+                    nivel_aviso,
+                    progresso,
+                    patente,
+                    trocou=trocou,
+                    icone=tags.icone(tags.id_patente(patente)),
+                    avatar_url=avatar_url,
                     com_imagem=arquivo is not None,
                 )
                 conteudo = {"embed": embed}
@@ -2265,7 +2368,7 @@ class Musicas(commands.Cog):
                 if not await self._enviar_reservado(
                     canal,
                     lambda estado, a=aviso_id: self.banco.marcar_aviso_nivel(a, estado),
-                    f"aviso de nível {marco * 10}",
+                    f"aviso de nível {nivel_aviso}",
                     **conteudo,
                 ):
                     return
@@ -2380,19 +2483,29 @@ class Musicas(commands.Cog):
         subtitulo="",
         meu_indice=None,
         numerar=True,
+        por_pagina=POR_PAGINA,
+        separador="\n",
     ):
         """Envia um ranking paginado; acrescenta o aviso de importação enquanto ela não terminar."""
         partes = list(rodape_partes)
         if self.banco.estado("importacao_concluida") != "1":
-            partes.append(f"{EMOJI['importando']} importando histórico")
+            partes.append(f"{emoji_simples('importando')} importando histórico")
         view = RankingView(
-            titulo, itens, partes, capa, subtitulo=subtitulo, meu_indice=meu_indice, numerar=numerar
+            titulo,
+            itens,
+            partes,
+            capa,
+            subtitulo=subtitulo,
+            meu_indice=meu_indice,
+            numerar=numerar,
+            por_pagina=por_pagina,
+            separador=separador,
         )
         view.message = await ctx.send(
             embed=view.montar_embed(), view=view, allowed_mentions=discord.AllowedMentions.none()
         )
 
-    @commands.command(name="musicas", aliases=["músicas", "ranking"])
+    @commands.command(name="musicas", aliases=["músicas", "ranking", "msc"])
     @commands.guild_only()
     async def musicas(self, ctx, *args):
         palavras = [sem_acento(x) for x in args]
@@ -2405,14 +2518,11 @@ class Musicas(commands.Cog):
             return
         periodo = periodos[0] if periodos else ""
         palavras = [x for x in palavras if x not in ("mes", "ano")]
-        genero = None
         if "genero" in palavras or "generos" in palavras:
-            indice = next(i for i, x in enumerate(palavras) if x in ("genero", "generos"))
-            if indice != 0:
-                await responder(ctx, "aviso", "Use mm!musicas genero [NOME] [mes|ano].")
+            if len(palavras) > 1:
+                await responder(ctx, "aviso", "Use mm!musicas genero [mes|ano].")
                 return
             tipo = "genero"
-            genero = " ".join(palavras[1:]) or None
         else:
             tipo = palavras[0] if palavras else ""
             validos = {
@@ -2420,20 +2530,14 @@ class Musicas(commands.Cog):
                 for x in NOMES_RANKING_MUSICA + NOMES_RANKING_ARTISTA + NOMES_RANKING_USUARIO
             }
             if len(palavras) > 1 or tipo not in validos:
-                await responder(
-                    ctx, "aviso", "Use mm!musicas [artista|ios|genero [NOME]] [mes|ano]."
-                )
+                await responder(ctx, "aviso", "Use mm!musicas [artista|ios|genero] [mes|ano].")
                 return
         desde, rotulo = intervalo(periodo)
         capa, meu_indice = "", None
         if tipo == "genero":
-            linhas = self.banco.ranking_generos(desde, genero)
-            if genero:
-                titulo = f"🎼 Músicas de {genero}"
-                itens = [linha_faixa(t, a, q) for t, a, q in linhas]
-            else:
-                titulo = "🎼 Ranking de gêneros"
-                itens = [f"**{g}** · {q} tocadas · {n} músicas diferentes" for g, q, n in linhas]
+            linhas = self.banco.ranking_generos(desde)
+            titulo = "🎼 Ranking de gêneros"
+            itens = [f"**{g}** · {q} tocadas · {n} músicas diferentes" for g, q, n in linhas]
             pendentes = self.banco.generos_pendentes(desde)
             partes = (
                 f"{pendentes} músicas sem gênero",
@@ -2494,7 +2598,7 @@ class Musicas(commands.Cog):
                 pendentes += 1
         return mais, (generos.most_common(1)[0][0] if generos else ""), pendentes
 
-    @commands.command(name="perfil")
+    @commands.command(name="perfil", aliases=["p"])
     @commands.guild_only()
     async def perfil(self, ctx, pessoa: discord.Member = None):
         pessoa = pessoa or ctx.author
@@ -2528,15 +2632,21 @@ class Musicas(commands.Cog):
             return None
         return discord.File(io.BytesIO(png), filename=nome_arquivo)
 
+    def totais_usuario(self, uid):
+        return {
+            fonte: self.banco.total_usuario(uid, fonte)
+            for fonte in ("mensagens", "pedidos", "mudae")
+        }
+
     def dados_cartao(self, pessoa):
         """Dados do cartão de perfil (texto/números simples; a imagem não desenha emojis)."""
         uid = pessoa.id
         perfil = self.banco.perfil(uid)
-        totais = {
-            fonte: self.banco.total_usuario(uid, fonte)
-            for fonte in ("mensagens", "pedidos", "mudae")
-        }
-        nivel_atual, avanco, meta = progresso_valores(totais["mensagens"])
+        totais = self.totais_usuario(uid)
+        xp = xp_de(totais)
+        nivel_atual, avanco, meta = progressao.progresso(xp)
+        patente = progressao.patente(nivel_atual)
+        titulo = perfil["titulo"] if perfil["titulo"] in CATALOGO else ""
 
         def posicao(fonte):
             linhas = self.ranking(fonte, eh_bot=pessoa.bot if fonte == "mensagens" else False)
@@ -2546,10 +2656,14 @@ class Musicas(commands.Cog):
         return {
             "nome": pessoa.display_name,
             "nome_alt": getattr(pessoa, "name", "") or "",
-            "titulo": CATALOGO.get(perfil["titulo"], {}).get("nome", ""),
+            "titulo": CATALOGO[titulo]["nome"] if titulo else "",
+            "insignia": imagem_da_tag(titulo),
             "nivel": nivel_atual,
             "avanco": avanco,
             "meta": meta,
+            "xp": xp,
+            "patente": patente["nome"],
+            "cor_patente": patente["cor"],
             "mensagens": totais["mensagens"],
             "pedidos": totais["pedidos"],
             "roletadas": totais["mudae"],
@@ -2562,23 +2676,24 @@ class Musicas(commands.Cog):
     def paginas_perfil(self, pessoa, mais="", genero="", pendentes=0):
         uid = pessoa.id
         perfil = self.banco.perfil(uid)
-        fav = CATALOGO.get(perfil["titulo"], {}).get("nome", "")
-        nome = (pessoa.display_name + (f" ({fav})" if fav else "")).upper()[:256]
+        titulo = perfil["titulo"] if perfil["titulo"] in CATALOGO else ""
+        nome = pessoa.display_name.upper()[:256]
         mes, _ = intervalo("mes")
         ano, _ = intervalo("ano")
-        totais = {
-            fonte: self.banco.total_usuario(uid, fonte)
-            for fonte in ("mensagens", "pedidos", "mudae")
-        }
-        lvl, avanco, meta = progresso_valores(totais["mensagens"])
+        totais = self.totais_usuario(uid)
+        lvl, avanco, meta = progressao.progresso(xp_de(totais))
+        patente = progressao.patente(lvl)
         ranks = {}
         for fonte in totais:
             linhas = self.ranking(fonte, eh_bot=pessoa.bot if fonte == "mensagens" else False)
             pos = next((i for i, (u, _) in enumerate(linhas, 1) if u == uid), None)
             ranks[fonte] = posicao_texto(pos, len(linhas)) if pos else ""
-        insignias = "  ".join(
-            f"{CATALOGO[k]['emoji']}" + (f" x{n}" if n > 1 else "")
-            for k, n in self.banco.itens(uid, "insignia")
+        posses = self.banco.tags_usuario(uid)
+        insignias = juntar_ate(
+            [tags.icone(k) + (f" ×{n}" if n > 1 else "") for k, n, _ in posses],
+            LIMITE_CAMPO,
+            "  ",
+            "  +{n}",
         )
         cor = perfil["cor"] if perfil["cor"] is not None else COR_PADRAO
         importando = self.banco.estado("importacao_concluida") != "1"
@@ -2586,23 +2701,26 @@ class Musicas(commands.Cog):
         def pagina(n, *extras):
             e = discord.Embed(title=nome, color=cor)
             e.set_thumbnail(url=pessoa.display_avatar.with_size(128).url)
-            aviso = f"{EMOJI['importando']} importando histórico" if importando else ""
+            aviso = f"{emoji_simples('importando')} importando histórico" if importando else ""
             e.set_footer(text=rodape_do_bot(f"{n}/3", *extras, aviso))
             return e
 
-        def nivel_texto():
-            if lvl >= 1000:
-                return f"{barra(1, 1)} nível máximo"
-            return f"{barra(avanco, meta)} {avanco}/{meta}"
+        nivel_nome = f"Nível {lvl} · {patente['nome']}"
+        nivel_valor = texto_progresso(lvl, avanco, meta, progressao.NIVEL_MAXIMO)
 
-        p1 = pagina(1, f"{EMOJI['genero']} {pendentes} sem gênero" if pendentes else "")
+        p1 = pagina(1, f"{emoji_simples('genero')} {pendentes} sem gênero" if pendentes else "")
+        cabecalho = []
+        if titulo:
+            cabecalho.append(f"{tags.icone(titulo)} **{CATALOGO[titulo]['nome']}**")
         if perfil["frase"]:
             frase = " ".join(perfil["frase"].split())  # itálico não atravessa quebras de linha
-            p1.description = f"*{discord.utils.escape_markdown(frase)}*"
+            cabecalho.append(f"*{discord.utils.escape_markdown(frase)}*")
+        if cabecalho:
+            p1.description = "\n".join(cabecalho)
         campo(p1, f"{EMOJI['musica']} Música", ranks["pedidos"])
         campo(p1, f"{EMOJI['mensagens']} Mensagens", ranks["mensagens"])
         campo(p1, f"{EMOJI['mudae']} Mudae", ranks["mudae"])
-        campo(p1, f"Nível {lvl}", nivel_texto(), False)
+        campo(p1, nivel_nome, nivel_valor, False)
         campo(p1, f"{EMOJI['favorita']} Música favorita", perfil["favorita"], False)
         campo(p1, f"{EMOJI['mais_pedida']} Música mais colocada", mais, False)
         campo(p1, f"{EMOJI['genero']} Gênero favorito", genero, False)
@@ -2616,29 +2734,18 @@ class Musicas(commands.Cog):
         )
         campo(p1, f"{EMOJI['insignias']} Insígnias", insignias, False)
 
-        p2 = pagina(2, "escolha com mm!titulo NOME")
-        titulos = [CATALOGO[k]["nome"] for k, _ in self.banco.itens(uid, "titulo")]
-        visiveis = []
-        for texto in titulos:
-            if len("\n".join(visiveis + [texto])) > 3400:
-                break
-            visiveis.append(texto)
-        if not titulos:
-            tem_insignia = bool(self.banco.itens(uid, "insignia"))
-            p2.description = (
-                "NÃO POSSUI TÍTULOS" if tem_insignia else "NÃO POSSUI TÍTULOS OU INSÍGNIAS"
+        p2 = pagina(2, "escolha o título com mm!titulo NOME")
+        if posses:
+            p2.description = juntar_ate(
+                blocos_por_categoria(posses), 3800, "\n\n", "\n\n+{n} categorias · use mm!tags"
             )
         else:
-            p2.description = "\n".join(visiveis)
-            if len(visiveis) < len(titulos):
-                p2.description += (
-                    f"\n\n+{len(titulos) - len(visiveis)} títulos\nUse mm!titulos para ver todos."
-                )
+            p2.description = "NÃO POSSUI TÍTULOS OU INSÍGNIAS"
 
         p3 = pagina(3)
         if perfil["capa"]:
             p3.set_image(url=perfil["capa"])
-        campo(p3, f"Nível {lvl}", nivel_texto(), False)
+        campo(p3, nivel_nome, nivel_valor, False)
         campo(p3, f"{EMOJI['mensagens']} Ranking de mensagens", ranks["mensagens"])
         campo(p3, f"{EMOJI['musica']} Ranking de música", ranks["pedidos"])
         campo(p3, f"{EMOJI['mudae']} Ranking do Mudae", ranks["mudae"])
@@ -2697,7 +2804,7 @@ class Musicas(commands.Cog):
         await ctx.send(embed=embed)
 
     # ----- mm!wrapped --------------------------------------------------------
-    @commands.command(name="wrapped")
+    @commands.command(name="wrapped", aliases=["w"])
     @commands.guild_only()
     @commands.cooldown(1, 10, commands.BucketType.user)
     async def wrapped(self, ctx: commands.Context):
@@ -2993,12 +3100,9 @@ class Atividade(commands.Cog):
             completo=True,
         )
 
-    async def mostrar_ranking(self, ctx, titulo, linhas, unidade, levels=False, subtitulo=""):
+    async def mostrar_ranking(self, ctx, titulo, linhas, unidade, subtitulo=""):
         itens = [
-            f"**{self.musicas.nome_pessoa(uid)}** · "
-            + (f"nível {nivel(n)} · " if levels else "")
-            + f"{milhar(n)} {unidade}"
-            for uid, n in linhas
+            f"**{self.musicas.nome_pessoa(uid)}** · {milhar(n)} {unidade}" for uid, n in linhas
         ]
         await self.musicas.enviar_ranking(
             ctx,
@@ -3012,9 +3116,11 @@ class Atividade(commands.Cog):
             meu_indice=indice_do_usuario(linhas, ctx.author.id),
         )
 
-    @commands.command(name="tagarelas")
+    @commands.command(name="tagarelas", aliases=["tg"])
     @commands.guild_only()
     async def tagarelas(self, ctx, *args):
+        """Quem mais manda mensagem. Por padrão só pessoas; `bots` mostra os bots e `todos`
+        mistura os dois."""
         filtros = {
             "geral": None,
             "todos": None,
@@ -3033,19 +3139,18 @@ class Atividade(commands.Cog):
             elif arg in filtros:
                 tipos.append(filtros[arg])
             else:
-                await responder(ctx, "aviso", "Use mm!tagarelas [ios|bot] [mes|ano].")
+                await responder(ctx, "aviso", "Use mm!tagarelas [bots|todos] [mes|ano].")
                 return
         if len(set(tipos)) > 1:
-            await responder(ctx, "aviso", "Escolha ios, bot ou geral.")
+            await responder(ctx, "aviso", "Escolha só um: pessoas (padrão), bots ou todos.")
             return
-        filtro = tipos[0] if tipos else None
+        filtro = tipos[0] if tipos else False
         desde, rotulo = intervalo(periodo)
         linhas = self.musicas.ranking("mensagens", desde, filtro)
-        await self.mostrar_ranking(
-            ctx, "💬 Quem mais mandou mensagem", linhas, "mensagens", subtitulo=rotulo
-        )
+        titulo = "🤖 Bots que mais mandaram mensagem" if filtro else "💬 Quem mais mandou mensagem"
+        await self.mostrar_ranking(ctx, titulo, linhas, "mensagens", subtitulo=rotulo)
 
-    @commands.command(name="hall", aliases=["halldafama"])
+    @commands.command(name="hall", aliases=["halldafama", "h"])
     @commands.guild_only()
     async def hall(self, ctx, *args):
         palavras = [sem_acento(x) for x in args]
@@ -3055,95 +3160,499 @@ class Atividade(commands.Cog):
         tipo = "ano" if palavras and palavras[0].startswith("ano") else "mes"
 
         def quem(uid):
-            return self.musicas.nome_pessoa(uid) if uid is not None else "—"
+            if uid is None:
+                return "—"
+            return f"**{cortar(self.musicas.nome_pessoa(uid), HALL_NOME_MAXIMO)}**"
 
+        dj, resenhex = tags.icone(f"dj_{tipo}"), tags.icone(f"tagarela_{tipo}")
         itens = [
-            f"**{rotulo_periodo(tipo, periodo)}** · {EMOJI['musica']} {quem(dj)}"
-            f" · {EMOJI['mensagens']} {quem(tagarela)}"
-            for periodo, dj, tagarela in self.banco.hall(tipo)
+            f"**{rotulo_periodo(tipo, periodo)}**\n"
+            f"{dj} DJ · {quem(uid_dj)}\n{resenhex} Resenhex · {quem(uid_tagarela)}"
+            for periodo, uid_dj, uid_tagarela in self.banco.hall(tipo)
         ]
         await self.musicas.enviar_ranking(
             ctx,
             "🏛️ Hall da fama",
             itens,
             subtitulo="anos" if tipo == "ano" else "meses",
-            rodape_partes=(f"{len(itens)} períodos",),
+            rodape_partes=(plural(len(itens), "período", "períodos"),),
             numerar=False,
+            por_pagina=HALL_POR_PAGINA,
+            separador="\n\n",
         )
 
-    @commands.command(name="levels")
+    @commands.command(name="levels", aliases=["lvl", "niveis", "níveis"])
     @commands.guild_only()
     async def levels(self, ctx, *args):
         if args:
             await responder(ctx, "aviso", "mm!levels usa o total histórico, sem flags.")
             return
-        await self.mostrar_ranking(
+        linhas = self.banco.ranking_xp(False, self.musicas.elegiveis())
+        itens = []
+        for uid, xp in linhas:
+            n = progressao.nivel(xp)
+            patente = progressao.patente(n)
+            itens.append(
+                f"**{self.musicas.nome_pessoa(uid)}** · Nv. {n} · "
+                f"{tags.icone(tags.id_patente(patente))} {patente['nome']} · {milhar(xp)} XP"
+            )
+        await self.musicas.enviar_ranking(
             ctx,
             "🏆 Ranking de níveis",
-            self.musicas.ranking("mensagens", eh_bot=False),
-            "mensagens",
-            True,
+            itens,
+            rodape_partes=(
+                f"{len(linhas)} participantes",
+                "XP: 1 por mensagem, 25 por música, ½ por roletada",
+            ),
+            meu_indice=indice_do_usuario(linhas, ctx.author.id),
         )
 
-    @commands.command(name="mudae")
+    # ----- Mudae -------------------------------------------------------------
+    def _aviso_mudae(self):
+        if self.banco.estado("mudae_historico") != "1":
+            return f"{emoji_simples('importando')} lendo o histórico do Mudae"
+        return ""
+
+    def _topo(self, linhas, formatar, limite=3):
+        return "\n".join(
+            f"{MEDALHAS[i] if i < 3 else '·'} {formatar(x)}" for i, x in enumerate(linhas[:limite])
+        )
+
+    def embed_panorama_mudae(self):
+        con, nome = self.banco.con, self.musicas.nome_pessoa
+        dados = mudae_tracker.panorama(con)
+        elegiveis = self.musicas.elegiveis()
+
+        def presente(uid):
+            return uid is not None and (elegiveis is None or uid in elegiveis)
+
+        embed = discord.Embed(title=f"{emoji_simples('mudae')} Mudae no servidor", color=COR_PADRAO)
+        if not dados["rolls"] and not dados["casamentos"]:
+            embed.description = (
+                "Ainda não li nenhum roll do Mudae."
+                if not self._aviso_mudae()
+                else "Estou lendo o histórico do Mudae. Volte daqui a pouco."
+            )
+        else:
+            embed.description = (
+                f"**{milhar(dados['rolls'])}** rolls · **{milhar(dados['casamentos'])}** casamentos"
+                f" · **{milhar(dados['kakera'])}** kakera coletados\n"
+                f"{dados['taxa']}% dos personagens livres foram casados"
+            )
+        campo(
+            embed,
+            "🎲 Quem mais rola",
+            self._topo(
+                self.musicas.ranking("mudae", eh_bot=False),
+                lambda x: f"**{nome(x[0])}** · {plural(x[1], 'roletada', 'roletadas')}",
+            ),
+        )
+        campo(
+            embed,
+            "💍 Quem mais casa",
+            self._topo(
+                [x for x in mudae_tracker.ranking(con, "casamentos") if presente(x[0])],
+                lambda x: f"**{nome(x[0])}** · {plural(x[1], 'casamento', 'casamentos')}",
+            ),
+        )
+        campo(
+            embed,
+            "⭐ Mais roletados",
+            self._topo(dados["personagens"], lambda x: f"**{x[0][:40]}** · {x[1]}x", 5),
+            False,
+        )
+        campo(
+            embed,
+            "📚 Séries",
+            self._topo(dados["series"], lambda x: f"**{x[0][:40]}** · {x[1]}x"),
+            False,
+        )
+        if dados["maior_casamento"]:
+            personagem, uid, kakera = dados["maior_casamento"]
+            quem = f" · por **{nome(uid)}**" if presente(uid) else ""
+            campo(
+                embed,
+                "💎 Casamento mais valioso",
+                f"**{personagem}** · {milhar(kakera)} kakera{quem}",
+            )
+        if dados["escapou"]:
+            personagem, kakera = dados["escapou"]
+            campo(embed, "🏃 Ninguém casou", f"**{personagem}** · {milhar(kakera)} kakera")
+        if any(dados["horas"]):
+            hora = max(range(24), key=lambda h: dados["horas"][h])
+            campo(
+                embed,
+                "🕐 Horário nobre",
+                f"**{hora}h** · {plural(dados['horas'][hora], 'roll', 'rolls')}",
+            )
+        embed.set_footer(
+            text=rodape_do_bot("mm!mudae @pessoa", "mm!mudae personagem NOME", self._aviso_mudae())
+        )
+        return embed
+
+    def embed_pessoa_mudae(self, pessoa):
+        con = self.banco.con
+        dados = mudae_tracker.perfil(con, pessoa.id)
+        linhas = self.musicas.ranking("mudae", eh_bot=False)
+        posicao = indice_do_usuario(linhas, pessoa.id)
+        embed = discord.Embed(
+            title=f"{emoji_simples('mudae')} {pessoa.display_name} no Mudae"[:256],
+            color=COR_PADRAO,
+        )
+        embed.set_thumbnail(url=pessoa.display_avatar.with_size(128).url)
+        roletadas = self.banco.total_usuario(pessoa.id, "mudae")
+        campo(
+            embed,
+            "🎲 Roletadas",
+            f"**{milhar(roletadas)}**"
+            + (f"\n{posicao_texto(posicao + 1, len(linhas))}" if posicao is not None else ""),
+        )
+        campo(embed, "💍 Casamentos", f"**{milhar(dados['casamentos'])}**")
+        campo(embed, "💎 Kakera coletado", f"**{milhar(dados['kakera'])}**")
+        if dados["rolls"]:
+            campo(
+                embed,
+                "🎯 Aproveitamento",
+                f"casou com **{dados['aproveitamento']}%** dos próprios rolls"
+                f" ({milhar(dados['rolls'])} rolls lidos)",
+                False,
+            )
+        if dados["favorito"]:
+            nome_p, vezes = dados["favorito"]
+            campo(embed, "⭐ Mais saiu para você", f"**{nome_p}** · {vezes}x")
+        if dados["maior_casamento"]:
+            nome_p, kakera = dados["maior_casamento"]
+            campo(embed, "👑 Maior casamento", f"**{nome_p}** · {milhar(kakera)} kakera")
+        if dados["snipes"] or dados["sofridos"]:
+            campo(
+                embed,
+                "🥷 Snipes",
+                f"deu **{dados['snipes']}** · sofreu **{dados['sofridos']}**",
+            )
+        if any(dados["horas"]):
+            hora = max(range(24), key=lambda h: dados["horas"][h])
+            campo(embed, "🕐 Horário favorito", f"**{hora}h**")
+        embed.set_footer(text=rodape_do_bot("mm!mudae", self._aviso_mudae()))
+        return embed
+
+    @commands.group(
+        name="mudae", aliases=["md"], invoke_without_command=True, case_insensitive=True
+    )
     @commands.guild_only()
-    async def mudae(self, ctx, *args):
-        if args:
-            await responder(ctx, "aviso", "mm!mudae usa o total histórico, sem flags.")
+    async def mudae(self, ctx, pessoa: typing.Optional[discord.Member] = None, *, resto: str = ""):
+        """Mudae tracker: panorama do servidor, ou os números de alguém."""
+        if resto:
+            await responder(
+                ctx,
+                "aviso",
+                "Use mm!mudae [@pessoa], mm!mudae personagem NOME ou mm!mudae "
+                "roletadores|casamentos|kakera|personagens|series|snipers|azarados [mes|ano].",
+            )
             return
-        await self.mostrar_ranking(
-            ctx, "🎎 Ranking de roletadas", self.musicas.ranking("mudae", eh_bot=False), "roletadas"
+        embed = self.embed_pessoa_mudae(pessoa) if pessoa else self.embed_panorama_mudae()
+        await ctx.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+
+    async def _ranking_mudae(self, ctx, tipo, args):
+        periodos = [sem_acento(x) for x in args]
+        if any(x not in ("mes", "ano") for x in periodos) or len(periodos) > 1:
+            await responder(ctx, "aviso", f"Use mm!mudae {tipo} [mes|ano].")
+            return
+        desde, rotulo = intervalo(periodos[0] if periodos else "")
+        con, nome = self.banco.con, self.musicas.nome_pessoa
+        elegiveis = self.musicas.elegiveis()
+        meu_indice = None
+        if tipo == "roletadores":
+            linhas = self.musicas.ranking("mudae", desde, False)
+            itens = [f"**{nome(u)}** · {plural(n, 'roletada', 'roletadas')}" for u, n in linhas]
+            titulo = "🎲 Quem mais rola"
+        elif tipo in ("personagens", "series"):
+            linhas = mudae_tracker.ranking(con, tipo, desde)
+            if tipo == "personagens":
+                itens = [
+                    f"**{n[:60]}**" + (f" · {s[:40]}" if s else "") + f" · {q}x"
+                    for n, s, q in linhas
+                ]
+                titulo = "⭐ Personagens mais roletados"
+            else:
+                itens = [f"**{n[:60]}** · {q}x" for n, q in linhas]
+                titulo = "📚 Séries mais roletadas"
+        else:
+            linhas = [
+                (u, n)
+                for u, n in mudae_tracker.ranking(con, tipo, desde)
+                if elegiveis is None or u in elegiveis
+            ]
+            unidade, titulo = {
+                "casamentos": (("casamento", "casamentos"), "💍 Quem mais casa"),
+                "kakera": (("kakera", "kakera"), "💎 Quem mais coleta kakera"),
+                "snipers": (("snipe", "snipes"), "🥷 Quem mais rouba personagem"),
+                "azarados": (("roll sem casar", "rolls sem casar"), "🍀 Azarados"),
+            }[tipo]
+            itens = [f"**{nome(u)}** · {plural(n, *unidade)}" for u, n in linhas]
+        if tipo not in ("personagens", "series"):
+            meu_indice = indice_do_usuario(linhas, ctx.author.id)
+        aviso = self._aviso_mudae()
+        await self.musicas.enviar_ranking(
+            ctx,
+            titulo,
+            itens,
+            rodape_partes=(f"{len(linhas)} no ranking", aviso),
+            subtitulo=rotulo,
+            meu_indice=meu_indice,
+        )
+
+    @mudae.command(name="roletadores", aliases=["rolls", "roletadas", "ranking"])
+    async def mudae_roletadores(self, ctx, *args):
+        await self._ranking_mudae(ctx, "roletadores", args)
+
+    @mudae.command(name="casamentos", aliases=["casados", "claims"])
+    async def mudae_casamentos(self, ctx, *args):
+        await self._ranking_mudae(ctx, "casamentos", args)
+
+    @mudae.command(name="kakera", aliases=["kk"])
+    async def mudae_kakera(self, ctx, *args):
+        await self._ranking_mudae(ctx, "kakera", args)
+
+    @mudae.command(name="personagens", aliases=["chars", "waifus"])
+    async def mudae_personagens(self, ctx, *args):
+        await self._ranking_mudae(ctx, "personagens", args)
+
+    @mudae.command(name="series", aliases=["séries"])
+    async def mudae_series(self, ctx, *args):
+        await self._ranking_mudae(ctx, "series", args)
+
+    @mudae.command(name="snipers", aliases=["snipes"])
+    async def mudae_snipers(self, ctx, *args):
+        await self._ranking_mudae(ctx, "snipers", args)
+
+    @mudae.command(name="azarados", aliases=["azar"])
+    async def mudae_azarados(self, ctx, *args):
+        await self._ranking_mudae(ctx, "azarados", args)
+
+    @mudae.command(name="personagem", aliases=["char", "p"])
+    async def mudae_personagem(self, ctx, *, nome: str = ""):
+        info = mudae_tracker.personagem(self.banco.con, nome)
+        if info is None:
+            await responder(
+                ctx,
+                "aviso",
+                (
+                    "Ainda não vi esse personagem num roll."
+                    if nome
+                    else "Use mm!mudae personagem NOME."
+                ),
+            )
+            return
+        quem = self.musicas.nome_pessoa
+        embed = discord.Embed(title=f"⭐ {info['nome']}"[:256], color=COR_PADRAO)
+        if info["serie"]:
+            embed.description = f"*{discord.utils.escape_markdown(info['serie'])}*"
+        campo(embed, "🎲 Saiu", f"**{info['vezes']}x**")
+        if info["maior_kakera"]:
+            campo(embed, "💎 Maior valor", f"**{milhar(info['maior_kakera'])}** kakera")
+        if info["claims"]:
+            campo(embed, "📈 Rank de claims", f"#{milhar(info['claims'])}")
+        campo(
+            embed,
+            "🙋 Quem mais rolou",
+            self._topo(info["roletadores"], lambda x: f"**{quem(x[0])}** · {x[1]}x"),
+            False,
+        )
+        casamentos = [
+            f"**{quem(uid) if uid else discord.utils.escape_markdown(nome_txt)}**"
+            for uid, nome_txt in info["casamentos"]
+        ]
+        campo(
+            embed,
+            "💍 Casou com",
+            (
+                juntar_ate(casamentos, LIMITE_CAMPO, " · ", " · +{n}")
+                if casamentos
+                else "ninguém ainda"
+            ),
+            False,
+        )
+        embed.set_footer(
+            text=rodape_do_bot(f"primeira vez: {data_local(info['primeira']).strftime('%d/%m/%Y')}")
+        )
+        await ctx.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+
+    @commands.command(name="mudaedump", hidden=True)
+    @commands.guild_only()
+    @so_memi()
+    @commands.cooldown(1, 30, commands.BucketType.user)
+    async def mudaedump(self, ctx, *args):
+        """Exporta as últimas mensagens do Mudae de um canal em JSON (calibração do tracker)."""
+        canal, quantidade = getattr(ctx, "channel", None), 300
+        for arg in args:
+            achado = re.fullmatch(r"(?:<#)?(\d{15,21})>?", arg)
+            if achado:
+                canal = ctx.guild.get_channel_or_thread(int(achado[1]))
+            elif arg.isdigit():
+                quantidade = max(1, min(2000, int(arg)))
+        if canal is None or not hasattr(canal, "history"):
+            await responder(ctx, "aviso", "Use mm!mudaedump [#canal] [quantidade até 2000].")
+            return
+        amostras, contagem = [], Counter()
+        async with ctx.typing():
+            async for msg in canal.history(limit=quantidade):
+                do_mudae = mudae_tracker.eh_do_mudae(msg)
+                if not do_mudae and not eh_mudae(msg):
+                    continue
+                tipo = mudae_tracker.tipo_de(msg) if do_mudae else "comando"
+                contagem[tipo or "não reconhecida"] += 1
+                interacao = getattr(getattr(msg, "interaction_metadata", None), "user", None)
+                amostras.append(
+                    {
+                        "id": msg.id,
+                        "quando": data_local(msg.id).isoformat(),
+                        "autor": {
+                            "id": msg.author.id,
+                            "nome": msg.author.name,
+                            "bot": msg.author.bot,
+                        },
+                        "entendido_como": tipo,
+                        "conteudo": msg.content,
+                        "embeds": [e.to_dict() for e in msg.embeds],
+                        "botoes": [
+                            {
+                                "emoji": str(getattr(b, "emoji", "") or ""),
+                                "rotulo": getattr(b, "label", None),
+                                "desativado": getattr(b, "disabled", None),
+                            }
+                            for linha in getattr(msg, "components", []) or []
+                            for b in getattr(linha, "children", []) or []
+                        ],
+                        "interacao_de": getattr(interacao, "id", None),
+                        "editada": getattr(msg, "edited_at", None) is not None,
+                    }
+                )
+        arquivo = discord.File(
+            io.BytesIO(json.dumps(amostras[::-1], ensure_ascii=False, indent=1).encode("utf-8")),
+            filename="mudae_amostras.json",
+        )
+        resumo = " · ".join(f"{t}: {n}" for t, n in contagem.most_common()) or "nada do Mudae"
+        await ctx.send(
+            f"{EMOJI['mudae']} {len(amostras)} mensagens do Mudae e comandos em "
+            f"{quantidade} lidas. {resumo}",
+            file=arquivo,
         )
 
     @commands.command(name="give", hidden=True)
     @commands.guild_only()
     @so_memi()
-    async def give(self, ctx, tipo: str, pessoa: discord.Member, *, nome: str):
+    async def give(self, ctx, *, texto: str = ""):
+        """mm!give @pessoa TAG (o formato antigo mm!give titulo @pessoa TAG também vale)."""
+        palavras = texto.split()
+        if palavras and sem_acento(palavras[0]) in ("titulo", "insignia", "tag"):
+            palavras = palavras[1:]
+        alvo, resto = None, []
+        for palavra in palavras:
+            achado = re.fullmatch(r"<@!?(\d+)>|(\d{15,21})", palavra)
+            if achado and alvo is None:
+                alvo = int(achado[1] or achado[2])
+            else:
+                resto.append(palavra)
+        manuais = ", ".join(CATALOGO[k]["nome"] for k in tags.manuais())
+        if alvo is None or not resto:
+            await responder(ctx, "aviso", f"Use mm!give @pessoa TAG. Tags manuais: {manuais}.")
+            return
+        pessoa = ctx.guild.get_member(alvo)
+        if pessoa is None:  # sem a Server Members Intent o cache pode não ter a pessoa
+            try:
+                pessoa = await ctx.guild.fetch_member(alvo)
+            except discord.HTTPException:
+                await responder(ctx, "aviso", "Não achei essa pessoa no servidor.")
+                return
         try:
-            novo = self.banco.conceder_manual(pessoa.id, tipo, nome, pessoa.bot)
+            novo = self.banco.conceder_manual(pessoa.id, " ".join(resto), pessoa.bot)
         except ValueError as erro:
             await responder(ctx, "erro", str(erro)[:1900])
             return
+        rotulo = tags.rotulo(tags.buscar(" ".join(resto)))
+        nome = discord.utils.escape_markdown(pessoa.display_name)
         if novo:
-            await responder(ctx, "sucesso", "Item concedido.")
+            await responder(ctx, "sucesso", f"{rotulo} concedida a **{nome}**.")
         else:
-            await responder(ctx, "aviso", "Essa pessoa já possui esse item.")
+            await responder(ctx, "aviso", f"**{nome}** já possui {rotulo}.")
 
-    async def mostrar_itens(self, ctx, pessoa, tipo):
-        pessoa = pessoa or ctx.author
-        rotulo = "Insígnias" if tipo == "insignia" else "Títulos"
-        itens = []
-        for item, n in self.banco.itens(pessoa.id, tipo):
-            info = CATALOGO[item]
-            nome = info.get("nome_insignia", info["nome"]) if tipo == "insignia" else info["nome"]
-            itens.append(
-                (f"{info['emoji']} " + (f"x{n} " if n > 1 else "") if tipo == "insignia" else "")
-                + nome
+    def embed_tags(self, pessoa):
+        posses = self.banco.tags_usuario(pessoa.id)
+        embed = discord.Embed(title=f"🏷️ Tags de {pessoa.display_name}"[:256], color=COR_PADRAO)
+        if posses:
+            embed.description = juntar_ate(
+                blocos_por_categoria(posses),
+                LIMITE_DESCRICAO,
+                "\n\n",
+                "\n\n+{n} categorias",
             )
-        titulo = f"{rotulo} de {pessoa.display_name}"
-        if not itens:
-            aviso = discord.Embed(
-                title=titulo, description=f"NÃO POSSUI {rotulo.upper()}", color=COR_PADRAO
+            total = sum(n for _, n, _ in posses)
+            embed.set_footer(
+                text=rodape_do_bot(
+                    plural(len(posses), "tag", "tags"),
+                    f"{milhar(total)} no total" if total != len(posses) else "",
+                    "mm!tags todos",
+                )
             )
-            await ctx.send(embed=aviso, allowed_mentions=discord.AllowedMentions.none())
+        else:
+            embed.description = "NÃO POSSUI TÍTULOS OU INSÍGNIAS"
+            embed.set_footer(text=rodape_do_bot("mm!tags todos mostra como ganhar"))
+        return embed
+
+    def paginas_catalogo(self, uid):
+        """Uma página por categoria, marcando com ✅ as tags que a pessoa já tem."""
+        tem = {item for item, _, _ in self.banco.tags_usuario(uid)}
+        paginas = []
+        for i, categoria in enumerate(tags.CATEGORIAS, 1):
+            linhas = [
+                f"{'✅' if item in tem else '▫️'} {tags.icone(item)} **{info['nome']}** — "
+                f"{info['como']}" + (" · dada pelo dono" if info["manual"] else "")
+                for item, info in CATALOGO.items()
+                if info["categoria"] == categoria
+            ]
+            embed = discord.Embed(
+                title=f"🏷️ Todas as tags · {categoria}",
+                description=cortar("\n".join(linhas), LIMITE_DESCRICAO),
+                color=COR_PADRAO,
+            )
+            embed.set_footer(text=rodape_do_bot(f"{i}/{len(tags.CATEGORIAS)}", "✅ você já tem"))
+            paginas.append(embed)
+        return paginas
+
+    @commands.command(
+        name="tags",
+        aliases=["t", "titulos", "títulos", "insignias", "insígnias", "i"],
+    )
+    @commands.guild_only()
+    async def tags(self, ctx, *, alvo: str = ""):
+        """Tags (títulos e insígnias) de alguém; `mm!tags todos` mostra todas e como ganhar."""
+        if sem_acento(alvo) in ("todos", "todas", "help", "ajuda", "lista", "catalogo"):
+            await self.enviar_catalogo(ctx)
             return
-        contagem = f"{len(itens)} {'item' if len(itens) == 1 else 'itens'}"
-        view = RankingView(titulo, itens, (contagem,), numerar=False)
-        view.message = await ctx.send(
-            embed=view.montar_embed(), view=view, allowed_mentions=discord.AllowedMentions.none()
+        pessoa = ctx.author
+        if alvo:
+            try:
+                pessoa = await commands.MemberConverter().convert(ctx, alvo)
+            except commands.BadArgument:
+                await responder(ctx, "aviso", "Use mm!tags [@pessoa] ou mm!tags todos.")
+                return
+        await ctx.send(
+            embed=self.embed_tags(pessoa), allowed_mentions=discord.AllowedMentions.none()
         )
 
-    @commands.command(name="insignias", aliases=["insígnias"])
+    @commands.command(name="th", hidden=True)
     @commands.guild_only()
-    async def insignias(self, ctx, pessoa: discord.Member = None):
-        await self.mostrar_itens(ctx, pessoa, "insignia")
+    async def th(self, ctx):
+        """Atalho de mm!tags todos."""
+        await self.enviar_catalogo(ctx)
 
-    @commands.command(name="titulos", aliases=["títulos"])
-    @commands.guild_only()
-    async def titulos(self, ctx, pessoa: discord.Member = None):
-        await self.mostrar_itens(ctx, pessoa, "titulo")
+    async def enviar_catalogo(self, ctx):
+        view = PerfilView(self.paginas_catalogo(ctx.author.id))
+        view.message = await ctx.send(
+            embed=view.paginas[0], view=view, allowed_mentions=discord.AllowedMentions.none()
+        )
 
-    @commands.command(name="cartao", aliases=["cartão", "card"])
+    @commands.command(name="cartao", aliases=["cartão", "card", "c"])
     @commands.guild_only()
     @commands.cooldown(1, 10, commands.BucketType.user)
     async def cartao(self, ctx, pessoa: discord.Member = None):
@@ -3176,12 +3685,10 @@ class Atividade(commands.Cog):
         if arquivo is None:
             await responder(ctx, "erro", "Não consegui gerar o cartão agora. Tente de novo.")
             return
-        cor = COR_PADRAO if dados["cor"] is None else dados["cor"]
-        embed = discord.Embed(color=cor)
-        embed.set_image(url="attachment://cartao.png")
-        await ctx.send(embed=embed, file=arquivo, allowed_mentions=discord.AllowedMentions.none())
+        # Anexo solto (sem embed): o Discord mostra a imagem maior.
+        await ctx.send(file=arquivo, allowed_mentions=discord.AllowedMentions.none())
 
-    @commands.command(name="frase")
+    @commands.command(name="frase", aliases=["f"])
     @commands.guild_only()
     async def frase(self, ctx, *, texto: str = ""):
         if len(texto) > 100:
@@ -3190,7 +3697,7 @@ class Atividade(commands.Cog):
         self.banco.salvar_perfil(ctx.author.id, frase=texto)
         await responder(ctx, "sucesso", "Frase salva.")
 
-    @commands.command(name="favorita")
+    @commands.command(name="favorita", aliases=["fm"])
     @commands.guild_only()
     async def favorita(self, ctx, *, texto: str):
         texto = texto.strip()
@@ -3213,7 +3720,7 @@ class Atividade(commands.Cog):
             ),
         )
 
-    @commands.command(name="ec")
+    @commands.command(name="ec", aliases=["embedcolor"])
     @commands.guild_only()
     async def ec(self, ctx, *, texto: str = ""):
         """Troca a cor do embed do seu perfil (mm!ec COR)."""
@@ -3247,40 +3754,53 @@ class Atividade(commands.Cog):
         if self.banco.selecionar_titulo(ctx.author.id, nome):
             await responder(ctx, "sucesso", "Título favorito atualizado.")
         else:
-            await responder(
-                ctx, "aviso", "Você não possui esse título. Veja os seus com mm!titulos."
-            )
+            await responder(ctx, "aviso", "Você não possui essa tag. Veja as suas com mm!tags.")
 
 
 AJUDA = [
     (
         "🏆 Rankings",
         [
-            ("mm!tagarelas", "mensagens · flags: ios, bot, mes, ano"),
-            ("mm!levels", "níveis"),
-            ("mm!mudae", "roletadas do Mudae"),
-            ("mm!hall", "vencedores dos meses e anos anteriores · flag: ano"),
+            ("mm!tagarelas", "mensagens · flags: bots, todos, mes, ano"),
+            ("mm!levels", "níveis, patentes e XP"),
+            ("mm!hall", "vencedores dos meses anteriores · flag: ano"),
         ],
     ),
     (
         "🎵 Música",
         [
-            ("mm!musicas", "flags: artista, ios, genero [NOME], mes, ano"),
+            ("mm!musicas", "flags: artista, ios, genero, mes, ano"),
             ("mm!aleatoria", "sorteia uma música"),
             ("mm!wrapped", "seu resumo dos últimos 12 meses"),
         ],
     ),
     (
-        "👤 Perfil e conquistas",
+        "🎎 Mudae",
+        [
+            ("mm!mudae [@pessoa]", "panorama do servidor ou os números de alguém"),
+            ("mm!mudae personagem NOME", "quem rolou, quem casou e quanto vale"),
+            (
+                "mm!mudae roletadores",
+                "também casamentos, kakera, personagens, series, snipers, azarados · mes, ano",
+            ),
+        ],
+    ),
+    (
+        "👤 Perfil e tags",
         [
             ("mm!perfil [@pessoa]", "perfil em 3 páginas"),
-            ("mm!insignias [@pessoa]", "insígnias"),
-            ("mm!titulos [@pessoa]", "títulos"),
-            ("mm!titulo NOME", "escolhe um título que você possui"),
+            ("mm!cartao [@pessoa]", "cartão de perfil em imagem"),
+            ("mm!tags [@pessoa]", "títulos e insígnias conquistados"),
+            ("mm!tags todos", "todas as tags e como ganhar cada uma"),
+        ],
+    ),
+    (
+        "🎨 Personalização",
+        [
+            ("mm!favorita MÚSICA - ARTISTA", "sua música favorita"),
+            ("mm!titulo NOME", "escolhe o título exibido no perfil"),
             ("mm!frase TEXTO", "frase de até 100 caracteres"),
-            ("mm!favorita MÚSICA - ARTISTA", "música favorita"),
-            ("mm!cartao [@pessoa]", "seu cartão de perfil em imagem"),
-            ("mm!ec COR", "cor do seu perfil (#hex ou nome; padrao restaura)"),
+            ("mm!ec COR", "cor do perfil (#hex ou nome; padrao restaura)"),
         ],
     ),
     (
@@ -3351,7 +3871,7 @@ class Ajuda(commands.Cog):
         embed.set_image(url="attachment://ajuda.png")
         await ctx.send(embed=embed, file=arquivo)
 
-    @commands.command(name="changelog", aliases=["novidades", "versao", "versão"])
+    @commands.command(name="changelog", aliases=["novidades", "versao", "versão", "cl"])
     async def changelog(self, ctx, versao: str = ""):
         """Mudanças da versão mais recente; `mm!changelog 2.0.0` ou o menu mostram as anteriores."""
         indice = versoes_bot.buscar(versao) if versao else 0

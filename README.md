@@ -1,17 +1,20 @@
 # MeMi BOT
 
-Bot para Discord com rankings de música, atividade, perfis, níveis, conquistas e
-recuperação de histórico. A documentação completa de instalação e comandos está em
+Bot para Discord com rankings de música e atividade, perfis, níveis de 1 a 100 com
+patentes, tags (títulos e insígnias com emojis próprios), Mudae tracker e recuperação de
+histórico. A documentação completa de instalação e comandos está em
 [LEIA-ME.md](./LEIA-ME.md).
 
 ## Visual
 
-O bot gera imagens no mesmo estilo para o `mm!help`, o `mm!cartao`, o aviso de level up, o resumo
-do mês e o `mm!wrapped` (amostras em [docs/amostras](./docs/amostras/)):
+O bot gera imagens para o `mm!cartao`, o aviso de level up e de nova patente, o resumo do mês e
+o `mm!wrapped`, e usa o banner próprio no `mm!help` (amostras em
+[docs/amostras](./docs/amostras/)):
 
 ![Cartão de perfil](./docs/amostras/cartao.png)
-![Level up](./docs/amostras/nivel.png)
+![Nova patente](./docs/amostras/nivel.png)
 ![Resumo do mês](./docs/amostras/resumo.png)
+![Patentes](./docs/amostras/patentes.png)
 
 ## Requisitos
 
@@ -43,7 +46,8 @@ Para rodar com um ícone na bandeja do Windows (e iniciar junto com o sistema), 
 
 As imagens do bot (`mm!cartao`, level up, resumos, `mm!wrapped` e o banner da ajuda) usam o
 Pillow, que já vem no `requirements.txt`. Sem ele, o bot funciona normalmente e as mensagens
-saem só em texto. `mm!changelog` mostra as mudanças de cada versão.
+saem só em texto. As insígnias viram emojis da aplicação sozinhas ao ligar. `mm!changelog`
+mostra as mudanças de cada versão.
 
 ## Testes
 

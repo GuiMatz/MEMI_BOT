@@ -30,7 +30,16 @@ CARTAO = {
     "pos_mudae": "",
     "cor": 0xFF8800,
 }
-NIVEL = {"nome": "Fulano", "marco": 3, "nivel": 32, "avanco": 61, "meta": 100, "cor": 0xF0704E}
+NIVEL = {
+    "nome": "Fulano",
+    "nivel": 30,
+    "atual": 32,
+    "avanco": 61,
+    "meta": 100,
+    "patente": "Veterano da Call",
+    "trocou": True,
+    "cor": 0xF0704E,
+}
 RESUMO = {
     "tipo": "mes",
     "titulo": "Dezembro",
@@ -101,7 +110,7 @@ class GeradoresTests(unittest.TestCase):
         """O grão do fundo é aleatório, então comparamos o pixel do acento (não os bytes)."""
         # (imagem, dados com cor azul, pixel que deve ter a cor de acento)
         casos = {
-            "cartao": (dict(CARTAO, cor=0x2255FF), (1170, 38)),
+            "cartao": (dict(CARTAO, cor=0x2255FF), (540, 254)),  # barra de XP
             "nivel": (dict(NIVEL, cor=0x2255FF), (1170, 38)),
             "resumo": (dict(RESUMO, cor=0x2255FF), (1170, 38)),
             "wrapped": (dict(WRAPPED, cor=0x2255FF), (1170, 38)),
@@ -109,11 +118,40 @@ class GeradoresTests(unittest.TestCase):
         }
         for nome, (azul, pixel) in casos.items():
             with self.subTest(nome):
-                sem_cor = {"cartao": dict(CARTAO, cor=None)}.get(nome)
+                sem_cor = {"cartao": dict(CARTAO, cor=None), "ajuda": {"cor": 0xF0704E}}.get(nome)
                 padrao = abrir(gerar(nome, sem_cor, avatar())).convert("RGB").getpixel(pixel)
                 pessoal = abrir(gerar(nome, azul, avatar())).convert("RGB").getpixel(pixel)
                 self.assertTrue(perto(padrao, (240, 112, 78)), padrao)  # coral padrão
                 self.assertTrue(perto(pessoal, (34, 85, 255)), pessoal)  # cor escolhida
+
+    def test_ajuda_usa_o_banner_pronto_e_desenha_se_faltar(self):
+        banner = abrir(imagens.gerar_ajuda()).convert("RGB")
+        self.assertEqual(banner.size, (1200, 400))
+        original = Image.open(imagens.BANNER_AJUDA).convert("RGB")
+        self.assertTrue(perto(banner.getpixel((600, 180)), original.getpixel((600, 180)), 20))
+        imagens._ajuda_bytes.cache_clear()
+        try:
+            with patch.object(imagens, "BANNER_AJUDA", Path("nao-existe.jpg")):
+                desenhado = abrir(imagens.gerar_ajuda()).convert("RGB")
+            self.assertTrue(perto(desenhado.getpixel((1130, 215)), (240, 112, 78)))
+        finally:
+            imagens._ajuda_bytes.cache_clear()
+
+    def test_cartao_usa_o_fundo_e_poe_o_avatar_na_lente(self):
+        cartao = abrir(imagens.gerar_cartao(CARTAO, avatar((200, 30, 30)))).convert("RGB")
+        self.assertTrue(perto(cartao.getpixel((238, 200)), (200, 30, 30)))  # centro da lente
+        self.assertTrue(perto(cartao.getpixel((1157, 29)), (253, 118, 37), 30))  # logo intacto
+        with patch.object(imagens, "FUNDO_CARTAO", Path("nao-existe.jpg")):
+            self.assertEqual(abrir(imagens.gerar_cartao(CARTAO, avatar())).size, (1200, 400))
+
+    def test_insignia_invalida_no_cartao_nao_quebra(self):
+        for icone in (None, b"lixo"):
+            dados = dict(CARTAO, insignia=icone)
+            self.assertEqual(abrir(imagens.gerar_cartao(dados, avatar())).size, (1200, 400))
+
+    def test_nivel_com_patente_desenha_o_emblema(self):
+        dados = dict(NIVEL, cor_patente=0x26A69A, patente_minimo=60)
+        self.assertEqual(abrir(imagens.gerar_nivel(dados, avatar())).size, (1200, 400))
 
     def test_ajuda_e_guardada_em_cache_por_cor(self):
         self.assertIs(imagens.gerar_ajuda(None), imagens.gerar_ajuda(None))
@@ -147,13 +185,13 @@ class GeradoresTests(unittest.TestCase):
     def test_numeros_extremos_e_dados_faltando(self):
         for dados in (
             dict(CARTAO, nivel=1, avanco=0, meta=21, mensagens=0, pedidos=0, roletadas=0),
-            dict(CARTAO, nivel=1000, avanco=1, meta=1, mensagens=999_999_999),
+            dict(CARTAO, nivel=100, avanco=1, meta=1, mensagens=999_999_999),
             dict(CARTAO, meta=0),
             {"nome": "Só o nome"},
         ):
             self.assertEqual(abrir(imagens.gerar_cartao(dados, avatar())).size, (1200, 400))
         self.assertEqual(
-            abrir(imagens.gerar_nivel({"marco": 100, "nivel": 1000, "avanco": 1, "meta": 1})).size,
+            abrir(imagens.gerar_nivel({"nivel": 100, "avanco": 1, "meta": 1})).size,
             (1200, 400),
         )
         vazio = dict(WRAPPED, meses=[0] * 12, pedidos=0, dias=0, genero="", top=[])
