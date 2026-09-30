@@ -13,6 +13,7 @@ Comandos:
 
 Sem janela de console: os erros vão para o arquivo memi.log (menu do ícone -> "Ver log").
 """
+
 import asyncio
 import logging
 import os
@@ -23,11 +24,11 @@ import traceback
 from pathlib import Path
 
 PASTA = Path(__file__).resolve().parent
-os.chdir(PASTA)                  # token.txt e memi.db são procurados na pasta do bot
+os.chdir(PASTA)  # token.txt e memi.db são procurados na pasta do bot
 sys.path.insert(0, str(PASTA))
 
 ARQ_LOG = PASTA / "memi.log"
-PORTA_UNICA = 47653              # impede abrir o bot duas vezes (senão ele responderia em dobro)
+PORTA_UNICA = 47653  # impede abrir o bot duas vezes (senão ele responderia em dobro)
 NOME_ATALHO = "MeMiBOT.vbs"
 
 
@@ -69,13 +70,14 @@ if len(sys.argv) > 1:
 _log = open(ARQ_LOG, "a", encoding="utf-8", buffering=1)
 if sys.stdout is None or sys.stderr is None or Path(sys.executable).name.lower() == "pythonw.exe":
     sys.stdout = sys.stderr = _log
-logging.basicConfig(level=logging.WARNING, stream=_log,
-                    format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logging.basicConfig(
+    level=logging.WARNING, stream=_log, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+)
 
-import pystray                      # noqa: E402
-from PIL import Image, ImageDraw    # noqa: E402
+import pystray  # noqa: E402
+from PIL import Image, ImageDraw  # noqa: E402
 
-import memi_bot                     # noqa: E402  (só importa; o bot não roda sozinho)
+import memi_bot  # noqa: E402  (só importa; o bot não roda sozinho)
 
 estado = {"loop": None, "icone": None}
 
@@ -83,7 +85,7 @@ estado = {"loop": None, "icone": None}
 def criar_imagem():
     img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    d.ellipse((2, 2, 62, 62), fill=(88, 101, 242, 255))    # azul do Discord
+    d.ellipse((2, 2, 62, 62), fill=(88, 101, 242, 255))  # azul do Discord
     d.text((21, 23), "MeMi", fill=(255, 255, 255, 255))
     return img
 
@@ -98,7 +100,7 @@ def rodar_bot():
             traceback.print_exc()
 
     asyncio.run(principal())
-    if estado["icone"]:            # o bot parou sozinho (ex.: token errado): fecha o ícone também
+    if estado["icone"]:  # o bot parou sozinho (ex.: token errado): fecha o ícone também
         estado["icone"].stop()
 
 
@@ -140,7 +142,7 @@ def main():
         pystray.MenuItem("Sair", sair),
     )
     estado["icone"] = pystray.Icon("memibot", criar_imagem(), "MeMi BOT", menu)
-    estado["icone"].run()          # fica aqui até clicar em "Sair"
+    estado["icone"].run()  # fica aqui até clicar em "Sair"
 
 
 if __name__ == "__main__":

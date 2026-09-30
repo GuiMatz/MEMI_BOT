@@ -2,6 +2,7 @@
 Leia LEIA-ME.md para instalação, migração, catálogo e testes ao vivo.
 O banco original é estendido, com backup antes da primeira migração.
 """
+
 import asyncio
 import gzip
 import heapq
@@ -89,19 +90,19 @@ DIAS_SEMANA = ("segunda", "terça", "quarta", "quinta", "sexta", "sábado", "dom
 
 # mm!aleatoria mostra este comando (num embed) pra pessoa copiar e colar no chat
 COMANDO_PLAY = "m!play"
-DEEZER_API = "https://api.deezer.com"   # API pública, não precisa de chave
-DEEZER_ESPERA = 8                       # segundos máx. esperando o Deezer por comando
-DEEZER_REPETIR_APOS = 7 * 24 * 3600     # quando não achou capa/gênero, tenta de novo depois de 7 dias
-YOUTUBE_OEMBED = "https://www.youtube.com/oembed"   # títulos de links: públicos, sem chave
+DEEZER_API = "https://api.deezer.com"  # API pública, não precisa de chave
+DEEZER_ESPERA = 8  # segundos máx. esperando o Deezer por comando
+DEEZER_REPETIR_APOS = 7 * 24 * 3600  # quando não achou capa/gênero, tenta de novo depois de 7 dias
+YOUTUBE_OEMBED = "https://www.youtube.com/oembed"  # títulos de links: públicos, sem chave
 SPOTIFY_OEMBED = "https://open.spotify.com/oembed"
-LINK_ESPERA = 6                         # segundos máx. esperando o título de um link
-LINK_REPETIR_APOS = 24 * 3600           # link cujo título não veio: tenta de novo depois de 1 dia
-WRAPPED_TOP_GENERO = 10                 # quantos pedidos mais feitos entram na conta do gênero favorito
-LIMITE_BUSCA_NOMES = 150    # máx. de pessoas buscadas na API ao exportar (o resto sai só com o ID)
+LINK_ESPERA = 6  # segundos máx. esperando o título de um link
+LINK_REPETIR_APOS = 24 * 3600  # link cujo título não veio: tenta de novo depois de 1 dia
+WRAPPED_TOP_GENERO = 10  # quantos pedidos mais feitos entram na conta do gênero favorito
+LIMITE_BUSCA_NOMES = 150  # máx. de pessoas buscadas na API ao exportar (o resto sai só com o ID)
 
-POR_PAGINA = 10                                      # itens por página do ranking
+POR_PAGINA = 10  # itens por página do ranking
 ARQUIVO_BANCO = Path(__file__).with_name("memi.db")  # fica na mesma pasta do bot
-LOTE = 200                                           # quantos registros salvar por vez
+LOTE = 200  # quantos registros salvar por vez
 # --------------------------------------------------------------------------
 
 
@@ -126,8 +127,8 @@ def chave_musica(titulo: str, artista: str) -> str:
     return f"{normalizar(titulo)}|{normalizar_artista(artista)}"
 
 
-RE_TRACO = re.compile(r"\s+[-–—]\s+")   # Pancake: "Título - Artista"
-RE_BY = re.compile(r"\s+by\s+", re.I)   # Jockie:  "Título by Artista"
+RE_TRACO = re.compile(r"\s+[-–—]\s+")  # Pancake: "Título - Artista"
+RE_BY = re.compile(r"\s+by\s+", re.I)  # Jockie:  "Título by Artista"
 RE_JOCKIE = re.compile(r"started playing\s*(.+)", re.I | re.S)
 
 
@@ -137,7 +138,7 @@ def dividir(nome: str, separador):
     if not achados:
         return nome, ""
     m = achados[-1]
-    titulo, artista = nome[:m.start()].strip(), nome[m.end():].strip()
+    titulo, artista = nome[: m.start()].strip(), nome[m.end() :].strip()
     if not titulo or not artista:
         return nome, ""
     return titulo, artista
@@ -217,42 +218,131 @@ SERVIDOR_ID = _id_config("guild_id", "MEMI_GUILD_ID")
 PREFIXO_MUDAE = "$"
 COMANDOS_MUDAE = {"w", "wa", "wg", "wx", "h", "ha", "hg", "hx", "m", "ma", "mg", "mx"}
 # Acrescente waifu/husbando/marry somente depois de confirmar no servidor.
-PONTOS_NIVEL = [(0, 1), (1000, 50), (5000, 100), (10000, 150),
-                (25000, 200), (50000, 250), (75000, 275), (100000, 400),
-                (125000, 500), (150000, 650), (175000, 800), (200000, 1000)]
-TITULOS_MENSAGENS = [(1000, "resenha_torta", "Resenha Torta"),
-    (10000, "resenha_reta", "Resenha Reta"), (50000, "resenhudo", "Resenhudo"),
+PONTOS_NIVEL = [
+    (0, 1),
+    (1000, 50),
+    (5000, 100),
+    (10000, 150),
+    (25000, 200),
+    (50000, 250),
+    (75000, 275),
+    (100000, 400),
+    (125000, 500),
+    (150000, 650),
+    (175000, 800),
+    (200000, 1000),
+]
+TITULOS_MENSAGENS = [
+    (1000, "resenha_torta", "Resenha Torta"),
+    (10000, "resenha_reta", "Resenha Reta"),
+    (50000, "resenhudo", "Resenhudo"),
     (75000, "cafetao_resenhas", "Cafetão das Resenhas"),
-    (100000, "rei_resenha", "Rei da Resenha"), (200000, "demiurgo", "Demiurgo do Clubex")]
-TITULOS_MUSICAS = [(50, "dj_piolho", "DJ PIOLHO"), (100, "dj_overload", "DJ OVERLOAD"),
-    (150, "dj_zettabytes", "DJ ZETTABYTES"), (200, "dj_pancaked", "DJ PANCAKED KING"),
-    (300, "dj_cupcake", "DJ CUPCAKE PARTY"), (500, "dj_roger", "DJ ROGER LAKE")]
+    (100000, "rei_resenha", "Rei da Resenha"),
+    (200000, "demiurgo", "Demiurgo do Clubex"),
+]
+TITULOS_MUSICAS = [
+    (50, "dj_piolho", "DJ PIOLHO"),
+    (100, "dj_overload", "DJ OVERLOAD"),
+    (150, "dj_zettabytes", "DJ ZETTABYTES"),
+    (200, "dj_pancaked", "DJ PANCAKED KING"),
+    (300, "dj_cupcake", "DJ CUPCAKE PARTY"),
+    (500, "dj_roger", "DJ ROGER LAKE"),
+]
 
 # Catálogo editável. Não troque os identificadores de itens já concedidos.
 # Cada item pode ser título, insígnia ou ambos. Edite nomes/emojis aqui.
 CATALOGO = {
-    "dj_call": {"nome": "DJ da Call", "titulo": True, "insignia": True, "emoji": "🥇", "manual": False},
-    "dj_mes": {"nome": "DJ do Mês", "titulo": True, "insignia": True, "emoji": "🟣", "manual": False},
-    "dj_ano": {"nome": "DJ do Ano", "titulo": True, "insignia": True, "emoji": "🔴", "manual": False},
-    "tagarela_chat": {"nome": "Tagarela do Chat", "titulo": True, "insignia": True, "emoji": "💬", "manual": False},
-    "tagarela_mes": {"nome": "Tagarela do Mês", "titulo": True, "insignia": True, "emoji": "🟪", "manual": False},
-    "tagarela_ano": {"nome": "Tagarela do Ano", "titulo": True, "insignia": True, "emoji": "🟥", "manual": False},
-    "roletador": {"nome": "Roletador", "titulo": True, "insignia": True, "emoji": "🎎", "manual": False},
-    "cartola": {"nome": "Cartoleiro", "nome_insignia": "CARTOLA", "titulo": True, "insignia": True, "emoji": "🟠", "manual": True},
-    "wplace": {"nome": "Pintador", "nome_insignia": "WPLACE", "titulo": True, "insignia": True, "emoji": "🎨", "manual": True},
+    "dj_call": {
+        "nome": "DJ da Call",
+        "titulo": True,
+        "insignia": True,
+        "emoji": "🥇",
+        "manual": False,
+    },
+    "dj_mes": {
+        "nome": "DJ do Mês",
+        "titulo": True,
+        "insignia": True,
+        "emoji": "🟣",
+        "manual": False,
+    },
+    "dj_ano": {
+        "nome": "DJ do Ano",
+        "titulo": True,
+        "insignia": True,
+        "emoji": "🔴",
+        "manual": False,
+    },
+    "tagarela_chat": {
+        "nome": "Tagarela do Chat",
+        "titulo": True,
+        "insignia": True,
+        "emoji": "💬",
+        "manual": False,
+    },
+    "tagarela_mes": {
+        "nome": "Tagarela do Mês",
+        "titulo": True,
+        "insignia": True,
+        "emoji": "🟪",
+        "manual": False,
+    },
+    "tagarela_ano": {
+        "nome": "Tagarela do Ano",
+        "titulo": True,
+        "insignia": True,
+        "emoji": "🟥",
+        "manual": False,
+    },
+    "roletador": {
+        "nome": "Roletador",
+        "titulo": True,
+        "insignia": True,
+        "emoji": "🎎",
+        "manual": False,
+    },
+    "cartola": {
+        "nome": "Cartoleiro",
+        "nome_insignia": "CARTOLA",
+        "titulo": True,
+        "insignia": True,
+        "emoji": "🟠",
+        "manual": True,
+    },
+    "wplace": {
+        "nome": "Pintador",
+        "nome_insignia": "WPLACE",
+        "titulo": True,
+        "insignia": True,
+        "emoji": "🎨",
+        "manual": True,
+    },
     "bongas": {"nome": "BONGAS", "titulo": True, "insignia": True, "emoji": "🫏", "manual": True},
-    "breca": {"nome": "Bréca Games", "titulo": True, "insignia": True, "emoji": "🧱", "manual": True},
+    "breca": {
+        "nome": "Bréca Games",
+        "titulo": True,
+        "insignia": True,
+        "emoji": "🧱",
+        "manual": True,
+    },
     # Troféus do Cartola: adicione aqui depois de definir a lista, por exemplo
     # "identificador_estavel": {"nome": "Nome definido pelo dono", "titulo": True,
     #     "insignia": True, "emoji": "🏆", "manual": True},
 }
 for _limite, _identificador, _nome in TITULOS_MENSAGENS + TITULOS_MUSICAS:
-    CATALOGO[_identificador] = {"nome": _nome, "titulo": True, "insignia": False, "emoji": "", "manual": False}
+    CATALOGO[_identificador] = {
+        "nome": _nome,
+        "titulo": True,
+        "insignia": False,
+        "emoji": "",
+        "manual": False,
+    }
 
 
 def sem_acento(texto):
-    return "".join(c for c in unicodedata.normalize("NFKD", normalizar(texto))
-                   if not unicodedata.combining(c))
+    return "".join(
+        c for c in unicodedata.normalize("NFKD", normalizar(texto)) if not unicodedata.combining(c)
+    )
 
 
 def nivel(total):
@@ -284,17 +374,26 @@ def eh_mudae(msg):
     if msg.author.bot:
         return False
     partes = (getattr(msg, "content", "") or "").strip().casefold().split()
-    return bool(partes and partes[0].startswith(PREFIXO_MUDAE) and
-                partes[0][len(PREFIXO_MUDAE):] in COMANDOS_MUDAE)
+    return bool(
+        partes
+        and partes[0].startswith(PREFIXO_MUDAE)
+        and partes[0][len(PREFIXO_MUDAE) :] in COMANDOS_MUDAE
+    )
 
 
 def intervalo(periodo="", agora=None):
     agora = (agora or datetime.now(FUSO)).astimezone(FUSO)
     periodo = sem_acento(periodo)
     if periodo == "mes":
-        inicio, rotulo = agora.replace(day=1, hour=0, minute=0, second=0, microsecond=0), "mês atual"
+        inicio, rotulo = (
+            agora.replace(day=1, hour=0, minute=0, second=0, microsecond=0),
+            "mês atual",
+        )
     elif periodo == "ano":
-        inicio, rotulo = agora.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0), "ano atual"
+        inicio, rotulo = (
+            agora.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0),
+            "ano atual",
+        )
     elif periodo == "semana":
         inicio, rotulo = agora - timedelta(days=7), "últimos 7 dias"
     else:
@@ -318,6 +417,7 @@ def so_memi():
         if ctx.author.id != MEMI_ID:
             raise commands.CheckFailure("Só o Memi pode usar esse comando.")
         return True
+
     return commands.check(permitido)
 
 
@@ -364,7 +464,9 @@ def backup_antes_migracao(caminho):
     caminho = Path(caminho)
     if not caminho.exists():
         return
-    destino = caminho.parent / "backups" / ("migracao_" + datetime.now(FUSO).strftime("%Y%m%d_%H%M%S_%f"))
+    destino = (
+        caminho.parent / "backups" / ("migracao_" + datetime.now(FUSO).strftime("%Y%m%d_%H%M%S_%f"))
+    )
     destino.mkdir(parents=True, exist_ok=True)
     shutil.copy2(__file__, destino / "memi_bot.py")
     with closing(sqlite3.connect(caminho)) as origem:
@@ -387,8 +489,7 @@ class BancoLegado:
         if colunas and "musica_id" not in colunas:
             raise RuntimeError("Esquema antigo incompatível; nenhum dado foi apagado.")
 
-        self.con.executescript(
-            """
+        self.con.executescript("""
             CREATE TABLE IF NOT EXISTS musicas (
                 id            INTEGER PRIMARY KEY AUTOINCREMENT,
                 chave         TEXT NOT NULL UNIQUE,
@@ -433,12 +534,13 @@ class BancoLegado:
                 id    INTEGER PRIMARY KEY CHECK (id = 1),
                 quando INTEGER NOT NULL
             );
-            """
-        )
+            """)
 
         # banco criado por versão anterior: ganha a coluna do artista normalizado
         if "artista_chave" not in [r[1] for r in self.con.execute("PRAGMA table_info(musicas)")]:
-            self.con.execute("ALTER TABLE musicas ADD COLUMN artista_chave TEXT NOT NULL DEFAULT ''")
+            self.con.execute(
+                "ALTER TABLE musicas ADD COLUMN artista_chave TEXT NOT NULL DEFAULT ''"
+            )
             for mid, artista in self.con.execute("SELECT id, artista FROM musicas").fetchall():
                 self.con.execute(
                     "UPDATE musicas SET artista_chave = ? WHERE id = ?",
@@ -466,9 +568,9 @@ class BancoLegado:
                 "VALUES (?, ?, ?, ?)",
                 (chave, titulo, artista, normalizar_artista(artista)),
             )
-            musica_id = cur.execute(
-                "SELECT id FROM musicas WHERE chave = ?", (chave,)
-            ).fetchone()[0]
+            musica_id = cur.execute("SELECT id FROM musicas WHERE chave = ?", (chave,)).fetchone()[
+                0
+            ]
             cur.execute(
                 "INSERT OR IGNORE INTO tocadas (message_id, channel_id, musica_id, bot) "
                 "VALUES (?, ?, ?, ?)",
@@ -641,7 +743,9 @@ class BancoLegado:
             "AND (mensagens > ? OR (mensagens = ? AND autor_id < ?))",
             (eh_bot, mensagens, mensagens, autor_id),
         ).fetchone()[0]
-        total = self.con.execute("SELECT COUNT(*) FROM atividade WHERE eh_bot = ?", (eh_bot,)).fetchone()[0]
+        total = self.con.execute(
+            "SELECT COUNT(*) FROM atividade WHERE eh_bot = ?", (eh_bot,)
+        ).fetchone()[0]
         return mensagens, acima + 1, total
 
     def quando_scan(self):
@@ -658,9 +762,12 @@ class BancoLegado:
 
 class Banco(BancoLegado):
     """Estende o esquema original sem apagar tabelas nem recriar o histórico."""
-    FONTES = {"mensagens": ("mensagens", "autor_id", "mensagens", "ultima_msg"),
-              "pedidos": ("pedidos", "usuario_id", "pedidos", "ultimo_pedido"),
-              "mudae": ("mudae", "usuario_id", "roletadas", "ultima_roletada")}
+
+    FONTES = {
+        "mensagens": ("mensagens", "autor_id", "mensagens", "ultima_msg"),
+        "pedidos": ("pedidos", "usuario_id", "pedidos", "ultimo_pedido"),
+        "mudae": ("mudae", "usuario_id", "roletadas", "ultima_roletada"),
+    }
 
     def __init__(self, caminho):
         self.caminho = Path(caminho)
@@ -672,13 +779,15 @@ class Banco(BancoLegado):
             if versao < 2:
                 backup_antes_migracao(caminho)
             if colunas and "musica_id" not in colunas:
-                raise RuntimeError("Banco muito antigo: preservado no backup; a migração precisa ser revisada. Nenhuma tabela foi apagada.")
+                raise RuntimeError(
+                    "Banco muito antigo: preservado no backup; a migração precisa ser revisada. Nenhuma tabela foi apagada."
+                )
         super().__init__(caminho)
         self.con.execute("PRAGMA journal_mode=WAL")
         self.con.execute("PRAGMA busy_timeout=5000")
         self.con.create_function("sem_acento", 1, sem_acento, deterministic=True)
         self.con.create_function("chave_deezer", 1, chave_deezer, deterministic=True)
-        self.con.executescript('''
+        self.con.executescript("""
             CREATE TABLE IF NOT EXISTS mensagens (
                 message_id INTEGER PRIMARY KEY, autor_id INTEGER NOT NULL,
                 canal_id INTEGER NOT NULL, eh_bot INTEGER NOT NULL);
@@ -715,17 +824,29 @@ class Banco(BancoLegado):
             CREATE TABLE IF NOT EXISTS classificacao_pedidos (
                 chave TEXT PRIMARY KEY, texto TEXT NOT NULL, nome TEXT NOT NULL DEFAULT '',
                 genero TEXT NOT NULL DEFAULT '', consultado_em INTEGER NOT NULL DEFAULT 0);
-        ''')
+        """)
         if versao < 2:
             with self.con:
-                self.con.execute("INSERT OR IGNORE INTO autores(usuario_id, eh_bot) SELECT autor_id, eh_bot FROM atividade")
-                self.con.execute("INSERT OR IGNORE INTO autores(usuario_id) SELECT DISTINCT usuario_id FROM pedidos")
+                self.con.execute(
+                    "INSERT OR IGNORE INTO autores(usuario_id, eh_bot) SELECT autor_id, eh_bot FROM atividade"
+                )
+                self.con.execute(
+                    "INSERT OR IGNORE INTO autores(usuario_id) SELECT DISTINCT usuario_id FROM pedidos"
+                )
                 for fonte, (tabela, autor, contagem, ultimo) in self.FONTES.items():
                     for uid, n, mid in self.con.execute(
-                            f"SELECT {autor}, COUNT(*), MAX(message_id) FROM {tabela} GROUP BY {autor}").fetchall():
-                        self.con.execute("INSERT OR IGNORE INTO totais(usuario_id) VALUES (?)", (uid,))
-                        self.con.execute(f"UPDATE totais SET {contagem}=?, {ultimo}=? WHERE usuario_id=?", (n, mid, uid))
-                for (conteudo,) in self.con.execute("SELECT DISTINCT conteudo FROM pedidos WHERE conteudo IS NOT NULL").fetchall():
+                        f"SELECT {autor}, COUNT(*), MAX(message_id) FROM {tabela} GROUP BY {autor}"
+                    ).fetchall():
+                        self.con.execute(
+                            "INSERT OR IGNORE INTO totais(usuario_id) VALUES (?)", (uid,)
+                        )
+                        self.con.execute(
+                            f"UPDATE totais SET {contagem}=?, {ultimo}=? WHERE usuario_id=?",
+                            (n, mid, uid),
+                        )
+                for (conteudo,) in self.con.execute(
+                    "SELECT DISTINCT conteudo FROM pedidos WHERE conteudo IS NOT NULL"
+                ).fetchall():
                     self._registrar_consulta(conteudo)
                 self.con.execute("PRAGMA user_version=2")
 
@@ -735,15 +856,23 @@ class Banco(BancoLegado):
 
     def definir_estado(self, chave, valor):
         with self.con:
-            self.con.execute("INSERT INTO estado VALUES (?,?) ON CONFLICT(chave) DO UPDATE SET valor=excluded.valor", (chave, str(valor)))
+            self.con.execute(
+                "INSERT INTO estado VALUES (?,?) ON CONFLICT(chave) DO UPDATE SET valor=excluded.valor",
+                (chave, str(valor)),
+            )
 
     def marca(self, channel_id):
-        row = self.con.execute("SELECT ultimo_msg_id FROM progresso_mensagens WHERE channel_id=?", (channel_id,)).fetchone()
+        row = self.con.execute(
+            "SELECT ultimo_msg_id FROM progresso_mensagens WHERE channel_id=?", (channel_id,)
+        ).fetchone()
         return row[0] if row else 0
 
     def _marca(self, channel_id, msg_id):
-        self.con.execute("INSERT INTO progresso_mensagens VALUES (?,?) ON CONFLICT(channel_id) DO UPDATE "
-                         "SET ultimo_msg_id=MAX(ultimo_msg_id, excluded.ultimo_msg_id)", (channel_id, msg_id))
+        self.con.execute(
+            "INSERT INTO progresso_mensagens VALUES (?,?) ON CONFLICT(channel_id) DO UPDATE "
+            "SET ultimo_msg_id=MAX(ultimo_msg_id, excluded.ultimo_msg_id)",
+            (channel_id, msg_id),
+        )
 
     def salvar_marca(self, channel_id, msg_id):
         with self.con:
@@ -752,43 +881,67 @@ class Banco(BancoLegado):
     def _registrar_consulta(self, conteudo):
         consulta = consulta_musical(conteudo)
         if consulta:
-            self.con.execute("INSERT OR IGNORE INTO classificacao_pedidos(chave,texto) VALUES (?,?)", consulta)
+            self.con.execute(
+                "INSERT OR IGNORE INTO classificacao_pedidos(chave,texto) VALUES (?,?)", consulta
+            )
 
     def _incrementar(self, uid, fonte, mid):
         _, _, contador, ultimo = self.FONTES[fonte]
         self.con.execute("INSERT OR IGNORE INTO totais(usuario_id) VALUES (?)", (uid,))
-        self.con.execute(f"UPDATE totais SET {contador}={contador}+1,{ultimo}=MAX({ultimo},?) WHERE usuario_id=?", (mid, uid))
+        self.con.execute(
+            f"UPDATE totais SET {contador}={contador}+1,{ultimo}=MAX({ultimo},?) WHERE usuario_id=?",
+            (mid, uid),
+        )
 
     def receber(self, msg, *, avancar=False, recompensar=False, avisar=False, elegiveis=None):
         """Mensagem, seus eventos e recompensas são salvos na mesma transação."""
         with self.con:
             uid, mid = msg.author.id, msg.id
-            self.con.execute("INSERT INTO autores VALUES (?,?,?) ON CONFLICT(usuario_id) DO UPDATE "
-                             "SET eh_bot=excluded.eh_bot,nome=excluded.nome",
-                             (uid, int(msg.author.bot), msg.author.display_name))
-            nova = self.con.execute("INSERT OR IGNORE INTO mensagens VALUES (?,?,?,?)",
-                (mid, uid, msg.channel.id, int(msg.author.bot))).rowcount
+            self.con.execute(
+                "INSERT INTO autores VALUES (?,?,?) ON CONFLICT(usuario_id) DO UPDATE "
+                "SET eh_bot=excluded.eh_bot,nome=excluded.nome",
+                (uid, int(msg.author.bot), msg.author.display_name),
+            )
+            nova = self.con.execute(
+                "INSERT OR IGNORE INTO mensagens VALUES (?,?,?,?)",
+                (mid, uid, msg.channel.id, int(msg.author.bot)),
+            ).rowcount
             if nova:
                 self._incrementar(uid, "mensagens", mid)
             pedido_novo = 0
             if eh_pedido(msg):
                 conteudo = (msg.content or "")[:2000]
-                pedido_novo = self.con.execute("INSERT OR IGNORE INTO pedidos VALUES (?,?,?,?)",
-                    (mid, msg.channel.id, uid, conteudo)).rowcount
-                self.con.execute("UPDATE pedidos SET conteudo=? WHERE message_id=? AND (conteudo IS NULL OR conteudo='')", (conteudo, mid))
+                pedido_novo = self.con.execute(
+                    "INSERT OR IGNORE INTO pedidos VALUES (?,?,?,?)",
+                    (mid, msg.channel.id, uid, conteudo),
+                ).rowcount
+                self.con.execute(
+                    "UPDATE pedidos SET conteudo=? WHERE message_id=? AND (conteudo IS NULL OR conteudo='')",
+                    (conteudo, mid),
+                )
                 self._registrar_consulta(conteudo)
                 if pedido_novo:
                     self._incrementar(uid, "pedidos", mid)
             if eh_mudae(msg):
-                if self.con.execute("INSERT OR IGNORE INTO mudae VALUES (?,?)", (mid, uid)).rowcount:
+                if self.con.execute(
+                    "INSERT OR IGNORE INTO mudae VALUES (?,?)", (mid, uid)
+                ).rowcount:
                     self._incrementar(uid, "mudae", mid)
             musica = extrair_musica(msg)
             if musica:
                 t, a = musica
                 chave = chave_musica(t, a)
-                self.con.execute("INSERT OR IGNORE INTO musicas(chave,titulo,artista,artista_chave) VALUES (?,?,?,?)", (chave,t,a,normalizar_artista(a)))
-                musica_id = self.con.execute("SELECT id FROM musicas WHERE chave=?", (chave,)).fetchone()[0]
-                self.con.execute("INSERT OR IGNORE INTO tocadas VALUES (?,?,?,?)", (mid,msg.channel.id,musica_id,msg.author.name))
+                self.con.execute(
+                    "INSERT OR IGNORE INTO musicas(chave,titulo,artista,artista_chave) VALUES (?,?,?,?)",
+                    (chave, t, a, normalizar_artista(a)),
+                )
+                musica_id = self.con.execute(
+                    "SELECT id FROM musicas WHERE chave=?", (chave,)
+                ).fetchone()[0]
+                self.con.execute(
+                    "INSERT OR IGNORE INTO tocadas VALUES (?,?,?,?)",
+                    (mid, msg.channel.id, musica_id, msg.author.name),
+                )
             if avancar:
                 self._marca(msg.channel.id, mid)
             if recompensar and not msg.author.bot:
@@ -812,8 +965,11 @@ class Banco(BancoLegado):
         if eh_bot is not None:
             sql += " AND COALESCE(a.eh_bot,0)=?"
             parametros.append(int(eh_bot))
-        return [(uid, n) for uid, n, _ in self.con.execute(sql + ordem, parametros)
-                if elegiveis is None or uid in elegiveis]
+        return [
+            (uid, n)
+            for uid, n, _ in self.con.execute(sql + ordem, parametros)
+            if elegiveis is None or uid in elegiveis
+        ]
 
     def ranking_usuarios(self, desde=0):
         return self.ranking_contagens("pedidos", desde, eh_bot=False)
@@ -824,20 +980,35 @@ class Banco(BancoLegado):
     def total_usuario(self, uid, fonte, desde=0):
         tabela, autor, contador, _ = self.FONTES[fonte]
         if not desde:
-            row = self.con.execute(f"SELECT {contador} FROM totais WHERE usuario_id=?", (uid,)).fetchone()
+            row = self.con.execute(
+                f"SELECT {contador} FROM totais WHERE usuario_id=?", (uid,)
+            ).fetchone()
             return row[0] if row else 0
-        return self.con.execute(f"SELECT COUNT(*) FROM {tabela} WHERE {autor}=? AND message_id>=?", (uid,desde)).fetchone()[0]
+        return self.con.execute(
+            f"SELECT COUNT(*) FROM {tabela} WHERE {autor}=? AND message_id>=?", (uid, desde)
+        ).fetchone()[0]
 
     def ranking_generos(self, desde=0, genero=None):
         sql = "FROM tocadas t JOIN musicas m ON m.id=t.musica_id LEFT JOIN deezer_cache d ON d.chave=chave_deezer(m.titulo||' '||m.artista) WHERE t.message_id>=?"
         if genero is not None:
-            return self.con.execute("SELECT m.titulo,m.artista,COUNT(*) " + sql +
-                " AND sem_acento(COALESCE(d.genero,''))=? GROUP BY m.id ORDER BY COUNT(*) DESC,MAX(t.message_id),m.id", (desde,sem_acento(genero))).fetchall()
-        return self.con.execute("SELECT MIN(d.genero),COUNT(*),COUNT(DISTINCT m.id) " + sql +
-            " AND COALESCE(d.genero,'')<>'' GROUP BY sem_acento(d.genero) ORDER BY COUNT(*) DESC,MIN(d.genero)", (desde,)).fetchall()
+            return self.con.execute(
+                "SELECT m.titulo,m.artista,COUNT(*) "
+                + sql
+                + " AND sem_acento(COALESCE(d.genero,''))=? GROUP BY m.id ORDER BY COUNT(*) DESC,MAX(t.message_id),m.id",
+                (desde, sem_acento(genero)),
+            ).fetchall()
+        return self.con.execute(
+            "SELECT MIN(d.genero),COUNT(*),COUNT(DISTINCT m.id) "
+            + sql
+            + " AND COALESCE(d.genero,'')<>'' GROUP BY sem_acento(d.genero) ORDER BY COUNT(*) DESC,MIN(d.genero)",
+            (desde,),
+        ).fetchall()
 
     def generos_pendentes(self, desde=0):
-        return self.con.execute("SELECT COUNT(DISTINCT m.id) FROM musicas m JOIN tocadas t ON t.musica_id=m.id LEFT JOIN deezer_cache d ON d.chave=chave_deezer(m.titulo||' '||m.artista) WHERE t.message_id>=? AND COALESCE(d.genero,'')=''", (desde,)).fetchone()[0]
+        return self.con.execute(
+            "SELECT COUNT(DISTINCT m.id) FROM musicas m JOIN tocadas t ON t.musica_id=m.id LEFT JOIN deezer_cache d ON d.chave=chave_deezer(m.titulo||' '||m.artista) WHERE t.message_id>=? AND COALESCE(d.genero,'')=''",
+            (desde,),
+        ).fetchone()[0]
 
     def consultas_usuario(self, uid):
         contagem, exemplos = Counter(), {}
@@ -850,8 +1021,10 @@ class Banco(BancoLegado):
         return contagem, exemplos
 
     def perfil(self, uid):
-        row = self.con.execute("SELECT frase,favorita,capa,titulo FROM perfil_usuario WHERE usuario_id=?", (uid,)).fetchone()
-        return dict(zip(("frase","favorita","capa","titulo"), row or ("",)*4))
+        row = self.con.execute(
+            "SELECT frase,favorita,capa,titulo FROM perfil_usuario WHERE usuario_id=?", (uid,)
+        ).fetchone()
+        return dict(zip(("frase", "favorita", "capa", "titulo"), row or ("",) * 4))
 
     def salvar_perfil(self, uid, **campos):
         if not set(campos) <= {"frase", "favorita", "capa", "titulo"}:
@@ -859,17 +1032,26 @@ class Banco(BancoLegado):
         with self.con:
             self.con.execute("INSERT OR IGNORE INTO perfil_usuario(usuario_id) VALUES (?)", (uid,))
             for campo, valor in campos.items():
-                self.con.execute(f"UPDATE perfil_usuario SET {campo}=? WHERE usuario_id=?", (valor,uid))
+                self.con.execute(
+                    f"UPDATE perfil_usuario SET {campo}=? WHERE usuario_id=?", (valor, uid)
+                )
 
     def itens(self, uid, tipo):
         if tipo not in ("titulo", "insignia"):
             raise ValueError("Tipo inválido")
-        return [(item,n) for item,n in self.con.execute(f"SELECT item,COUNT(*) FROM posses WHERE usuario_id=? AND {tipo}=1 GROUP BY item ORDER BY MIN(desbloqueado_em),item", (uid,)) if item in CATALOGO]
+        return [
+            (item, n)
+            for item, n in self.con.execute(
+                f"SELECT item,COUNT(*) FROM posses WHERE usuario_id=? AND {tipo}=1 GROUP BY item ORDER BY MIN(desbloqueado_em),item",
+                (uid,),
+            )
+            if item in CATALOGO
+        ]
 
     def selecionar_titulo(self, uid, nome):
-        for item, _ in self.itens(uid,"titulo"):
+        for item, _ in self.itens(uid, "titulo"):
             if sem_acento(CATALOGO[item]["nome"]) == sem_acento(nome):
-                self.salvar_perfil(uid,titulo=item)
+                self.salvar_perfil(uid, titulo=item)
                 return True
         return False
 
@@ -877,81 +1059,136 @@ class Banco(BancoLegado):
         info = CATALOGO[item]
         titulo, insignia = int(info["titulo"]), int(info["insignia"])
         if tipo and not info.get("vinculado"):
-            titulo, insignia = int(tipo=="titulo"), int(tipo=="insignia")
-        novo = self.con.execute("INSERT OR IGNORE INTO posses VALUES (?,?,?,?,?,?)", (uid,item,detalhe,titulo,insignia,int(time.time()))).rowcount
+            titulo, insignia = int(tipo == "titulo"), int(tipo == "insignia")
+        novo = self.con.execute(
+            "INSERT OR IGNORE INTO posses VALUES (?,?,?,?,?,?)",
+            (uid, item, detalhe, titulo, insignia, int(time.time())),
+        ).rowcount
         if not novo:
             return False
         if avisar:
-            self.con.execute("INSERT OR IGNORE INTO avisos(chave,usuario_id,item,titulo,insignia,detalhe) VALUES (?,?,?,?,?,?)",
-                (chave_aviso or f"{uid}:{item}:{detalhe}",uid,item,titulo,insignia,detalhe))
+            self.con.execute(
+                "INSERT OR IGNORE INTO avisos(chave,usuario_id,item,titulo,insignia,detalhe) VALUES (?,?,?,?,?,?)",
+                (chave_aviso or f"{uid}:{item}:{detalhe}", uid, item, titulo, insignia, detalhe),
+            )
         return True
 
     def conceder_manual(self, uid, tipo, nome, eh_bot=False):
         tipo = sem_acento(tipo)
-        if tipo not in ("titulo","insignia") or eh_bot:
+        if tipo not in ("titulo", "insignia") or eh_bot:
             raise ValueError("Escolha titulo ou insignia e uma pessoa.")
-        item = next((k for k,v in CATALOGO.items() if v.get(tipo) and sem_acento(nome) in
-                     {sem_acento(k),sem_acento(v["nome"]),sem_acento(v.get("nome_insignia",v["nome"]))}), None)
+        item = next(
+            (
+                k
+                for k, v in CATALOGO.items()
+                if v.get(tipo)
+                and sem_acento(nome)
+                in {
+                    sem_acento(k),
+                    sem_acento(v["nome"]),
+                    sem_acento(v.get("nome_insignia", v["nome"])),
+                }
+            ),
+            None,
+        )
         if item is None:
-            raise ValueError("Item inexistente. Válidos: " + ", ".join(v.get("nome_insignia",v["nome"]) if tipo=="insignia" else v["nome"] for v in CATALOGO.values() if v.get(tipo)))
+            raise ValueError(
+                "Item inexistente. Válidos: "
+                + ", ".join(
+                    v.get("nome_insignia", v["nome"]) if tipo == "insignia" else v["nome"]
+                    for v in CATALOGO.values()
+                    if v.get(tipo)
+                )
+            )
         with self.con:
-            if any(k==item for k,_ in self.itens(uid,tipo)):
+            if any(k == item for k, _ in self.itens(uid, tipo)):
                 return False
             # Uma única posse por item manual, com possibilidade de completar o outro tipo.
-            row = self.con.execute("SELECT 1 FROM posses WHERE usuario_id=? AND item=? AND detalhe='manual'", (uid,item)).fetchone()
+            row = self.con.execute(
+                "SELECT 1 FROM posses WHERE usuario_id=? AND item=? AND detalhe='manual'",
+                (uid, item),
+            ).fetchone()
             if row:
-                self.con.execute(f"UPDATE posses SET {tipo}=1 WHERE usuario_id=? AND item=? AND detalhe='manual'", (uid,item))
+                self.con.execute(
+                    f"UPDATE posses SET {tipo}=1 WHERE usuario_id=? AND item=? AND detalhe='manual'",
+                    (uid, item),
+                )
                 return True
-            return self._conceder(uid,item,"manual",tipo=tipo)
+            return self._conceder(uid, item, "manual", tipo=tipo)
 
     def _avaliar_usuario(self, uid, avisar):
         autor = self.con.execute("SELECT eh_bot FROM autores WHERE usuario_id=?", (uid,)).fetchone()
         if autor and autor[0]:
             return
-        for fonte, limites in (("mensagens",TITULOS_MENSAGENS),("pedidos",TITULOS_MUSICAS)):
-            n = self.total_usuario(uid,fonte)
-            for limite,item,_ in limites:
+        for fonte, limites in (("mensagens", TITULOS_MENSAGENS), ("pedidos", TITULOS_MUSICAS)):
+            n = self.total_usuario(uid, fonte)
+            for limite, item, _ in limites:
                 if n >= limite:
-                    self._conceder(uid,item,avisar=avisar)
-        if self.total_usuario(uid,"mudae") >= 1000:
-            self._conceder(uid,"roletador",avisar=avisar)
+                    self._conceder(uid, item, avisar=avisar)
+        if self.total_usuario(uid, "mudae") >= 1000:
+            self._conceder(uid, "roletador", avisar=avisar)
 
     def _rotativos(self, avisar, evento, elegiveis=None):
-        for fonte,item in (("mensagens","tagarela_chat"),("pedidos","dj_call")):
-            rank = self.ranking_contagens(fonte,eh_bot=False,elegiveis=elegiveis)
+        for fonte, item in (("mensagens", "tagarela_chat"), ("pedidos", "dj_call")):
+            rank = self.ranking_contagens(fonte, eh_bot=False, elegiveis=elegiveis)
             vencedor = rank[0][0] if rank else None
-            antigos = [r[0] for r in self.con.execute("SELECT DISTINCT usuario_id FROM posses WHERE item=?", (item,))]
+            antigos = [
+                r[0]
+                for r in self.con.execute(
+                    "SELECT DISTINCT usuario_id FROM posses WHERE item=?", (item,)
+                )
+            ]
             for uid in antigos:
                 if uid != vencedor:
-                    self.con.execute("DELETE FROM posses WHERE usuario_id=? AND item=?", (uid,item))
-                    self.con.execute("UPDATE perfil_usuario SET titulo='' WHERE usuario_id=? AND titulo=?", (uid,item))
+                    self.con.execute(
+                        "DELETE FROM posses WHERE usuario_id=? AND item=?", (uid, item)
+                    )
+                    self.con.execute(
+                        "UPDATE perfil_usuario SET titulo='' WHERE usuario_id=? AND titulo=?",
+                        (uid, item),
+                    )
             if vencedor is not None and vencedor not in antigos:
-                self._conceder(vencedor,item,"geral",avisar,f"rotativo:{item}:{vencedor}:{evento}")
+                self._conceder(
+                    vencedor, item, "geral", avisar, f"rotativo:{item}:{vencedor}:{evento}"
+                )
 
     def reconciliar(self, *, avisar=False, elegiveis=None):
         with self.con:
-            for (uid,) in self.con.execute("SELECT usuario_id FROM autores WHERE eh_bot=0").fetchall():
-                self._avaliar_usuario(uid,avisar)
-            self._rotativos(avisar,str(time.time_ns()),elegiveis)
+            for (uid,) in self.con.execute(
+                "SELECT usuario_id FROM autores WHERE eh_bot=0"
+            ).fetchall():
+                self._avaliar_usuario(uid, avisar)
+            self._rotativos(avisar, str(time.time_ns()), elegiveis)
 
     def fechar_periodos(self, agora=None, *, avisar=False, elegiveis=None):
         agora = (agora or datetime.now(FUSO)).astimezone(FUSO)
         # strftime em SQLite evita converter cada snowflake no Python.
-        datas = [r[0] for r in self.con.execute("SELECT DISTINCT strftime('%Y-%m', ((message_id >> 22)+1420070400000)/1000, 'unixepoch','-3 hours') FROM mensagens UNION SELECT DISTINCT strftime('%Y-%m', ((message_id >> 22)+1420070400000)/1000, 'unixepoch','-3 hours') FROM pedidos")]
-        periodos = [("mes",p) for p in datas if p and p < agora.strftime("%Y-%m")]
-        periodos += [("ano",p) for p in sorted({p[:4] for p in datas if p and p[:4] < str(agora.year)})]
+        datas = [
+            r[0]
+            for r in self.con.execute(
+                "SELECT DISTINCT strftime('%Y-%m', ((message_id >> 22)+1420070400000)/1000, 'unixepoch','-3 hours') FROM mensagens UNION SELECT DISTINCT strftime('%Y-%m', ((message_id >> 22)+1420070400000)/1000, 'unixepoch','-3 hours') FROM pedidos"
+            )
+        ]
+        periodos = [("mes", p) for p in datas if p and p < agora.strftime("%Y-%m")]
+        periodos += [
+            ("ano", p) for p in sorted({p[:4] for p in datas if p and p[:4] < str(agora.year)})
+        ]
         fechados = []
-        for tipo,p in sorted(periodos, key=lambda x: limites_periodo(*x)[1]):
+        for tipo, p in sorted(periodos, key=lambda x: limites_periodo(*x)[1]):
             with self.con:
-                if self.con.execute("SELECT 1 FROM periodos_fechados WHERE tipo=? AND periodo=?",(tipo,p)).fetchone():
+                if self.con.execute(
+                    "SELECT 1 FROM periodos_fechados WHERE tipo=? AND periodo=?", (tipo, p)
+                ).fetchone():
                     continue
-                desde,ate = limites_periodo(tipo,p)
-                for fonte,prefixo in (("mensagens","tagarela"),("pedidos","dj")):
-                    rank = self.ranking_contagens(fonte,desde,ate,False,elegiveis)
+                desde, ate = limites_periodo(tipo, p)
+                for fonte, prefixo in (("mensagens", "tagarela"), ("pedidos", "dj")):
+                    rank = self.ranking_contagens(fonte, desde, ate, False, elegiveis)
                     if rank:
-                        self._conceder(rank[0][0],prefixo+"_"+tipo,p,avisar)
-                self.con.execute("INSERT INTO periodos_fechados VALUES (?,?,?)",(tipo,p,int(time.time())))
-                fechados.append((tipo,p))
+                        self._conceder(rank[0][0], prefixo + "_" + tipo, p, avisar)
+                self.con.execute(
+                    "INSERT INTO periodos_fechados VALUES (?,?,?)", (tipo, p, int(time.time()))
+                )
+                fechados.append((tipo, p))
         return fechados
 
     def backup_diario(self, agora=None):
@@ -959,7 +1196,7 @@ class Banco(BancoLegado):
         pasta = self.caminho.parent / "backups"
         destino = pasta / f"memi_{dia}.db.gz"
         if not destino.exists():
-            backup_sqlite(self.con,destino)
+            backup_sqlite(self.con, destino)
         for velho in sorted(pasta.glob("memi_????-??-??.db.gz"))[:-7]:
             velho.unlink()
         return destino
@@ -1026,7 +1263,9 @@ class Deezer:
 
         guardado = self.banco.cache_deezer(chave)
         agora = int(time.time())
-        if guardado and ((guardado[0] and guardado[1]) or agora - guardado[2] < DEEZER_REPETIR_APOS):
+        if guardado and (
+            (guardado[0] and guardado[1]) or agora - guardado[2] < DEEZER_REPETIR_APOS
+        ):
             return guardado[0], guardado[1]
 
         achado = None
@@ -1055,8 +1294,12 @@ class Deezer:
 RE_LINK = re.compile(r"https?://[^\s<>]+", re.I)
 RE_ID = re.compile(r"[\w-]+")
 TIPOS_SPOTIFY = {
-    "track": "música", "album": "álbum", "playlist": "playlist",
-    "artist": "artista", "episode": "episódio", "show": "podcast",
+    "track": "música",
+    "album": "álbum",
+    "playlist": "playlist",
+    "artist": "artista",
+    "episode": "episódio",
+    "show": "podcast",
 }
 
 
@@ -1099,7 +1342,11 @@ def analisar_link(texto: str):
         if partes and partes[0].startswith("intl-"):
             partes = partes[1:]
         if len(partes) >= 2 and partes[0] in TIPOS_SPOTIFY and RE_ID.fullmatch(partes[1]):
-            return f"https://open.spotify.com/{partes[0]}/{partes[1]}", SPOTIFY_OEMBED, TIPOS_SPOTIFY[partes[0]]
+            return (
+                f"https://open.spotify.com/{partes[0]}/{partes[1]}",
+                SPOTIFY_OEMBED,
+                TIPOS_SPOTIFY[partes[0]],
+            )
     return None
 
 
@@ -1120,7 +1367,7 @@ def formatar_consulta(texto: str, achado=None, limite: int = 60) -> str:
         nome, url = achado
         nome = nome.replace("[", "(").replace("]", ")")
         if len(nome) > limite:
-            nome = nome[:limite - 1] + "…"
+            nome = nome[: limite - 1] + "…"
         return f"[{nome}]({url})"
     return "`" + " ".join(texto.split()).replace("`", "'")[:limite] + "`"
 
@@ -1208,7 +1455,7 @@ class RankingView(discord.ui.View):
 
     def montar_embed(self) -> discord.Embed:
         ini = self.pagina * POR_PAGINA
-        fatia = self.itens[ini:ini + POR_PAGINA]
+        fatia = self.itens[ini : ini + POR_PAGINA]
         medalhas = {1: "🥇 ", 2: "🥈 ", 3: "🥉 "}
         linhas = [
             f"{medalhas.get(ini + i, '')}**{ini + i}** - {item}"
@@ -1276,7 +1523,9 @@ class Musicas(commands.Cog):
     async def cog_unload(self):
         for tarefa in self.tarefas + ([self._sync_task] if self._sync_task else []):
             tarefa.cancel()
-        await asyncio.gather(*self.tarefas, *([self._sync_task] if self._sync_task else []), return_exceptions=True)
+        await asyncio.gather(
+            *self.tarefas, *([self._sync_task] if self._sync_task else []), return_exceptions=True
+        )
         await self.deezer.fechar()
         await self.links.fechar()
         self.banco.con.close()
@@ -1291,7 +1540,7 @@ class Musicas(commands.Cog):
         return None
 
     def ranking(self, fonte, desde=0, eh_bot=None):
-        return self.banco.ranking_contagens(fonte,desde,eh_bot=eh_bot,elegiveis=self.elegiveis())
+        return self.banco.ranking_contagens(fonte, desde, eh_bot=eh_bot, elegiveis=self.elegiveis())
 
     async def canais_legiveis(self):
         """Inclui voz, threads ativas e arquivadas, inclusive fóruns."""
@@ -1299,16 +1548,18 @@ class Musicas(commands.Cog):
         canais, erros = {}, []
         if not guild:
             return [], ["servidor indisponível"]
+
         def adicionar(canal):
-            if not hasattr(canal,"history"):
+            if not hasattr(canal, "history"):
                 return
             perm = canal.permissions_for(guild.me)
             if not perm.view_channel:
                 return
             if not perm.read_message_history:
                 erros.append(f"sem histórico em {canal.id}")
-            elif hasattr(canal,"history"):
+            elif hasattr(canal, "history"):
                 canais[canal.id] = canal
+
         for canal in guild.channels:
             adicionar(canal)
         for thread in guild.threads:
@@ -1319,17 +1570,17 @@ class Musicas(commands.Cog):
         except discord.HTTPException:
             erros.append("não foi possível listar threads ativas")
         for pai in guild.channels:
-            if not hasattr(pai,"archived_threads"):
+            if not hasattr(pai, "archived_threads"):
                 continue
             perm = pai.permissions_for(guild.me)
             if not (perm.view_channel and perm.read_message_history):
                 continue
             consultas = [{}]
-            if isinstance(pai,discord.TextChannel):
-                consultas.append({"private":True,"joined":not perm.manage_threads})
+            if isinstance(pai, discord.TextChannel):
+                consultas.append({"private": True, "joined": not perm.manage_threads})
             for opcoes in consultas:
                 try:
-                    async for thread in pai.archived_threads(limit=None,**opcoes):
+                    async for thread in pai.archived_threads(limit=None, **opcoes):
                         adicionar(thread)
                 except discord.HTTPException:
                     erros.append(f"não foi possível listar threads arquivadas em {pai.id}")
@@ -1338,33 +1589,37 @@ class Musicas(commands.Cog):
     def iniciar_sync(self):
         self._sync_solicitada = True
         if self._sync_task is None or self._sync_task.done():
+
             async def recuperar():
                 while self._sync_solicitada:
                     self._sync_solicitada = False
                     await self.sincronizar()
                 await self.enviar_avisos()
+
             self._sync_task = asyncio.create_task(recuperar(), name="memi-sincronizar")
 
     @commands.Cog.listener()
     async def on_ready(self):
         if not self.guild_id:
             canal = self.bot.get_channel(CANAL_AVISOS)
-            if canal and getattr(canal,"guild",None):
+            if canal and getattr(canal, "guild", None):
                 self.guild_id = canal.guild.id
-            elif len(self.bot.guilds)==1:
+            elif len(self.bot.guilds) == 1:
                 self.guild_id = self.bot.guilds[0].id
             else:
                 logging.error("Defina MEMI_GUILD_ID: não consegui identificar um único servidor.")
                 return
-            self.banco.definir_estado("servidor_id",self.guild_id)
+            self.banco.definir_estado("servidor_id", self.guild_id)
         guild = self.guild()
         if self.bot.intents.members and guild and not guild.chunked:
             await guild.chunk(cache=True)
         self.sincronizados.clear()
         self.iniciar_sync()
         if not self.tarefas:
-            self.tarefas = [asyncio.create_task(self.manter(),name="memi-manutencao"),
-                           asyncio.create_task(self.classificar(),name="memi-generos")]
+            self.tarefas = [
+                asyncio.create_task(self.manter(), name="memi-manutencao"),
+                asyncio.create_task(self.classificar(), name="memi-generos"),
+            ]
 
     @commands.Cog.listener()
     async def on_resumed(self):
@@ -1381,8 +1636,8 @@ class Musicas(commands.Cog):
     async def on_member_remove(self, member):
         if member.guild.id == self.guild_id:
             async with self.lock:
-                if self.banco.estado("importacao_concluida")=="1":
-                    self.banco.reconciliar(avisar=True,elegiveis=self.elegiveis())
+                if self.banco.estado("importacao_concluida") == "1":
+                    self.banco.reconciliar(avisar=True, elegiveis=self.elegiveis())
             await self.enviar_avisos()
 
     @commands.Cog.listener()
@@ -1400,10 +1655,15 @@ class Musicas(commands.Cog):
                 self.iniciar_sync()
             await asyncio.shield(self._sync_task)
         async with self.lock:
-            pronto = self.banco.estado("importacao_concluida")=="1" and not self.recuperando
+            pronto = self.banco.estado("importacao_concluida") == "1" and not self.recuperando
             # Um canal ainda não lido não pode avançar além do histórico offline.
-            self.banco.receber(msg,avancar=msg.channel.id in self.sincronizados,
-                recompensar=pronto,avisar=pronto,elegiveis=self.elegiveis())
+            self.banco.receber(
+                msg,
+                avancar=msg.channel.id in self.sincronizados,
+                recompensar=pronto,
+                avisar=pronto,
+                elegiveis=self.elegiveis(),
+            )
         if pronto:
             await self.enviar_avisos()
         if msg.channel.id not in self.sincronizados:
@@ -1412,7 +1672,7 @@ class Musicas(commands.Cog):
     async def sincronizar(self, *, completo=False, silencioso=False, status=None, canais=None):
         async with self.lock:
             self.recuperando = True
-            inicial = self.banco.estado("importacao_concluida")!="1"
+            inicial = self.banco.estado("importacao_concluida") != "1"
             silencioso = silencioso or inicial
             total = 0
             ultima_edicao = 0.0
@@ -1428,57 +1688,80 @@ class Musicas(commands.Cog):
                 corte_data = discord.utils.snowflake_time(corte).astimezone(FUSO)
                 elegiveis = self.elegiveis()
                 heap = []
+
                 async def proxima(canal, it):
                     nonlocal total
                     try:
                         msg = await anext(it)
                     except StopAsyncIteration:
                         # Confirma todo o intervalo somente depois da leitura completa.
-                        self.banco.salvar_marca(canal.id,corte-1)
+                        self.banco.salvar_marca(canal.id, corte - 1)
                         self.sincronizados.add(canal.id)
                     except discord.HTTPException as exc:
                         erros.append(f"histórico de {canal.id}: {type(exc).__name__}")
-                        logging.warning("Falha no histórico do canal %s",canal.id,exc_info=True)
+                        logging.warning("Falha no histórico do canal %s", canal.id, exc_info=True)
                     else:
-                        heapq.heappush(heap,(msg.id,canal.id,msg,canal,it))
+                        heapq.heappush(heap, (msg.id, canal.id, msg, canal, it))
+
                 for canal in canais:
                     marca = 0 if completo else self.banco.marca(canal.id)
-                    it = canal.history(limit=None,after=discord.Object(id=marca) if marca else None,
-                        before=discord.Object(id=corte),oldest_first=True).__aiter__()
-                    await proxima(canal,it)
+                    it = canal.history(
+                        limit=None,
+                        after=discord.Object(id=marca) if marca else None,
+                        before=discord.Object(id=corte),
+                        oldest_first=True,
+                    ).__aiter__()
+                    await proxima(canal, it)
                 while heap:
-                    _,_,msg,canal,it = heapq.heappop(heap)
-                    self.banco.receber(msg,avancar=True,recompensar=not silencioso,
-                                       avisar=not silencioso,elegiveis=elegiveis)
+                    _, _, msg, canal, it = heapq.heappop(heap)
+                    self.banco.receber(
+                        msg,
+                        avancar=True,
+                        recompensar=not silencioso,
+                        avisar=not silencioso,
+                        elegiveis=elegiveis,
+                    )
                     total += 1
-                    if status and time.monotonic()-ultima_edicao >= 5:
-                        ultima_edicao=time.monotonic()
+                    if status and time.monotonic() - ultima_edicao >= 5:
+                        ultima_edicao = time.monotonic()
                         try:
-                            await status.edit(content=f"📖 Lendo {len(canais)} chats e threads • {milhar(total)} mensagens verificadas...")
+                            await status.edit(
+                                content=f"📖 Lendo {len(canais)} chats e threads • {milhar(total)} mensagens verificadas..."
+                            )
                         except discord.HTTPException:
                             pass
-                    await proxima(canal,it)
+                    await proxima(canal, it)
                     if total % 200 == 0:
                         await asyncio.sleep(0)
                 # Um resultado parcial não pode fechar períodos nem concluir a importação.
                 if global_ and not erros:
-                    self.banco.reconciliar(avisar=not silencioso,elegiveis=self.elegiveis())
+                    self.banco.reconciliar(avisar=not silencioso, elegiveis=self.elegiveis())
                     # O fechamento considera o instante até o qual o histórico foi lido.
-                    self.banco.fechar_periodos(corte_data,avisar=not silencioso,elegiveis=self.elegiveis())
+                    self.banco.fechar_periodos(
+                        corte_data, avisar=not silencioso, elegiveis=self.elegiveis()
+                    )
                     self._ultimo_fechamento = corte_data.strftime("%Y-%m")
-                    self.banco.definir_estado("importacao_concluida","1")
-                    self.banco.definir_estado("sincronizacao_completa","1")
+                    self.banco.definir_estado("importacao_concluida", "1")
+                    self.banco.definir_estado("sincronizacao_completa", "1")
                     with self.banco.con:
-                        self.banco.con.execute("INSERT INTO atividade_scan VALUES (1,?) ON CONFLICT(id) DO UPDATE SET quando=excluded.quando", (int(time.time()),))
+                        self.banco.con.execute(
+                            "INSERT INTO atividade_scan VALUES (1,?) ON CONFLICT(id) DO UPDATE SET quando=excluded.quando",
+                            (int(time.time()),),
+                        )
                 elif global_:
-                    self.banco.definir_estado("sincronizacao_completa","0")
+                    self.banco.definir_estado("sincronizacao_completa", "0")
                 elif not erros and not inicial:
-                    self.banco.reconciliar(avisar=False,elegiveis=self.elegiveis())
-                self._ultimo_sync=time.monotonic()
+                    self.banco.reconciliar(avisar=False, elegiveis=self.elegiveis())
+                self._ultimo_sync = time.monotonic()
                 if erros:
                     logging.warning("Leitura parcial: %s", "; ".join(erros))
                 else:
-                    logging.info("Leitura concluída: %s mensagens verificadas em %s chats/threads; silencioso=%s",total,len(canais),silencioso)
+                    logging.info(
+                        "Leitura concluída: %s mensagens verificadas em %s chats/threads; silencioso=%s",
+                        total,
+                        len(canais),
+                        silencioso,
+                    )
                 if status:
                     resumo = f"✅ Leitura concluída: {milhar(total)} mensagens verificadas em {len(canais)} chats/threads. Sem duplicação."
                     if erros:
@@ -1488,50 +1771,69 @@ class Musicas(commands.Cog):
                     await status.edit(content=resumo)
                 return total, erros
             except Exception:
-                self.banco.definir_estado("sincronizacao_completa","0")
+                self.banco.definir_estado("sincronizacao_completa", "0")
                 logging.exception("Falha na sincronização; o progresso confirmado foi preservado.")
                 if status:
-                    await status.edit(content="⚠️ A leitura foi interrompida. Progresso salvo; veja memi_bot.log e tente novamente.")
-                return total,["sincronização interrompida"]
+                    await status.edit(
+                        content="⚠️ A leitura foi interrompida. Progresso salvo; veja memi_bot.log e tente novamente."
+                    )
+                return total, ["sincronização interrompida"]
             finally:
-                self.recuperando=False
+                self.recuperando = False
         # Avisos são enviados pela manutenção, fora do bloqueio do histórico.
 
     async def enviar_avisos(self):
-        if self.recuperando or self.banco.estado("importacao_concluida")!="1":
+        if self.recuperando or self.banco.estado("importacao_concluida") != "1":
             return
         async with self.avisos_lock:
-            canal=self.bot.get_channel(CANAL_AVISOS)
+            canal = self.bot.get_channel(CANAL_AVISOS)
             if canal is None:
-                logging.warning("Canal de avisos %s não está acessível.",CANAL_AVISOS)
+                logging.warning("Canal de avisos %s não está acessível.", CANAL_AVISOS)
                 return
-            for aid,uid,item,titulo,insignia,detalhe in self.banco.con.execute(
-                    "SELECT id,usuario_id,item,titulo,insignia,detalhe FROM avisos WHERE estado='pendente' ORDER BY id LIMIT 20").fetchall():
-                info=CATALOGO.get(item)
+            for aid, uid, item, titulo, insignia, detalhe in self.banco.con.execute(
+                "SELECT id,usuario_id,item,titulo,insignia,detalhe FROM avisos WHERE estado='pendente' ORDER BY id LIMIT 20"
+            ).fetchall():
+                info = CATALOGO.get(item)
                 if not info:
                     continue
-                pessoa=self.guild().get_member(uid) if self.guild() else None
-                row=self.banco.con.execute("SELECT nome FROM autores WHERE usuario_id=?",(uid,)).fetchone()
-                nome=discord.utils.escape_markdown(pessoa.display_name if pessoa else (row[0] if row else str(uid)))
-                tipo="Insignia e Titulo desbloqueados" if titulo and insignia else "Titulo desbloqueado" if titulo else "Insignia desbloqueada"
-                texto=f"Parabens, {nome}!!! {tipo}: {info['nome']}!"
-                if detalhe and detalhe not in ("geral","manual"):
+                pessoa = self.guild().get_member(uid) if self.guild() else None
+                row = self.banco.con.execute(
+                    "SELECT nome FROM autores WHERE usuario_id=?", (uid,)
+                ).fetchone()
+                nome = discord.utils.escape_markdown(
+                    pessoa.display_name if pessoa else (row[0] if row else str(uid))
+                )
+                tipo = (
+                    "Insignia e Titulo desbloqueados"
+                    if titulo and insignia
+                    else "Titulo desbloqueado" if titulo else "Insignia desbloqueada"
+                )
+                texto = f"Parabens, {nome}!!! {tipo}: {info['nome']}!"
+                if detalhe and detalhe not in ("geral", "manual"):
                     texto += f" ({detalhe})"
                 # Reserva persistente antes de enviar: evita reenviar em caso de queda após o envio.
                 with self.banco.con:
-                    self.banco.con.execute("UPDATE avisos SET estado='reservado' WHERE id=?",(aid,))
+                    self.banco.con.execute(
+                        "UPDATE avisos SET estado='reservado' WHERE id=?", (aid,)
+                    )
                 try:
-                    await canal.send(texto,allowed_mentions=discord.AllowedMentions.none())
-                except (discord.Forbidden,discord.NotFound):
+                    await canal.send(texto, allowed_mentions=discord.AllowedMentions.none())
+                except (discord.Forbidden, discord.NotFound):
                     with self.banco.con:
-                        self.banco.con.execute("UPDATE avisos SET estado='pendente' WHERE id=?",(aid,))
+                        self.banco.con.execute(
+                            "UPDATE avisos SET estado='pendente' WHERE id=?", (aid,)
+                        )
                     logging.warning("Sem permissão para enviar avisos.")
                     return
-                except (discord.HTTPException,aiohttp.ClientError,asyncio.TimeoutError):
-                    logging.exception("Resultado incerto no envio do aviso %s; não será repetido.",aid)
+                except (discord.HTTPException, aiohttp.ClientError, asyncio.TimeoutError):
+                    logging.exception(
+                        "Resultado incerto no envio do aviso %s; não será repetido.", aid
+                    )
                 else:
                     with self.banco.con:
-                        self.banco.con.execute("UPDATE avisos SET estado='enviado' WHERE id=?",(aid,))
+                        self.banco.con.execute(
+                            "UPDATE avisos SET estado='enviado' WHERE id=?", (aid,)
+                        )
 
     async def manter(self):
         while not self.bot.is_closed():
@@ -1539,226 +1841,272 @@ class Musicas(commands.Cog):
                 await self.bot.wait_until_ready()
                 if not self.recuperando:
                     self.banco.backup_diario()
-                    agora=datetime.now(FUSO)
-                    chave=agora.strftime("%Y-%m")
-                    if chave!=self._ultimo_fechamento and self.banco.estado("importacao_concluida")=="1":
+                    agora = datetime.now(FUSO)
+                    chave = agora.strftime("%Y-%m")
+                    if (
+                        chave != self._ultimo_fechamento
+                        and self.banco.estado("importacao_concluida") == "1"
+                    ):
                         # Antes de fechar, recupera os eventos que possam faltar na virada.
-                        _,erros=await self.sincronizar()
+                        _, erros = await self.sincronizar()
                         if not erros:
-                            self._ultimo_fechamento=chave
+                            self._ultimo_fechamento = chave
                     await self.enviar_avisos()
-                    if time.monotonic()-self._ultimo_sync > 900:
+                    if time.monotonic() - self._ultimo_sync > 900:
                         self.iniciar_sync()
             except Exception:
                 logging.exception("Falha na manutenção; tentando de novo no próximo ciclo.")
             # Acorda na meia-noite de Brasília para o fechamento e backup.
-            agora=datetime.now(FUSO)
-            amanha=(agora+timedelta(days=1)).replace(hour=0,minute=0,second=0,microsecond=0)
-            await asyncio.sleep(max(0.1,min(15,(amanha-agora).total_seconds())))
+            agora = datetime.now(FUSO)
+            amanha = (agora + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+            await asyncio.sleep(max(0.1, min(15, (amanha - agora).total_seconds())))
 
     async def classificar(self):
         while not self.bot.is_closed():
             try:
                 await self.bot.wait_until_ready()
-                agora=int(time.time())
-                faixas=self.banco.con.execute("SELECT m.id,m.titulo,m.artista FROM musicas m LEFT JOIN deezer_cache d ON d.chave=chave_deezer(m.titulo||' '||m.artista) LEFT JOIN estado e ON e.chave='genero:'||m.id WHERE (d.chave IS NULL OR (d.genero='' AND d.buscado_em<?)) AND CAST(COALESCE(e.valor,'0') AS INTEGER)<? ORDER BY COALESCE(e.valor,'0'),m.id LIMIT 3", (agora-DEEZER_REPETIR_APOS,agora-3600)).fetchall()
-                for mid,t,a in faixas:
-                    self.banco.definir_estado(f"genero:{mid}",agora)
-                    await self.deezer.info_seguro(f"{t} {a}".strip(),t,a)
+                agora = int(time.time())
+                faixas = self.banco.con.execute(
+                    "SELECT m.id,m.titulo,m.artista FROM musicas m LEFT JOIN deezer_cache d ON d.chave=chave_deezer(m.titulo||' '||m.artista) LEFT JOIN estado e ON e.chave='genero:'||m.id WHERE (d.chave IS NULL OR (d.genero='' AND d.buscado_em<?)) AND CAST(COALESCE(e.valor,'0') AS INTEGER)<? ORDER BY COALESCE(e.valor,'0'),m.id LIMIT 3",
+                    (agora - DEEZER_REPETIR_APOS, agora - 3600),
+                ).fetchall()
+                for mid, t, a in faixas:
+                    self.banco.definir_estado(f"genero:{mid}", agora)
+                    await self.deezer.info_seguro(f"{t} {a}".strip(), t, a)
                     await asyncio.sleep(1)
-                consultas=self.banco.con.execute("SELECT chave,texto FROM classificacao_pedidos WHERE genero='' AND consultado_em<? ORDER BY consultado_em,chave LIMIT 3", (agora-3600,)).fetchall()
-                for chave,texto in consultas:
-                    nome=texto
+                consultas = self.banco.con.execute(
+                    "SELECT chave,texto FROM classificacao_pedidos WHERE genero='' AND consultado_em<? ORDER BY consultado_em,chave LIMIT 3",
+                    (agora - 3600,),
+                ).fetchall()
+                for chave, texto in consultas:
+                    nome = texto
                     if analisar_link(texto):
-                        achado=await self.links.titulo_seguro(texto)
-                        nome=achado[0] if achado else ""
-                    _,genero=await self.deezer.info_seguro(nome) if nome else ("","")
+                        achado = await self.links.titulo_seguro(texto)
+                        nome = achado[0] if achado else ""
+                    _, genero = await self.deezer.info_seguro(nome) if nome else ("", "")
                     with self.banco.con:
-                        self.banco.con.execute("UPDATE classificacao_pedidos SET nome=?,genero=?,consultado_em=? WHERE chave=?",(nome,genero,agora,chave))
+                        self.banco.con.execute(
+                            "UPDATE classificacao_pedidos SET nome=?,genero=?,consultado_em=? WHERE chave=?",
+                            (nome, genero, agora, chave),
+                        )
                     await asyncio.sleep(1)
             except Exception:
                 logging.exception("Falha na classificação de gêneros.")
             await asyncio.sleep(30)
 
-    @commands.command(name="read",hidden=True)
+    @commands.command(name="read", hidden=True)
     @commands.guild_only()
     @so_memi()
-    async def read(self,ctx,*args):
-        completo=any(sem_acento(x) in ("tudo","completo","full") for x in args)
-        canais=[]
+    async def read(self, ctx, *args):
+        completo = any(sem_acento(x) in ("tudo", "completo", "full") for x in args)
+        canais = []
         for arg in args:
-            if sem_acento(arg) in ("tudo","completo","full"):
+            if sem_acento(arg) in ("tudo", "completo", "full"):
                 continue
-            match=re.fullmatch(r"(?:<#)?(\d+)>?",arg)
-            canal=ctx.guild.get_channel_or_thread(int(match[1])) if match else None
-            if not canal or not hasattr(canal,"history"):
+            match = re.fullmatch(r"(?:<#)?(\d+)>?", arg)
+            canal = ctx.guild.get_channel_or_thread(int(match[1])) if match else None
+            if not canal or not hasattr(canal, "history"):
                 await ctx.send("Canal inválido. Use mm!read, mm!read tudo ou mm!read #canal.")
                 return
             canais.append(canal)
         if self.lock.locked():
             await ctx.send("⏳ Já tem uma leitura em andamento. Aguarde terminar.")
             return
-        status=await ctx.send("📖 Começando a leitura...")
+        status = await ctx.send("📖 Começando a leitura...")
         # Sem canais explícitos, verifica todos os chats, inclusive voz e threads.
-        await self.sincronizar(completo=completo,silencioso=True,status=status,canais=canais or None)
+        await self.sincronizar(
+            completo=completo, silencioso=True, status=status, canais=canais or None
+        )
 
-
-    @commands.command(name="musicas",aliases=["músicas","ranking"])
+    @commands.command(name="musicas", aliases=["músicas", "ranking"])
     @commands.guild_only()
-    async def musicas(self,ctx,*args):
-        palavras=[sem_acento(x) for x in args]
-        periodos=[x for x in palavras if x in ("mes","ano","semana")]
-        if len(set(periodos))>1:
+    async def musicas(self, ctx, *args):
+        palavras = [sem_acento(x) for x in args]
+        periodos = [x for x in palavras if x in ("mes", "ano", "semana")]
+        if len(set(periodos)) > 1:
             await ctx.send("Use um período por vez: semana, mes ou ano.")
             return
-        periodo=periodos[0] if periodos else ""
-        palavras=[x for x in palavras if x not in ("mes","ano","semana")]
-        genero=None
+        periodo = periodos[0] if periodos else ""
+        palavras = [x for x in palavras if x not in ("mes", "ano", "semana")]
+        genero = None
         if "genero" in palavras or "generos" in palavras:
-            indice=next(i for i,x in enumerate(palavras) if x in ("genero","generos"))
-            if indice!=0:
+            indice = next(i for i, x in enumerate(palavras) if x in ("genero", "generos"))
+            if indice != 0:
                 await ctx.send("Use mm!musicas genero [NOME] [semana|mes|ano].")
                 return
-            tipo="genero"
-            genero=" ".join(palavras[1:]) or None
+            tipo = "genero"
+            genero = " ".join(palavras[1:]) or None
         else:
-            tipo=palavras[0] if palavras else ""
-            validos={sem_acento(x) for x in NOMES_RANKING_MUSICA+NOMES_RANKING_ARTISTA+NOMES_RANKING_USUARIO}
-            if len(palavras)>1 or tipo not in validos:
+            tipo = palavras[0] if palavras else ""
+            validos = {
+                sem_acento(x)
+                for x in NOMES_RANKING_MUSICA + NOMES_RANKING_ARTISTA + NOMES_RANKING_USUARIO
+            }
+            if len(palavras) > 1 or tipo not in validos:
                 await ctx.send("Use mm!musicas [artista|ios|genero [NOME]] [semana|mes|ano].")
                 return
-        desde,rotulo=intervalo(periodo)
-        capa=""
-        if tipo=="genero":
-            linhas=self.banco.ranking_generos(desde,genero)
+        desde, rotulo = intervalo(periodo)
+        capa = ""
+        if tipo == "genero":
+            linhas = self.banco.ranking_generos(desde, genero)
             if genero:
-                titulo=f"🎼 Músicas de {genero}"
-                itens=[f"{t[:65]}"+(f" by {a[:45]}" if a else "")+f" — {q}x" for t,a,q in linhas]
+                titulo = f"🎼 Músicas de {genero}"
+                itens = [
+                    f"{t[:65]}" + (f" by {a[:45]}" if a else "") + f" — {q}x" for t, a, q in linhas
+                ]
             else:
-                titulo="🎼 Ranking de gêneros"
-                itens=[f"{g} — {q} tocadas • {n} músicas diferentes" for g,q,n in linhas]
-            pendentes=self.banco.generos_pendentes(desde)
-            rodape=f"{pendentes} músicas sem gênero • classificação automática em segundo plano"
+                titulo = "🎼 Ranking de gêneros"
+                itens = [f"{g} — {q} tocadas • {n} músicas diferentes" for g, q, n in linhas]
+            pendentes = self.banco.generos_pendentes(desde)
+            rodape = f"{pendentes} músicas sem gênero • classificação automática em segundo plano"
         elif tipo in {sem_acento(x) for x in NOMES_RANKING_ARTISTA}:
-            linhas=self.banco.ranking_artistas(desde)
-            titulo="🎤 Ranking de artistas"
-            itens=[f"{a[:80]} — {n} músicas diferentes • {q} tocadas" for a,n,q in linhas]
-            rodape=f"{len(linhas)} artistas"
+            linhas = self.banco.ranking_artistas(desde)
+            titulo = "🎤 Ranking de artistas"
+            itens = [f"{a[:80]} — {n} músicas diferentes • {q} tocadas" for a, n, q in linhas]
+            rodape = f"{len(linhas)} artistas"
             if linhas:
-                t,a=self.banco.musica_top_do_artista(linhas[0][0],desde)
-                capa,_=await self.deezer.info_seguro(f"{t} {a}".strip(),t,a)
+                t, a = self.banco.musica_top_do_artista(linhas[0][0], desde)
+                capa, _ = await self.deezer.info_seguro(f"{t} {a}".strip(), t, a)
         elif tipo in {sem_acento(x) for x in NOMES_RANKING_USUARIO}:
-            linhas=self.ranking("pedidos",desde,False)
-            titulo="🎧 Quem mais pediu música"
-            itens=[f"<@{uid}> — {milhar(n)} pedidos" for uid,n in linhas]
-            rodape=f"{milhar(sum(n for _,n in linhas))} pedidos • {len(linhas)} pessoas"
+            linhas = self.ranking("pedidos", desde, False)
+            titulo = "🎧 Quem mais pediu música"
+            itens = [f"<@{uid}> — {milhar(n)} pedidos" for uid, n in linhas]
+            rodape = f"{milhar(sum(n for _,n in linhas))} pedidos • {len(linhas)} pessoas"
         else:
-            linhas=self.banco.ranking_musicas(desde)
-            titulo="🏆 Ranking de músicas mais tocadas"
-            itens=[f"{t[:65]}"+(f" by {a[:45]}" if a else "")+f" — {q}x" for t,a,q in linhas]
-            rodape=f"{milhar(sum(q for _,_,q in linhas))} tocadas • {len(linhas)} músicas"
+            linhas = self.banco.ranking_musicas(desde)
+            titulo = "🏆 Ranking de músicas mais tocadas"
+            itens = [
+                f"{t[:65]}" + (f" by {a[:45]}" if a else "") + f" — {q}x" for t, a, q in linhas
+            ]
+            rodape = f"{milhar(sum(q for _,_,q in linhas))} tocadas • {len(linhas)} músicas"
             if linhas:
-                t,a,_=linhas[0]
-                capa,_=await self.deezer.info_seguro(f"{t} {a}".strip(),t,a)
+                t, a, _ = linhas[0]
+                capa, _ = await self.deezer.info_seguro(f"{t} {a}".strip(), t, a)
         if rotulo:
-            titulo+=f" — {rotulo}"
-        if not self.banco.estado("importacao_concluida")=="1":
-            rodape+=" • importação inicial pendente/em andamento"
-        view=RankingView(ctx.author.id,titulo,itens,rodape,capa)
-        view.message=await ctx.send(embed=view.montar_embed(),view=view,allowed_mentions=discord.AllowedMentions.none())
+            titulo += f" — {rotulo}"
+        if not self.banco.estado("importacao_concluida") == "1":
+            rodape += " • importação inicial pendente/em andamento"
+        view = RankingView(ctx.author.id, titulo, itens, rodape, capa)
+        view.message = await ctx.send(
+            embed=view.montar_embed(), view=view, allowed_mentions=discord.AllowedMentions.none()
+        )
 
-    async def resumo_musical(self,uid):
-        consultas,exemplos=self.banco.consultas_usuario(uid)
-        mais=""
+    async def resumo_musical(self, uid):
+        consultas, exemplos = self.banco.consultas_usuario(uid)
+        mais = ""
         if consultas:
-            chave,n=consultas.most_common(1)[0]
-            achado=await self.links.titulo_seguro(exemplos[chave])
-            mais=f"{formatar_consulta(exemplos[chave],achado,100)} — {n}x"
-        generos=Counter()
-        pendentes=0
-        for chave,n in consultas.items():
-            row=self.banco.con.execute("SELECT genero FROM classificacao_pedidos WHERE chave=?",(chave,)).fetchone()
-            genero=row[0] if row else ""
+            chave, n = consultas.most_common(1)[0]
+            achado = await self.links.titulo_seguro(exemplos[chave])
+            mais = f"{formatar_consulta(exemplos[chave],achado,100)} — {n}x"
+        generos = Counter()
+        pendentes = 0
+        for chave, n in consultas.items():
+            row = self.banco.con.execute(
+                "SELECT genero FROM classificacao_pedidos WHERE chave=?", (chave,)
+            ).fetchone()
+            genero = row[0] if row else ""
             if not genero and not analisar_link(exemplos[chave]):
-                cache=self.banco.cache_deezer(chave_deezer(exemplos[chave]))
-                genero=cache[1] if cache else ""
+                cache = self.banco.cache_deezer(chave_deezer(exemplos[chave]))
+                genero = cache[1] if cache else ""
             if genero:
-                generos[genero]+=n
+                generos[genero] += n
             else:
-                pendentes+=1
-        return mais,(generos.most_common(1)[0][0] if generos else ""),pendentes
+                pendentes += 1
+        return mais, (generos.most_common(1)[0][0] if generos else ""), pendentes
 
     @commands.command(name="perfil")
     @commands.guild_only()
-    async def perfil(self,ctx,pessoa:discord.Member=None):
-        pessoa=pessoa or ctx.author
+    async def perfil(self, ctx, pessoa: discord.Member = None):
+        pessoa = pessoa or ctx.author
         async with ctx.typing():
-            mais,genero,pendentes=await self.resumo_musical(pessoa.id)
-        paginas=self.paginas_perfil(pessoa,mais,genero,pendentes)
-        view=PerfilView(paginas)
-        view.message=await ctx.send(embed=paginas[0],view=view,allowed_mentions=discord.AllowedMentions.none())
+            mais, genero, pendentes = await self.resumo_musical(pessoa.id)
+        paginas = self.paginas_perfil(pessoa, mais, genero, pendentes)
+        view = PerfilView(paginas)
+        view.message = await ctx.send(
+            embed=paginas[0], view=view, allowed_mentions=discord.AllowedMentions.none()
+        )
 
-    def paginas_perfil(self,pessoa,mais="",genero="",pendentes=0):
-        uid=pessoa.id
-        perfil=self.banco.perfil(uid)
-        fav=CATALOGO.get(perfil["titulo"],{}).get("nome","")
-        nome=(pessoa.display_name+(f" ({fav})" if fav else "")).upper()[:256]
-        mes,_=intervalo("mes")
-        ano,_=intervalo("ano")
-        totais={fonte:self.banco.total_usuario(uid,fonte) for fonte in ("mensagens","pedidos","mudae")}
-        lvl,progresso=progresso_nivel(totais["mensagens"])
-        ranks={}
+    def paginas_perfil(self, pessoa, mais="", genero="", pendentes=0):
+        uid = pessoa.id
+        perfil = self.banco.perfil(uid)
+        fav = CATALOGO.get(perfil["titulo"], {}).get("nome", "")
+        nome = (pessoa.display_name + (f" ({fav})" if fav else "")).upper()[:256]
+        mes, _ = intervalo("mes")
+        ano, _ = intervalo("ano")
+        totais = {
+            fonte: self.banco.total_usuario(uid, fonte)
+            for fonte in ("mensagens", "pedidos", "mudae")
+        }
+        lvl, progresso = progresso_nivel(totais["mensagens"])
+        ranks = {}
         for fonte in totais:
-            linhas=self.ranking(fonte,eh_bot=pessoa.bot if fonte=="mensagens" else False)
-            pos=next((i for i,(u,_) in enumerate(linhas,1) if u==uid),None)
-            ranks[fonte]=posicao_texto(pos,len(linhas)) if pos else ""
-        insignias="  ".join(f"{CATALOGO[k]['emoji']}"+(f" x{n}" if n>1 else "") for k,n in self.banco.itens(uid,"insignia"))
+            linhas = self.ranking(fonte, eh_bot=pessoa.bot if fonte == "mensagens" else False)
+            pos = next((i for i, (u, _) in enumerate(linhas, 1) if u == uid), None)
+            ranks[fonte] = posicao_texto(pos, len(linhas)) if pos else ""
+        insignias = "  ".join(
+            f"{CATALOGO[k]['emoji']}" + (f" x{n}" if n > 1 else "")
+            for k, n in self.banco.itens(uid, "insignia")
+        )
+
         def pagina(n):
-            e=discord.Embed(title=nome,color=0x5865F2)
+            e = discord.Embed(title=nome, color=0x5865F2)
             e.set_thumbnail(url=pessoa.display_avatar.with_size(128).url)
-            rodape=f"{BOT_NAME} • página {n}/3"
-            if n==1 and pendentes:
-                rodape+=f" • {pendentes} pedidos diferentes ainda sem gênero"
-            if self.banco.estado("importacao_concluida")!="1":
-                rodape+=" • histórico inicial em importação"
+            rodape = f"{BOT_NAME} • página {n}/3"
+            if n == 1 and pendentes:
+                rodape += f" • {pendentes} pedidos diferentes ainda sem gênero"
+            if self.banco.estado("importacao_concluida") != "1":
+                rodape += " • histórico inicial em importação"
             e.set_footer(text=rodape)
             return e
-        def campo(e,nome,valor,inline=True):
-            e.add_field(name=nome,value=str(valor)[:1024] if str(valor) else "\u200b",inline=inline)
-        p1=pagina(1)
-        campo(p1,"🎧 Ranking de música",ranks["pedidos"])
-        campo(p1,"💬 Ranking de mensagens",ranks["mensagens"])
-        campo(p1,"Nível",f"{lvl} • {progresso}")
-        campo(p1,"Frase",perfil["frase"],False)
-        campo(p1,"Música favorita",perfil["favorita"],False)
-        campo(p1,"Música mais colocada",mais,False)
-        campo(p1,"Gênero favorito",genero,False)
-        campo(p1,"Mensagens",milhar(totais["mensagens"]))
-        campo(p1,"Roletadas do Mudae",milhar(totais["mudae"]))
-        campo(p1,"Insígnias",insignias,False)
-        p2=pagina(2)
-        titulos=[CATALOGO[k]["nome"] for k,_ in self.banco.itens(uid,"titulo")]
-        visiveis=[]
+
+        def campo(e, nome, valor, inline=True):
+            e.add_field(
+                name=nome, value=str(valor)[:1024] if str(valor) else "\u200b", inline=inline
+            )
+
+        p1 = pagina(1)
+        campo(p1, "🎧 Ranking de música", ranks["pedidos"])
+        campo(p1, "💬 Ranking de mensagens", ranks["mensagens"])
+        campo(p1, "Nível", f"{lvl} • {progresso}")
+        campo(p1, "Frase", perfil["frase"], False)
+        campo(p1, "Música favorita", perfil["favorita"], False)
+        campo(p1, "Música mais colocada", mais, False)
+        campo(p1, "Gênero favorito", genero, False)
+        campo(p1, "Mensagens", milhar(totais["mensagens"]))
+        campo(p1, "Roletadas do Mudae", milhar(totais["mudae"]))
+        campo(p1, "Insígnias", insignias, False)
+        p2 = pagina(2)
+        titulos = [CATALOGO[k]["nome"] for k, _ in self.banco.itens(uid, "titulo")]
+        visiveis = []
         for texto in titulos:
-            if len("\n".join(visiveis+[texto]))>3400:
+            if len("\n".join(visiveis + [texto])) > 3400:
                 break
             visiveis.append(texto)
-        p2.description="\n".join(visiveis) or "\u200b"
-        if len(visiveis)<len(titulos):
-            p2.description+=f"\n\n+{len(titulos)-len(visiveis)} títulos\nUse mm!titulos para ver todos."
+        p2.description = "\n".join(visiveis) or "\u200b"
+        if len(visiveis) < len(titulos):
+            p2.description += (
+                f"\n\n+{len(titulos)-len(visiveis)} títulos\nUse mm!titulos para ver todos."
+            )
         p2.set_footer(text=f"{BOT_NAME} • página 2/3 • escolha com mm!titulo NOME")
-        p3=pagina(3)
+        p3 = pagina(3)
         if perfil["capa"]:
             p3.set_image(url=perfil["capa"])
-        campo(p3,"Nível",f"{lvl} • {progresso}",False)
-        for fonte,rotulo in (("mensagens","Mensagens"),("pedidos","Música"),("mudae","Mudae")):
-            campo(p3,f"Ranking de {rotulo}",ranks[fonte])
-        for fonte,rotulo in (("mensagens","Mensagens"),("pedidos","Músicas colocadas")):
-            campo(p3,rotulo,f"Total: {milhar(totais[fonte])}\nAno: {milhar(self.banco.total_usuario(uid,fonte,ano))}\nMês: {milhar(self.banco.total_usuario(uid,fonte,mes))}")
-        campo(p3,"Música mais colocada",mais,False)
-        campo(p3,"One Hit Wonders","",False)
-        return [p1,p2,p3]
-
+        campo(p3, "Nível", f"{lvl} • {progresso}", False)
+        for fonte, rotulo in (
+            ("mensagens", "Mensagens"),
+            ("pedidos", "Música"),
+            ("mudae", "Mudae"),
+        ):
+            campo(p3, f"Ranking de {rotulo}", ranks[fonte])
+        for fonte, rotulo in (("mensagens", "Mensagens"), ("pedidos", "Músicas colocadas")):
+            campo(
+                p3,
+                rotulo,
+                f"Total: {milhar(totais[fonte])}\nAno: {milhar(self.banco.total_usuario(uid,fonte,ano))}\nMês: {milhar(self.banco.total_usuario(uid,fonte,mes))}",
+            )
+        campo(p3, "Música mais colocada", mais, False)
+        campo(p3, "One Hit Wonders", "", False)
+        return [p1, p2, p3]
 
     # ----- mm!aleatoria ------------------------------------------------------
     @commands.command(name="aleatoria", aliases=["aleatória", "random"])
@@ -1767,8 +2115,9 @@ class Musicas(commands.Cog):
         """Sorteia uma música do histórico e mostra o m!play pronto pra copiar."""
         sorteada = self.banco.musica_aleatoria()
         if not sorteada:
-            await ctx.send("Ainda não tem música guardada 🤔 (o dono precisa rodar "
-                           f"`{PREFIX}read tudo`)")
+            await ctx.send(
+                "Ainda não tem música guardada 🤔 (o dono precisa rodar " f"`{PREFIX}read tudo`)"
+            )
             return
 
         titulo, artista, vezes = sorteada
@@ -1776,12 +2125,15 @@ class Musicas(commands.Cog):
         comando = f"{COMANDO_PLAY} {busca}"[:300]
 
         async with ctx.typing():
-            capa, genero = await self.deezer.info_seguro(f"{titulo} {artista}".strip(), titulo, artista)
+            capa, genero = await self.deezer.info_seguro(
+                f"{titulo} {artista}".strip(), titulo, artista
+            )
 
         embed = discord.Embed(
             title="🎲 Música sorteada",
             description=(
-                f"**{titulo}**" + (f"\n{artista}" if artista else "")
+                f"**{titulo}**"
+                + (f"\n{artista}" if artista else "")
                 + f"\n\nCopie e cole no chat pra tocar:\n```\n{comando}\n```"
             ),
             color=0x5865F2,
@@ -1809,7 +2161,9 @@ class Musicas(commands.Cog):
 
         pedidos = self.banco.pedidos_do_usuario(autor.id, desde)
         if not pedidos:
-            await ctx.send(f"**{autor.display_name}**, você não tem pedidos nos últimos 12 meses 🤔")
+            await ctx.send(
+                f"**{autor.display_name}**, você não tem pedidos nos últimos 12 meses 🤔"
+            )
             return
 
         por_mes, por_dia_semana = Counter(), Counter()
@@ -1855,7 +2209,9 @@ class Musicas(commands.Cog):
         if top_consultas:
             async with ctx.typing():
                 infos, achados = await asyncio.gather(
-                    asyncio.gather(*(self.deezer.info_seguro(exemplo[ch]) for ch, _ in top_consultas)),
+                    asyncio.gather(
+                        *(self.deezer.info_seguro(exemplo[ch]) for ch, _ in top_consultas)
+                    ),
                     asyncio.gather(*(self.links.titulo_seguro(exemplo[ch]) for ch, _ in top5)),
                 )
             for (_, q), (capa_i, genero_i) in zip(top_consultas, infos):
@@ -1870,19 +2226,27 @@ class Musicas(commands.Cog):
                 f"\n⚠️ {sem_texto} pedido(s) sem texto guardado — o dono precisa rodar "
                 f"`{PREFIX}read tudo` pra completar o top de músicas."
             )
-        embed = discord.Embed(title=f"🎁 Wrapped de {autor.display_name}", description=descricao, color=0xEB459E)
+        embed = discord.Embed(
+            title=f"🎁 Wrapped de {autor.display_name}", description=descricao, color=0xEB459E
+        )
         embed.set_author(name=autor.display_name, icon_url=autor.display_avatar.with_size(128).url)
         if capa:
             embed.set_thumbnail(url=capa)
         embed.add_field(name="🎧 Pedidos", value=f"**{len(pedidos)}**", inline=True)
         embed.add_field(name="📅 Dias com pedido", value=f"**{len(dias)}**", inline=True)
         if posicao:
-            embed.add_field(name="🏆 Posição", value=f"**#{posicao}** de {len(ranking)}", inline=True)
-        embed.add_field(name="🔥 Mês mais ativo", value=f"{MESES[m_top - 1]}/{a_top} ({n_top})", inline=True)
+            embed.add_field(
+                name="🏆 Posição", value=f"**#{posicao}** de {len(ranking)}", inline=True
+            )
+        embed.add_field(
+            name="🔥 Mês mais ativo", value=f"{MESES[m_top - 1]}/{a_top} ({n_top})", inline=True
+        )
         embed.add_field(name="🗓️ Dia favorito", value=DIAS_SEMANA[dia_top], inline=True)
         if generos:
             mais = generos.most_common(3)
-            valor = f"**{mais[0][0]}** ({mais[0][1]})" + "".join(f"\n{g} ({n})" for g, n in mais[1:])
+            valor = f"**{mais[0][0]}** ({mais[0][1]})" + "".join(
+                f"\n{g} ({n})" for g, n in mais[1:]
+            )
             embed.add_field(name="🎼 Gênero favorito", value=valor, inline=True)
         if consultas:
             top = [
@@ -1890,7 +2254,9 @@ class Musicas(commands.Cog):
                 for i, ((ch, q), achado) in enumerate(zip(top5, achados), start=1)
             ]
             embed.add_field(name="🎵 Mais pedidos", value="\n".join(top), inline=False)
-        embed.add_field(name="📈 Mês a mês", value="```\n" + "\n".join(linhas_grafico) + "\n```", inline=False)
+        embed.add_field(
+            name="📈 Mês a mês", value="```\n" + "\n".join(linhas_grafico) + "\n```", inline=False
+        )
         embed.set_footer(text=BOT_NAME)
         await ctx.send(embed=embed)
 
@@ -1918,8 +2284,10 @@ class Musicas(commands.Cog):
             tocadas = self.banco.historico_tocadas()
             pedidos = self.banco.historico_pedidos()
             if not tocadas and not pedidos:
-                await ctx.send("Ainda não tem nada guardado pra exportar 🤔 (o dono precisa rodar "
-                               f"`{PREFIX}read tudo`)")
+                await ctx.send(
+                    "Ainda não tem nada guardado pra exportar 🤔 (o dono precisa rodar "
+                    f"`{PREFIX}read tudo`)"
+                )
                 return
 
             musicas = self.banco.ranking_musicas()
@@ -1931,29 +2299,47 @@ class Musicas(commands.Cog):
                 return data_local(message_id).strftime("%d/%m/%Y %H:%M:%S")
 
             arquivos = [
-                discord.File(gerar_csv(
-                    ("posicao", "titulo", "artista", "vezes_tocada"),
-                    [(i, t, a, q) for i, (t, a, q) in enumerate(musicas, start=1)],
-                ), filename="ranking_musicas.csv"),
-                discord.File(gerar_csv(
-                    ("posicao", "artista", "musicas_diferentes", "vezes_tocadas"),
-                    [(i, a, n, q) for i, (a, n, q) in enumerate(artistas, start=1)],
-                ), filename="ranking_artistas.csv"),
-                discord.File(gerar_csv(
-                    ("posicao", "usuario_id", "nome", "pedidos"),
-                    [(i, uid, nomes.get(uid, ""), q) for i, (uid, q) in enumerate(usuarios, start=1)],
-                ), filename="ranking_usuarios.csv"),
-                discord.File(gerar_csv(
-                    ("data_hora", "titulo", "artista", "bot", "canal_id"),
-                    [(hora(mid), t, a, b or "", cid) for mid, t, a, b, cid in tocadas],
-                ), filename="historico_tocadas.csv"),
-                discord.File(gerar_csv(
-                    ("data_hora", "usuario_id", "nome", "pedido", "canal_id"),
-                    [
-                        (hora(mid), uid, nomes.get(uid, ""), consulta_do_pedido(c) or "", cid)
-                        for mid, uid, c, cid in pedidos
-                    ],
-                ), filename="historico_pedidos.csv"),
+                discord.File(
+                    gerar_csv(
+                        ("posicao", "titulo", "artista", "vezes_tocada"),
+                        [(i, t, a, q) for i, (t, a, q) in enumerate(musicas, start=1)],
+                    ),
+                    filename="ranking_musicas.csv",
+                ),
+                discord.File(
+                    gerar_csv(
+                        ("posicao", "artista", "musicas_diferentes", "vezes_tocadas"),
+                        [(i, a, n, q) for i, (a, n, q) in enumerate(artistas, start=1)],
+                    ),
+                    filename="ranking_artistas.csv",
+                ),
+                discord.File(
+                    gerar_csv(
+                        ("posicao", "usuario_id", "nome", "pedidos"),
+                        [
+                            (i, uid, nomes.get(uid, ""), q)
+                            for i, (uid, q) in enumerate(usuarios, start=1)
+                        ],
+                    ),
+                    filename="ranking_usuarios.csv",
+                ),
+                discord.File(
+                    gerar_csv(
+                        ("data_hora", "titulo", "artista", "bot", "canal_id"),
+                        [(hora(mid), t, a, b or "", cid) for mid, t, a, b, cid in tocadas],
+                    ),
+                    filename="historico_tocadas.csv",
+                ),
+                discord.File(
+                    gerar_csv(
+                        ("data_hora", "usuario_id", "nome", "pedido", "canal_id"),
+                        [
+                            (hora(mid), uid, nomes.get(uid, ""), consulta_do_pedido(c) or "", cid)
+                            for mid, uid, c, cid in pedidos
+                        ],
+                    ),
+                    filename="historico_pedidos.csv",
+                ),
             ]
 
         try:
@@ -1964,34 +2350,36 @@ class Musicas(commands.Cog):
                 files=arquivos,
             )
         except discord.HTTPException:
-            await ctx.send("❌ Não consegui enviar: os arquivos passaram do limite de tamanho do Discord.")
+            await ctx.send(
+                "❌ Não consegui enviar: os arquivos passaram do limite de tamanho do Discord."
+            )
 
 
 class PerfilView(discord.ui.View):
-    def __init__(self,paginas):
+    def __init__(self, paginas):
         super().__init__(timeout=180)
-        self.paginas,self.pagina,self.message=paginas,0,None
+        self.paginas, self.pagina, self.message = paginas, 0, None
         self.atualizar()
 
     def atualizar(self):
-        self.anterior.disabled=self.pagina==0
-        self.proxima.disabled=self.pagina==len(self.paginas)-1
+        self.anterior.disabled = self.pagina == 0
+        self.proxima.disabled = self.pagina == len(self.paginas) - 1
 
-    @discord.ui.button(label="◀",style=discord.ButtonStyle.secondary)
-    async def anterior(self,interaction:discord.Interaction,button:discord.ui.Button):
-        self.pagina=max(0,self.pagina-1)
+    @discord.ui.button(label="◀", style=discord.ButtonStyle.secondary)
+    async def anterior(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.pagina = max(0, self.pagina - 1)
         self.atualizar()
-        await interaction.response.edit_message(embed=self.paginas[self.pagina],view=self)
+        await interaction.response.edit_message(embed=self.paginas[self.pagina], view=self)
 
-    @discord.ui.button(label="▶",style=discord.ButtonStyle.secondary)
-    async def proxima(self,interaction:discord.Interaction,button:discord.ui.Button):
-        self.pagina=min(len(self.paginas)-1,self.pagina+1)
+    @discord.ui.button(label="▶", style=discord.ButtonStyle.secondary)
+    async def proxima(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.pagina = min(len(self.paginas) - 1, self.pagina + 1)
         self.atualizar()
-        await interaction.response.edit_message(embed=self.paginas[self.pagina],view=self)
+        await interaction.response.edit_message(embed=self.paginas[self.pagina], view=self)
 
     async def on_timeout(self):
         for button in self.children:
-            button.disabled=True
+            button.disabled = True
         if self.message:
             try:
                 await self.message.edit(view=self)
@@ -2000,155 +2388,201 @@ class PerfilView(discord.ui.View):
 
 
 class Atividade(commands.Cog):
-    def __init__(self,bot):
-        self.bot=bot
-        self.musicas=bot.get_cog("Musicas")
-        self.banco=self.musicas.banco
+    def __init__(self, bot):
+        self.bot = bot
+        self.musicas = bot.get_cog("Musicas")
+        self.banco = self.musicas.banco
 
-    async def cog_check(self,ctx):
+    async def cog_check(self, ctx):
         return await self.musicas.cog_check(ctx)
 
-    @commands.command(name="scan",hidden=True)
+    @commands.command(name="scan", hidden=True)
     @commands.guild_only()
     @so_memi()
-    async def scan(self,ctx):
+    async def scan(self, ctx):
         if self.musicas.lock.locked():
             await ctx.send("⏳ Já tem uma leitura em andamento. Aguarde terminar.")
             return
-        status=await ctx.send("🔎 Importando o histórico de todos os chats e threads, sem avisos...")
-        await self.musicas.sincronizar(completo=True,silencioso=True,status=status)
+        status = await ctx.send(
+            "🔎 Importando o histórico de todos os chats e threads, sem avisos..."
+        )
+        await self.musicas.sincronizar(completo=True, silencioso=True, status=status)
 
-    async def mostrar_ranking(self,ctx,titulo,linhas,unidade,levels=False):
-        itens=[f"<@{uid}> — "+(f"nível {nivel(n)} • " if levels else "")+f"{milhar(n)} {unidade}" for uid,n in linhas]
-        rodape=f"{len(linhas)} participantes • {milhar(sum(n for _,n in linhas))} {unidade}"
-        if self.banco.estado("importacao_concluida")!="1":
-            rodape+=" • histórico inicial em importação"
-        view=RankingView(ctx.author.id,titulo,itens,rodape)
-        view.message=await ctx.send(embed=view.montar_embed(),view=view,allowed_mentions=discord.AllowedMentions.none())
+    async def mostrar_ranking(self, ctx, titulo, linhas, unidade, levels=False):
+        itens = [
+            f"<@{uid}> — " + (f"nível {nivel(n)} • " if levels else "") + f"{milhar(n)} {unidade}"
+            for uid, n in linhas
+        ]
+        rodape = f"{len(linhas)} participantes • {milhar(sum(n for _,n in linhas))} {unidade}"
+        if self.banco.estado("importacao_concluida") != "1":
+            rodape += " • histórico inicial em importação"
+        view = RankingView(ctx.author.id, titulo, itens, rodape)
+        view.message = await ctx.send(
+            embed=view.montar_embed(), view=view, allowed_mentions=discord.AllowedMentions.none()
+        )
 
     @commands.command(name="tagarelas")
     @commands.guild_only()
-    async def tagarelas(self,ctx,*args):
-        filtros={"geral":None,"todos":None,"ios":False,"pessoas":False,"bot":True,"bots":True}
-        filtros.update({sem_acento(nome):False for nome in NOMES_RANKING_USUARIO})
-        periodo=""
-        tipos=[]
+    async def tagarelas(self, ctx, *args):
+        filtros = {
+            "geral": None,
+            "todos": None,
+            "ios": False,
+            "pessoas": False,
+            "bot": True,
+            "bots": True,
+        }
+        filtros.update({sem_acento(nome): False for nome in NOMES_RANKING_USUARIO})
+        periodo = ""
+        tipos = []
         for arg in args:
-            arg=sem_acento(arg)
-            if arg in ("mes","ano") and not periodo:
-                periodo=arg
+            arg = sem_acento(arg)
+            if arg in ("mes", "ano") and not periodo:
+                periodo = arg
             elif arg in filtros:
                 tipos.append(filtros[arg])
             else:
                 await ctx.send("Use mm!tagarelas [ios|bot] [mes|ano].")
                 return
-        if len(set(tipos))>1:
+        if len(set(tipos)) > 1:
             await ctx.send("Escolha ios, bot ou geral.")
             return
-        filtro=tipos[0] if tipos else None
-        desde,rotulo=intervalo(periodo)
-        linhas=self.musicas.ranking("mensagens",desde,filtro)
-        await self.mostrar_ranking(ctx,"💬 Quem mais mandou mensagem"+(f" — {rotulo}" if rotulo else ""),linhas,"mensagens")
+        filtro = tipos[0] if tipos else None
+        desde, rotulo = intervalo(periodo)
+        linhas = self.musicas.ranking("mensagens", desde, filtro)
+        await self.mostrar_ranking(
+            ctx,
+            "💬 Quem mais mandou mensagem" + (f" — {rotulo}" if rotulo else ""),
+            linhas,
+            "mensagens",
+        )
 
     @commands.command(name="levels")
     @commands.guild_only()
-    async def levels(self,ctx,*args):
+    async def levels(self, ctx, *args):
         if args:
             await ctx.send("mm!levels usa o total histórico, sem flags.")
             return
-        await self.mostrar_ranking(ctx,"🏆 Ranking de níveis",self.musicas.ranking("mensagens",eh_bot=False),"mensagens",True)
+        await self.mostrar_ranking(
+            ctx,
+            "🏆 Ranking de níveis",
+            self.musicas.ranking("mensagens", eh_bot=False),
+            "mensagens",
+            True,
+        )
 
     @commands.command(name="mudae")
     @commands.guild_only()
-    async def mudae(self,ctx,*args):
+    async def mudae(self, ctx, *args):
         if args:
             await ctx.send("mm!mudae usa o total histórico, sem flags.")
             return
-        await self.mostrar_ranking(ctx,"🎎 Ranking de roletadas",self.musicas.ranking("mudae",eh_bot=False),"roletadas")
+        await self.mostrar_ranking(
+            ctx, "🎎 Ranking de roletadas", self.musicas.ranking("mudae", eh_bot=False), "roletadas"
+        )
 
-    @commands.command(name="give",hidden=True)
+    @commands.command(name="give", hidden=True)
     @commands.guild_only()
     @so_memi()
-    async def give(self,ctx,tipo:str,pessoa:discord.Member,*,nome:str):
+    async def give(self, ctx, tipo: str, pessoa: discord.Member, *, nome: str):
         try:
-            novo=self.banco.conceder_manual(pessoa.id,tipo,nome,pessoa.bot)
+            novo = self.banco.conceder_manual(pessoa.id, tipo, nome, pessoa.bot)
         except ValueError as erro:
-            await ctx.send(str(erro)[:1900],allowed_mentions=discord.AllowedMentions.none())
+            await ctx.send(str(erro)[:1900], allowed_mentions=discord.AllowedMentions.none())
             return
         await ctx.send("✅ Item concedido." if novo else "Essa pessoa já possui esse item.")
 
-    async def mostrar_itens(self,ctx,pessoa,tipo):
-        pessoa=pessoa or ctx.author
-        itens=[]
-        for item,n in self.banco.itens(pessoa.id,tipo):
-            info=CATALOGO[item]
-            nome=info.get("nome_insignia",info["nome"]) if tipo=="insignia" else info["nome"]
-            itens.append((f"{info['emoji']} "+(f"x{n} " if n>1 else "") if tipo=="insignia" else "")+nome)
-        view=RankingView(ctx.author.id,f"{'Insígnias' if tipo=='insignia' else 'Títulos'} de {pessoa.display_name}",itens,f"{len(itens)} itens")
-        view.message=await ctx.send(embed=view.montar_embed(),view=view,allowed_mentions=discord.AllowedMentions.none())
+    async def mostrar_itens(self, ctx, pessoa, tipo):
+        pessoa = pessoa or ctx.author
+        itens = []
+        for item, n in self.banco.itens(pessoa.id, tipo):
+            info = CATALOGO[item]
+            nome = info.get("nome_insignia", info["nome"]) if tipo == "insignia" else info["nome"]
+            itens.append(
+                (f"{info['emoji']} " + (f"x{n} " if n > 1 else "") if tipo == "insignia" else "")
+                + nome
+            )
+        view = RankingView(
+            ctx.author.id,
+            f"{'Insígnias' if tipo=='insignia' else 'Títulos'} de {pessoa.display_name}",
+            itens,
+            f"{len(itens)} itens",
+        )
+        view.message = await ctx.send(
+            embed=view.montar_embed(), view=view, allowed_mentions=discord.AllowedMentions.none()
+        )
 
-    @commands.command(name="insignias",aliases=["insígnias"])
+    @commands.command(name="insignias", aliases=["insígnias"])
     @commands.guild_only()
-    async def insignias(self,ctx,pessoa:discord.Member=None):
-        await self.mostrar_itens(ctx,pessoa,"insignia")
+    async def insignias(self, ctx, pessoa: discord.Member = None):
+        await self.mostrar_itens(ctx, pessoa, "insignia")
 
-    @commands.command(name="titulos",aliases=["títulos"])
+    @commands.command(name="titulos", aliases=["títulos"])
     @commands.guild_only()
-    async def titulos(self,ctx,pessoa:discord.Member=None):
-        await self.mostrar_itens(ctx,pessoa,"titulo")
+    async def titulos(self, ctx, pessoa: discord.Member = None):
+        await self.mostrar_itens(ctx, pessoa, "titulo")
 
     @commands.command(name="frase")
     @commands.guild_only()
-    async def frase(self,ctx,*,texto:str=""):
-        if len(texto)>100:
+    async def frase(self, ctx, *, texto: str = ""):
+        if len(texto) > 100:
             await ctx.send("A frase pode ter no máximo 100 caracteres.")
             return
-        self.banco.salvar_perfil(ctx.author.id,frase=texto)
+        self.banco.salvar_perfil(ctx.author.id, frase=texto)
         await ctx.send("✅ Frase salva.")
 
     @commands.command(name="favorita")
     @commands.guild_only()
-    async def favorita(self,ctx,*,texto:str):
-        texto=texto.strip()
-        if not texto or len(texto)>200:
+    async def favorita(self, ctx, *, texto: str):
+        texto = texto.strip()
+        if not texto or len(texto) > 200:
             await ctx.send("Use o nome da música e do artista, com até 200 caracteres.")
             return
-        titulo,artista=dividir(texto,RE_TRACO)
+        titulo, artista = dividir(texto, RE_TRACO)
         async with ctx.typing():
-            capa,_=await self.musicas.deezer.info_seguro(texto,titulo,artista)
-        self.banco.salvar_perfil(ctx.author.id,favorita=texto,capa=capa)
-        await ctx.send("✅ Música favorita salva. Capa encontrada no Deezer." if capa else "✅ Música favorita salva. Não encontrei a capa no Deezer agora.")
+            capa, _ = await self.musicas.deezer.info_seguro(texto, titulo, artista)
+        self.banco.salvar_perfil(ctx.author.id, favorita=texto, capa=capa)
+        await ctx.send(
+            "✅ Música favorita salva. Capa encontrada no Deezer."
+            if capa
+            else "✅ Música favorita salva. Não encontrei a capa no Deezer agora."
+        )
 
-    @commands.command(name="titulo",aliases=["título"])
+    @commands.command(name="titulo", aliases=["título"])
     @commands.guild_only()
-    async def titulo(self,ctx,*,nome:str):
-        if self.banco.selecionar_titulo(ctx.author.id,nome):
+    async def titulo(self, ctx, *, nome: str):
+        if self.banco.selecionar_titulo(ctx.author.id, nome):
             await ctx.send("✅ Título favorito atualizado.")
         else:
             await ctx.send("Você não possui esse título. Veja os seus com mm!titulos.")
 
 
 class Ajuda(commands.Cog):
-    @commands.command(name="help",aliases=["ajuda","comandos"])
-    async def ajuda(self,ctx):
-        embed=discord.Embed(title=f"📖 Comandos do {BOT_NAME}",description=(
-            "`mm!tagarelas` (flags: ios, bot, mes, ano)\n"
-            "`mm!musicas` (flags: artista, ios, mes, ano; também semana)\n"
-            "`mm!musicas genero [NOME] [semana|mes|ano]`\n"
-            "`mm!mudae` — roletadas\n`mm!levels` — níveis\n"
-            "`mm!perfil [@pessoa]` — perfil em 3 páginas\n"
-            "`mm!aleatoria` — sorteia uma música\n"
-            "`mm!wrapped` — seu resumo dos últimos 12 meses\n"
-            "`mm!insignias [@pessoa]` — insígnias\n"
-            "`mm!titulos [@pessoa]` — títulos\n"
-            "`mm!frase TEXTO` — frase de até 100 caracteres\n"
-            "`mm!favorita MÚSICA - ARTISTA` — música favorita\n"
-            "`mm!titulo NOME` — escolhe um título que você possui"),color=0x5865F2)
+    @commands.command(name="help", aliases=["ajuda", "comandos"])
+    async def ajuda(self, ctx):
+        embed = discord.Embed(
+            title=f"📖 Comandos do {BOT_NAME}",
+            description=(
+                "`mm!tagarelas` (flags: ios, bot, mes, ano)\n"
+                "`mm!musicas` (flags: artista, ios, mes, ano; também semana)\n"
+                "`mm!musicas genero [NOME] [semana|mes|ano]`\n"
+                "`mm!mudae` — roletadas\n`mm!levels` — níveis\n"
+                "`mm!perfil [@pessoa]` — perfil em 3 páginas\n"
+                "`mm!aleatoria` — sorteia uma música\n"
+                "`mm!wrapped` — seu resumo dos últimos 12 meses\n"
+                "`mm!insignias [@pessoa]` — insígnias\n"
+                "`mm!titulos [@pessoa]` — títulos\n"
+                "`mm!frase TEXTO` — frase de até 100 caracteres\n"
+                "`mm!favorita MÚSICA - ARTISTA` — música favorita\n"
+                "`mm!titulo NOME` — escolhe um título que você possui"
+            ),
+            color=0x5865F2,
+        )
         embed.set_footer(text="Mês e ano atuais • horário de Brasília")
         await ctx.send(embed=embed)
 
-    def __init__(self,bot):
-        self.bot=bot
+    def __init__(self, bot):
+        self.bot = bot
 
 
 # Adicione novas funcionalidades aqui (cada uma como um Cog separado)
@@ -2177,12 +2611,16 @@ class MeMiBot(commands.Bot):
             await ctx.send("🔒 " + str(error), allowed_mentions=discord.AllowedMentions.none())
             return
         if isinstance(error, commands.MissingRequiredArgument):
-            await ctx.send(f"Faltou um argumento. Use mm!{ctx.command.qualified_name} {ctx.command.signature}")
+            await ctx.send(
+                f"Faltou um argumento. Use mm!{ctx.command.qualified_name} {ctx.command.signature}"
+            )
             return
         if isinstance(error, commands.BadArgument):
             await ctx.send(f"Não entendi esse argumento 🤔 Veja `{PREFIX}help`.")
             return
-        logging.error("Erro no comando %s", ctx.command, exc_info=(type(error), error, error.__traceback__))
+        logging.error(
+            "Erro no comando %s", ctx.command, exc_info=(type(error), error, error.__traceback__)
+        )
         await ctx.send("Não consegui concluir o comando. O erro ficou salvo no memi_bot.log.")
 
 
@@ -2194,20 +2632,31 @@ intents.message_content = True  # ative também no Developer Portal!
 def prefixo(bot, message):
     """Aceita o prefixo em qualquer combinação de maiúsculas/minúsculas (MM!, Mm!, mm!...)."""
     prefixos = commands.when_mentioned(bot, message)
-    inicio = (message.content or "")[:len(PREFIX)]
+    inicio = (message.content or "")[: len(PREFIX)]
     if inicio.lower() == PREFIX.lower():
         prefixos.append(inicio)  # devolve exatamente o que a pessoa digitou
     return prefixos
 
 
 # case_insensitive: também aceita o nome do comando em maiúsculas (mm!RANKING, mm!Perfil...)
-bot = MeMiBot(command_prefix=prefixo, case_insensitive=True, intents=intents, help_command=None, allowed_mentions=discord.AllowedMentions.none())
+bot = MeMiBot(
+    command_prefix=prefixo,
+    case_insensitive=True,
+    intents=intents,
+    help_command=None,
+    allowed_mentions=discord.AllowedMentions.none(),
+)
 
 if __name__ == "__main__":
-    log = RotatingFileHandler(Path(__file__).with_name("memi_bot.log"), maxBytes=2_000_000,
-                              backupCount=3, encoding="utf-8")
-    logging.basicConfig(level=logging.INFO, handlers=[log],
-                        format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    log = RotatingFileHandler(
+        Path(__file__).with_name("memi_bot.log"),
+        maxBytes=2_000_000,
+        backupCount=3,
+        encoding="utf-8",
+    )
+    logging.basicConfig(
+        level=logging.INFO, handlers=[log], format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+    )
     if not TOKEN or TOKEN == "COLE_SEU_TOKEN_AQUI":
         logging.error("Falta configurar token.txt na mesma pasta do bot.")
         raise SystemExit(
