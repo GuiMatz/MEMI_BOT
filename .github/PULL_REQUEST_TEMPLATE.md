@@ -4,7 +4,7 @@
 
 ## Como foi validada?
 
-- [ ] `python -m unittest -v test_memi_bot.py`
+- [ ] `python -m unittest discover -v -p "test_*.py"`
 
 ## Checklist
 
