@@ -178,8 +178,9 @@ permissão no servidor):
 - os emblemas das patentes: `assets/patentes/<id>.png`, se existir, ou um emblema desenhado pelo
   bot (escudo na cor da patente com o nível);
 - qualquer `assets/emojis/<chave>.png`, em que `<chave>` é um nome de `EMOJI` em `estilo.py`
-  (por exemplo `musica.png`, `mensagens.png`, `mudae.png`): ele substitui o emoji padrão em todas
-  as mensagens.
+  (por exemplo `musica.png`, `mensagens.png`, `mudae.png`): ele substitui o emoji padrão nas
+  mensagens. Rodapés e títulos de embed continuam com o emoji padrão, porque o Discord não
+  desenha emojis personalizados neles.
 
 Cada imagem só é reenviada quando o arquivo muda. Use PNG quadrado de até 256 KB (o limite do
 Discord). Se o envio falhar (rede, limite), o bot segue com os emojis padrão e registra o motivo

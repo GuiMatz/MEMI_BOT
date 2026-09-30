@@ -247,6 +247,19 @@ class ResumoTests(unittest.TestCase):
 PATENTE = {"nome": "Resenheiro", "cor": 0xCD7F32}
 
 
+class EmojiSimplesTests(unittest.TestCase):
+    def test_emoji_simples_usa_o_padrao_quando_ha_personalizado(self):
+        original = estilo.EMOJI["mudae"]
+        try:
+            self.assertEqual(estilo.emoji_simples("mudae"), "🎎")
+            estilo.EMOJI["mudae"] = "<:mm_e_mudae:1>"
+            self.assertEqual(estilo.emoji_simples("mudae"), "🎎")
+            estilo.EMOJI["mudae"] = "🎲"
+            self.assertEqual(estilo.emoji_simples("mudae"), "🎲")
+        finally:
+            estilo.EMOJI["mudae"] = original
+
+
 class NivelTests(unittest.TestCase):
     def test_com_imagem_o_embed_fica_enxuto(self):
         embed = estilo.embed_nivel(
@@ -261,6 +274,7 @@ class NivelTests(unittest.TestCase):
         self.assertEqual(embed.description, "**Fulano** subiu para o nível **32** · Resenheiro")
         self.assertEqual(len(embed.fields), 0)
         self.assertIsNone(embed.thumbnail.url)  # o avatar já está na imagem
+        self.assertIn("5/10 XP para o nível 33", embed.footer.text)  # progresso fica no rodapé
 
     def test_embed_de_level_up(self):
         embed = estilo.embed_nivel(

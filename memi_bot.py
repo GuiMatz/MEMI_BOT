@@ -49,6 +49,7 @@ from estilo import (
     embed_nivel,
     embed_ranking,
     embed_resumo,
+    emoji_simples,
     linha_faixa,
     milhar,
     plural,
@@ -1938,11 +1939,15 @@ class Musicas(commands.Cog):
                     before=discord.Object(id=corte),
                     oldest_first=True,
                 ):
+                    try:
+                        with con:
+                            if not msg.author.bot:
+                                mudae_tracker.registrar_nomes(con, msg.author)
+                            elif mudae_tracker.eh_do_mudae(msg):
+                                mudae_tracker.registrar(con, msg)
+                    except Exception:  # noqa: BLE001 - uma mensagem estranha não trava o resto
+                        logging.exception("Mensagem %s do Mudae ignorada na releitura.", msg.id)
                     with con:
-                        if not msg.author.bot:
-                            mudae_tracker.registrar_nomes(con, msg.author)
-                        elif mudae_tracker.eh_do_mudae(msg):
-                            mudae_tracker.registrar(con, msg)
                         total += 1
                         if total % 200 == 0:
                             self._marca_mudae(canal_id, msg.id)
@@ -2484,7 +2489,7 @@ class Musicas(commands.Cog):
         """Envia um ranking paginado; acrescenta o aviso de importação enquanto ela não terminar."""
         partes = list(rodape_partes)
         if self.banco.estado("importacao_concluida") != "1":
-            partes.append(f"{EMOJI['importando']} importando histórico")
+            partes.append(f"{emoji_simples('importando')} importando histórico")
         view = RankingView(
             titulo,
             itens,
@@ -2696,14 +2701,14 @@ class Musicas(commands.Cog):
         def pagina(n, *extras):
             e = discord.Embed(title=nome, color=cor)
             e.set_thumbnail(url=pessoa.display_avatar.with_size(128).url)
-            aviso = f"{EMOJI['importando']} importando histórico" if importando else ""
+            aviso = f"{emoji_simples('importando')} importando histórico" if importando else ""
             e.set_footer(text=rodape_do_bot(f"{n}/3", *extras, aviso))
             return e
 
         nivel_nome = f"Nível {lvl} · {patente['nome']}"
         nivel_valor = texto_progresso(lvl, avanco, meta, progressao.NIVEL_MAXIMO)
 
-        p1 = pagina(1, f"{EMOJI['genero']} {pendentes} sem gênero" if pendentes else "")
+        p1 = pagina(1, f"{emoji_simples('genero')} {pendentes} sem gênero" if pendentes else "")
         cabecalho = []
         if titulo:
             cabecalho.append(f"{tags.icone(titulo)} **{CATALOGO[titulo]['nome']}**")
@@ -3205,7 +3210,7 @@ class Atividade(commands.Cog):
     # ----- Mudae -------------------------------------------------------------
     def _aviso_mudae(self):
         if self.banco.estado("mudae_historico") != "1":
-            return f"{EMOJI['importando']} lendo o histórico do Mudae"
+            return f"{emoji_simples('importando')} lendo o histórico do Mudae"
         return ""
 
     def _topo(self, linhas, formatar, limite=3):
@@ -3216,7 +3221,12 @@ class Atividade(commands.Cog):
     def embed_panorama_mudae(self):
         con, nome = self.banco.con, self.musicas.nome_pessoa
         dados = mudae_tracker.panorama(con)
-        embed = discord.Embed(title=f"{EMOJI['mudae']} Mudae no servidor", color=COR_PADRAO)
+        elegiveis = self.musicas.elegiveis()
+
+        def presente(uid):
+            return uid is not None and (elegiveis is None or uid in elegiveis)
+
+        embed = discord.Embed(title=f"{emoji_simples('mudae')} Mudae no servidor", color=COR_PADRAO)
         if not dados["rolls"] and not dados["casamentos"]:
             embed.description = (
                 "Ainda não li nenhum roll do Mudae."
@@ -3241,7 +3251,7 @@ class Atividade(commands.Cog):
             embed,
             "💍 Quem mais casa",
             self._topo(
-                mudae_tracker.ranking(con, "casamentos"),
+                [x for x in mudae_tracker.ranking(con, "casamentos") if presente(x[0])],
                 lambda x: f"**{nome(x[0])}** · {plural(x[1], 'casamento', 'casamentos')}",
             ),
         )
@@ -3259,7 +3269,7 @@ class Atividade(commands.Cog):
         )
         if dados["maior_casamento"]:
             personagem, uid, kakera = dados["maior_casamento"]
-            quem = f" · por **{nome(uid)}**" if uid else ""
+            quem = f" · por **{nome(uid)}**" if presente(uid) else ""
             campo(
                 embed,
                 "💎 Casamento mais valioso",
@@ -3286,7 +3296,8 @@ class Atividade(commands.Cog):
         linhas = self.musicas.ranking("mudae", eh_bot=False)
         posicao = indice_do_usuario(linhas, pessoa.id)
         embed = discord.Embed(
-            title=f"{EMOJI['mudae']} {pessoa.display_name} no Mudae"[:256], color=COR_PADRAO
+            title=f"{emoji_simples('mudae')} {pessoa.display_name} no Mudae"[:256],
+            color=COR_PADRAO,
         )
         embed.set_thumbnail(url=pessoa.display_avatar.with_size(128).url)
         roletadas = self.banco.total_usuario(pessoa.id, "mudae")
@@ -3542,11 +3553,17 @@ class Atividade(commands.Cog):
                 alvo = int(achado[1] or achado[2])
             else:
                 resto.append(palavra)
-        pessoa = ctx.guild.get_member(alvo) if alvo else None
         manuais = ", ".join(CATALOGO[k]["nome"] for k in tags.manuais())
-        if pessoa is None or not resto:
+        if alvo is None or not resto:
             await responder(ctx, "aviso", f"Use mm!give @pessoa TAG. Tags manuais: {manuais}.")
             return
+        pessoa = ctx.guild.get_member(alvo)
+        if pessoa is None:  # sem a Server Members Intent o cache pode não ter a pessoa
+            try:
+                pessoa = await ctx.guild.fetch_member(alvo)
+            except discord.HTTPException:
+                await responder(ctx, "aviso", "Não achei essa pessoa no servidor.")
+                return
         try:
             novo = self.banco.conceder_manual(pessoa.id, " ".join(resto), pessoa.bot)
         except ValueError as erro:
@@ -3607,17 +3624,20 @@ class Atividade(commands.Cog):
         aliases=["t", "titulos", "títulos", "insignias", "insígnias", "i"],
     )
     @commands.guild_only()
-    async def tags(self, ctx, pessoa: typing.Optional[discord.Member] = None, *, modo: str = ""):
+    async def tags(self, ctx, *, alvo: str = ""):
         """Tags (títulos e insígnias) de alguém; `mm!tags todos` mostra todas e como ganhar."""
-        if sem_acento(modo) in ("todos", "todas", "help", "ajuda", "lista", "catalogo"):
+        if sem_acento(alvo) in ("todos", "todas", "help", "ajuda", "lista", "catalogo"):
             await self.enviar_catalogo(ctx)
             return
-        if modo:
-            await responder(ctx, "aviso", "Use mm!tags [@pessoa] ou mm!tags todos.")
-            return
+        pessoa = ctx.author
+        if alvo:
+            try:
+                pessoa = await commands.MemberConverter().convert(ctx, alvo)
+            except commands.BadArgument:
+                await responder(ctx, "aviso", "Use mm!tags [@pessoa] ou mm!tags todos.")
+                return
         await ctx.send(
-            embed=self.embed_tags(pessoa or ctx.author),
-            allowed_mentions=discord.AllowedMentions.none(),
+            embed=self.embed_tags(pessoa), allowed_mentions=discord.AllowedMentions.none()
         )
 
     @commands.command(name="th", hidden=True)

@@ -28,6 +28,8 @@ EMOJI = {
     "importando": "⏳",
     "posicao": "📍",
 }
+# Cópia dos emojis padrão: rodapés e títulos de embed não desenham emojis personalizados.
+EMOJI_PADRAO = dict(EMOJI)
 MEDALHAS = ("🥇", "🥈", "🥉")
 MESES_EXTENSO = (
     "janeiro",
@@ -52,6 +54,13 @@ LIMITE_DESCRICAO = 4096
 LIMITE_EMBED = 6000
 
 _COR_FEEDBACK = {"sucesso": COR_SUCESSO, "aviso": COR_AVISO, "erro": COR_ERRO}
+
+
+def emoji_simples(chave):
+    """Emoji para rodapés e títulos de embed, onde o Discord mostra '<:nome:id>' como texto:
+    o personalizado (assets/emojis) dá lugar ao padrão."""
+    atual = EMOJI.get(chave, "")
+    return EMOJI_PADRAO.get(chave, "") if atual.startswith("<") else atual
 
 
 def barra(atual, total, largura=10):
@@ -284,7 +293,15 @@ def embed_nivel(
         campo(embed, f"Nível {atual}", texto_progresso(atual, avanco, meta), False)
         if avatar_url:
             embed.set_thumbnail(url=avatar_url)
-    embed.set_footer(text=rodape("mm!levels"))
+        embed.set_footer(text=rodape("mm!levels"))
+    else:
+        # A imagem traz o nível e a patente; o quanto falta para o próximo vai no rodapé.
+        falta = (
+            "nível máximo"
+            if atual >= 100
+            else f"{milhar(avanco)}/{milhar(meta)} XP para o nível {atual + 1}"
+        )
+        embed.set_footer(text=rodape(falta, "mm!levels"))
     return embed
 
 

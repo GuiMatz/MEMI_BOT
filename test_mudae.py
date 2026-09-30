@@ -256,6 +256,15 @@ class AtribuicaoTests(unittest.TestCase):
         for nome in ("joao123", "JOÃO", "jão do clubex"):
             self.assertEqual(mudae.resolver_nome(self.b.con, nome), 40)
 
+    def test_nome_visto_nas_mensagens_vale_antes_do_apelido_antigo(self):
+        self.b.comando(sid(0), 10, nome="ana")
+        with self.b.con:
+            self.b.con.execute("INSERT INTO autores VALUES (20, 0, 'Ana')")
+        self.assertEqual(mudae.resolver_nome(self.b.con, "ana"), 10)
+        with self.b.con:
+            self.b.con.execute("INSERT INTO autores VALUES (30, 0, 'Bia')")
+        self.assertEqual(mudae.resolver_nome(self.b.con, "BIA"), 30)  # sem nome visto: apelido
+
     def test_kakera_coletado(self):
         self.b.comando(sid(0), 10, nome="memii")
         texto = "<:kakeraY:6090> **memii +401** ($k)"

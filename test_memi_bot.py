@@ -1252,7 +1252,7 @@ class RankingsPerfilTests(CogBase):
             self.cog.paginas_perfil(alvo)[1].description, "NÃO POSSUI TÍTULOS OU INSÍGNIAS"
         )
         ctx = NS(send=AsyncMock(), author=alvo)
-        await m.Atividade.tags.callback(social, ctx, None)
+        await m.Atividade.tags.callback(social, ctx)
         self.assertEqual(embed_enviado(ctx).description, "NÃO POSSUI TÍTULOS OU INSÍGNIAS")
         self.assertIn("mm!tags todos", embed_enviado(ctx).footer.text)
 
@@ -1269,7 +1269,7 @@ class RankingsPerfilTests(CogBase):
             "\n\n**Eventos e Comunidade**\n🫏 **Bongador** — Participar do BONGAS",
         )
         ctx = NS(send=AsyncMock(), author=alvo)
-        await m.Atividade.tags.callback(social, ctx, None)
+        await m.Atividade.tags.callback(social, ctx)
         embed = embed_enviado(ctx)
         self.assertEqual(embed.title, "🏷️ Tags de Apelido 10")
         self.assertEqual(embed.description, p2)
@@ -1279,7 +1279,7 @@ class RankingsPerfilTests(CogBase):
         alvo, social = pessoa(10), self.social()
         self.b.conceder_manual(10, "Papagaio da Call")
         for chamada in (
-            lambda ctx: m.Atividade.tags.callback(social, ctx, None, modo="todos"),
+            lambda ctx: m.Atividade.tags.callback(social, ctx, alvo="todos"),
             lambda ctx: m.Atividade.th.callback(social, ctx),
         ):
             ctx = NS(send=AsyncMock(), author=alvo)
@@ -1291,6 +1291,23 @@ class RankingsPerfilTests(CogBase):
                 "✅ 🦜 **Papagaio da Call** — Ser Papagaio · dada pelo dono", eventos.description
             )
             self.assertIn("▫️ 🎨 **Pintador**", eventos.description)
+
+    async def test_61e_tags_de_outra_pessoa_e_nome_invalido(self):
+        social, outra = self.social(), pessoa(20)
+        conversor = AsyncMock(return_value=outra)
+        with patch.object(m.commands.MemberConverter, "convert", conversor):
+            ctx = NS(send=AsyncMock(), author=pessoa(10))
+            await m.Atividade.tags.callback(social, ctx, alvo="<@20>")
+            self.assertEqual(embed_enviado(ctx).title, "🏷️ Tags de Apelido 20")
+            ctx = NS(send=AsyncMock(), author=pessoa(10))
+            await m.Atividade.tags.callback(social, ctx, alvo="TODOS")
+            self.assertIn("Todas as tags", ctx.send.call_args.kwargs["view"].paginas[0].title)
+        conversor.assert_awaited_once()  # "todos" não gasta uma busca de membro
+        falha = AsyncMock(side_effect=m.commands.MemberNotFound("x"))
+        with patch.object(m.commands.MemberConverter, "convert", falha):
+            ctx = NS(send=AsyncMock(), author=pessoa(10))
+            await m.Atividade.tags.callback(social, ctx, alvo="ninguém")
+        self.assertIn("mm!tags [@pessoa]", texto_enviado(ctx))
 
     async def test_61c_titulos_e_insignias_viraram_atalhos_de_tags(self):
         self.assertIn("titulos", m.Atividade.tags.aliases)
@@ -1316,6 +1333,21 @@ class RankingsPerfilTests(CogBase):
         self.assertIn("Tags manuais", texto_enviado(ctx))
         await m.Atividade.give.callback(social, ctx, texto="papagaio")
         self.assertIn("mm!give @pessoa TAG", texto_enviado(ctx))
+
+    async def test_61f_give_busca_quem_nao_esta_em_cache(self):
+        social, alvo = self.social(), pessoa(30)
+        buscar = AsyncMock(return_value=alvo)
+        ctx = NS(
+            send=AsyncMock(),
+            author=NS(id=m.MEMI_ID),
+            guild=NS(get_member=lambda uid: None, fetch_member=buscar),
+        )
+        await m.Atividade.give.callback(social, ctx, texto="<@30> papagaio da call")
+        buscar.assert_awaited_once_with(30)
+        self.assertEqual(dict(self.b.itens(30)), {"papagaio": 1})
+        buscar.side_effect = discord.NotFound(NS(status=404, reason="x"), "sem")
+        await m.Atividade.give.callback(social, ctx, texto="<@31> papagaio da call")
+        self.assertIn("Não achei essa pessoa", texto_enviado(ctx))
 
     async def test_62_ec_troca_a_cor_do_perfil(self):
         alvo, social = pessoa(10), self.social()
@@ -1516,7 +1548,7 @@ class VisualTests(CogBase):
         self.b.conceder_manual(10, "BONGAS")
         self.b.conceder_manual(10, "Bréca Games")
         ctx = NS(send=AsyncMock(), author=pessoa(10))
-        await m.Atividade.tags.callback(self.social(), ctx, None)
+        await m.Atividade.tags.callback(self.social(), ctx)
         self.assertNotIn("🥇", embed_enviado(ctx).description)
         self.b.selecionar_titulo(10, "bongador")
         self.b.salvar_perfil(10, frase="oi")
@@ -2278,6 +2310,27 @@ class AtalhosTests(CogBase):
         self.assertEqual(embed_enviado(ctx).title, "💬 Quem mais mandou mensagem")
 
 
+class EmojiRodapeTests(CogBase):
+    async def test_131_emoji_personalizado_nao_vaza_em_rodape_e_titulo(self):
+        originais = dict(estilo.EMOJI)
+        try:
+            estilo.EMOJI["importando"] = "<:mm_e_importando:1>"
+            estilo.EMOJI["mudae"] = "<:mm_e_mudae:2>"
+            ctx = NS(send=AsyncMock(), author=pessoa(10))
+            await m.Atividade.tagarelas.callback(m.Atividade(NS(get_cog=lambda _: self.cog)), ctx)
+            self.assertIn("⏳ importando histórico", embed_enviado(ctx).footer.text)
+            p1 = self.cog.paginas_perfil(pessoa(10))[0]
+            self.assertNotIn("<:", p1.footer.text)
+            ctx = NS(send=AsyncMock(), author=pessoa(10))
+            await m.Atividade.mudae.callback(m.Atividade(NS(get_cog=lambda _: self.cog)), ctx, None)
+            embed = embed_enviado(ctx)
+            self.assertEqual(embed.title, "🎎 Mudae no servidor")
+            self.assertNotIn("<:", embed.footer.text)
+        finally:
+            estilo.EMOJI.clear()
+            estilo.EMOJI.update(originais)
+
+
 class MudaeBotTests(CogBase):
     def social(self):
         return m.Atividade(NS(get_cog=lambda _: self.cog))
@@ -2344,6 +2397,19 @@ class MudaeBotTests(CogBase):
         await m.Atividade.mudae_personagem.callback(social, ctx, nome="Goku")
         self.assertIn("Ainda não vi", texto_enviado(ctx))
 
+    async def test_122b_panorama_esconde_quem_saiu(self):
+        self.jogar()
+        membros = [pessoa(10)]
+        self.cog.bot.intents = NS(members=True)
+        self.cog.guild = lambda: NS(
+            chunked=True, members=membros, get_member=lambda uid: membros[0] if uid == 10 else None
+        )
+        ctx = NS(send=AsyncMock(), author=pessoa(10))
+        await m.Atividade.mudae.callback(self.social(), ctx, None)
+        campos = {f.name: f.value for f in embed_enviado(ctx).fields}
+        self.assertNotIn("💍 Quem mais casa", campos)  # só 20 casou, e 20 saiu
+        self.assertNotIn("por ", campos.get("💎 Casamento mais valioso", ""))
+
     async def test_123_rankings_do_mudae_com_periodo_e_uso(self):
         self.jogar()
         social = self.social()
@@ -2400,6 +2466,40 @@ class MudaeBotTests(CogBase):
         self.assertEqual(self.b.estado("mudae_historico"), "1")
         self.assertTrue(await self.cog.ler_historico_mudae())  # de novo: nada duplica
         self.assertEqual(self.b.con.execute("SELECT COUNT(*) FROM mudae_rolls").fetchone()[0], 2)
+
+    async def test_125b_mensagem_que_quebra_nao_trava_o_historico(self):
+        eventos = [
+            msg(10, 1, content="$wa"),
+            roll_mudae(2, "Rem"),
+            msg(10, 3, content="$wa"),
+            roll_mudae(4, "Ram"),
+        ]
+        with self.b.con:
+            for e in eventos:
+                self.b.con.execute(
+                    "INSERT INTO mensagens VALUES (?,?,?,?)",
+                    (e.id, e.author.id, 1, int(e.author.bot)),
+                )
+                if not e.author.bot:
+                    self.b.con.execute("INSERT INTO mudae VALUES (?,?)", (e.id, 10))
+        canal = Canal(1, eventos)
+        self.cog.guild = lambda: NS(get_channel_or_thread=lambda cid: canal)
+        real = m.mudae_tracker.registrar
+
+        def quebra_no_rem(con, mensagem):
+            if mensagem.embeds and mensagem.embeds[0].author.name == "Rem":
+                raise OverflowError("número enorme")
+            return real(con, mensagem)
+
+        with (
+            patch.object(m.mudae_tracker, "registrar", quebra_no_rem),
+            self.assertLogs(level="ERROR"),
+        ):
+            self.assertTrue(await self.cog.ler_historico_mudae())
+        self.assertEqual(
+            self.b.con.execute("SELECT personagem FROM mudae_rolls").fetchall(), [("Ram",)]
+        )
+        self.assertEqual(self.b.estado("mudae_historico"), "1")
 
     async def test_126_falha_passageira_nao_marca_o_historico_como_lido(self):
         with self.b.con:

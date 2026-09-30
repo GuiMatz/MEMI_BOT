@@ -238,13 +238,14 @@ def resolver_nome(con, nome):
     if not alvo:
         return None
     ids = {r[0] for r in con.execute("SELECT usuario_id FROM mudae_nomes WHERE chave=?", (alvo,))}
-    # Apelidos guardados pelo contador de mensagens (casefold no Python: o lower() do SQLite
-    # só conhece ASCII).
-    ids |= {
-        uid
-        for uid, nome in con.execute("SELECT usuario_id, nome FROM autores WHERE eh_bot=0")
-        if _nome_pessoa(nome) == alvo
-    }
+    if not ids:
+        # Sem nome visto nas mensagens: tenta os apelidos guardados pelo contador de mensagens
+        # (casefold no Python: o lower() do SQLite só conhece ASCII).
+        ids = {
+            uid
+            for uid, nome in con.execute("SELECT usuario_id, nome FROM autores WHERE eh_bot=0")
+            if _nome_pessoa(nome) == alvo
+        }
     return ids.pop() if len(ids) == 1 else None
 
 
