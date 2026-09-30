@@ -30,7 +30,16 @@ CARTAO = {
     "pos_mudae": "",
     "cor": 0xFF8800,
 }
-NIVEL = {"nome": "Fulano", "marco": 3, "nivel": 32, "avanco": 61, "meta": 100, "cor": 0xF0704E}
+NIVEL = {
+    "nome": "Fulano",
+    "nivel": 30,
+    "atual": 32,
+    "avanco": 61,
+    "meta": 100,
+    "patente": "Veterano da Call",
+    "trocou": True,
+    "cor": 0xF0704E,
+}
 RESUMO = {
     "tipo": "mes",
     "titulo": "Dezembro",
@@ -147,13 +156,13 @@ class GeradoresTests(unittest.TestCase):
     def test_numeros_extremos_e_dados_faltando(self):
         for dados in (
             dict(CARTAO, nivel=1, avanco=0, meta=21, mensagens=0, pedidos=0, roletadas=0),
-            dict(CARTAO, nivel=1000, avanco=1, meta=1, mensagens=999_999_999),
+            dict(CARTAO, nivel=100, avanco=1, meta=1, mensagens=999_999_999),
             dict(CARTAO, meta=0),
             {"nome": "Só o nome"},
         ):
             self.assertEqual(abrir(imagens.gerar_cartao(dados, avatar())).size, (1200, 400))
         self.assertEqual(
-            abrir(imagens.gerar_nivel({"marco": 100, "nivel": 1000, "avanco": 1, "meta": 1})).size,
+            abrir(imagens.gerar_nivel({"nivel": 100, "avanco": 1, "meta": 1})).size,
             (1200, 400),
         )
         vazio = dict(WRAPPED, meses=[0] * 12, pedidos=0, dias=0, genero="", top=[])

@@ -424,7 +424,7 @@ def _nome(dados, tamanho_max, peso, corpo):
 
 
 def _prop(avanco, meta, nivel=1):
-    return 1.0 if nivel >= 1000 or meta <= 0 else avanco / meta
+    return 1.0 if nivel >= 100 or meta <= 0 else avanco / meta
 
 
 # ------------------------------------------------------------------ imagens
@@ -449,7 +449,7 @@ def gerar_cartao(dados, avatar_bytes=None):
     base = texto(base, (x - 3, 262), str(nivel), "forte", 62)
     lar = largura(str(nivel), "forte", 62)
     base = _barra(base, x + lar + 24, 240, 600 - lar - 24, 7, _prop(avanco, meta, nivel), acento)
-    legenda = "nível máximo" if nivel >= 1000 else f"{avanco}/{meta}"
+    legenda = "nível máximo" if nivel >= 100 else f"{avanco}/{meta} XP"
     base = texto(base, (x + 600, 226), legenda, "medio", 15, SLATE, "rs")
     colunas = (
         ("mensagens", dados.get("mensagens", 0), dados.get("pos_mensagens", "")),
@@ -466,20 +466,21 @@ def gerar_cartao(dados, avatar_bytes=None):
 
 
 def gerar_nivel(dados, avatar_bytes=None):
-    """Aviso de level up (1200x400). `dados`: nome, nome_alt, marco, nivel, avanco, meta, cor."""
+    """Aviso de level up (1200x400). `dados`: nome, nome_alt, nivel (o anunciado), atual, avanco,
+    meta, patente, cor_patente, trocou (nova patente), cor."""
     _exigir()
     acento = _rgb(dados.get("cor"))
-    marco = int(dados.get("marco", 1))
+    anunciado = int(dados.get("nivel", 1))
     nivel, avanco, meta = (
-        int(dados.get("nivel", 1)),
+        int(dados.get("atual", anunciado)),
         int(dados.get("avanco", 0)),
         int(dados.get("meta", 1)),
     )
     base = _fundo(1200, 400, acento)
     base = _disco(base, 240, 200, 168, avatar_bytes, acento)
     x = 500
-    base = _rotulo(base, (x, 84), "Novo marco", acento)
-    numero = str(marco * 10)
+    base = _rotulo(base, (x, 84), "Nova patente" if dados.get("trocou") else "Level up", acento)
+    numero = str(anunciado)
     base = texto(base, (x - 6, 246), numero, "forte", 176)
     lar = largura(numero, "forte", 176)
     base = texto_espacado(base, (x + lar + 22, 246), "NÍVEL", "negrito", 30, acento, 5)
@@ -487,7 +488,7 @@ def gerar_nivel(dados, avatar_bytes=None):
     base = texto(base, (x, 306), nome, "negrito", corpo)
     base = _barra(base, x, 326, 560, 7, _prop(avanco, meta, nivel), acento)
     legenda = (
-        "Nível máximo" if nivel >= 1000 else f"Nível {nivel}  ·  {avanco}/{meta} para o próximo"
+        "Nível máximo" if nivel >= 100 else f"Nível {nivel}  ·  {avanco}/{meta} XP para o próximo"
     )
     base = texto(base, (x, 364), legenda, "medio", 17, SLATE)
     return _png(_finalizar(_selo(base, acento)))
@@ -566,6 +567,48 @@ def gerar_resumo(dados, avatar_dj=None, avatar_tagarela=None, capa=None):
     else:
         base = texto(base, (910, 354), "Sem músicas", "negrito", 24)
     return _png(_finalizar(_selo(base, acento)))
+
+
+def gerar_emblema(patente, lado=128):
+    """Emblema quadrado (PNG com transparência) de uma patente, para virar emoji: escudo na cor da
+    patente com o nível mínimo dentro. Sem ruído aleatório: a mesma patente gera sempre os
+    mesmos bytes (o emoji só é reenviado quando o desenho muda)."""
+    _exigir()
+    cor = _rgb(patente.get("cor"))
+    escuro = tuple(int(c * 0.45) for c in cor)
+    claro = tuple(min(255, int(c + (255 - c) * 0.35)) for c in cor)
+    L = lado * 4
+    img = Image.new("RGBA", (L, L), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+
+    def escudo(margem):
+        m = L * margem
+        topo, base = m, L - m
+        return [
+            (L / 2, topo),
+            (L - m, topo + L * 0.14),
+            (L - m, L * 0.52),
+            (L / 2, base),
+            (m, L * 0.52),
+            (m, topo + L * 0.14),
+        ]
+
+    d.polygon(escudo(0.04), fill=_rgba(claro))
+    d.polygon(escudo(0.09), fill=_rgba(cor))
+    d.polygon(escudo(0.16), fill=_rgba(escuro))
+    numero = str(patente.get("minimo", ""))
+    corpo = 0.40 if len(numero) < 3 else 0.30
+    d.text(
+        (L / 2, L * 0.47),
+        numero,
+        font=fonte("forte", L * corpo / SS, numero),
+        fill=_rgba(BRANCO),
+        anchor="mm",
+    )
+    img = img.resize((lado, lado), Image.LANCZOS)
+    saida = io.BytesIO()
+    img.save(saida, "PNG", compress_level=6)
+    return saida.getvalue()
 
 
 def gerar_wrapped(dados, avatar_bytes=None):

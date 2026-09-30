@@ -244,27 +244,47 @@ class ResumoTests(unittest.TestCase):
                 self.assertLessEqual(len(campo.value), estilo.LIMITE_CAMPO)
 
 
+PATENTE = {"nome": "Resenheiro", "cor": 0xCD7F32}
+
+
 class NivelTests(unittest.TestCase):
     def test_com_imagem_o_embed_fica_enxuto(self):
         embed = estilo.embed_nivel(
-            "Fulano", 3, 32, 5, 10, "https://example.test/a.png", com_imagem=True
+            "Fulano",
+            32,
+            (32, 5, 10),
+            PATENTE,
+            avatar_url="https://example.test/a.png",
+            com_imagem=True,
         )
-        self.assertEqual(embed.title, "🎉 Nível 30!")
-        self.assertEqual(embed.description, "**Fulano** chegou ao nível **30**!")
+        self.assertEqual(embed.title, "⬆️ Nível 32")
+        self.assertEqual(embed.description, "**Fulano** subiu para o nível **32** · Resenheiro")
         self.assertEqual(len(embed.fields), 0)
         self.assertIsNone(embed.thumbnail.url)  # o avatar já está na imagem
 
     def test_embed_de_level_up(self):
-        embed = estilo.embed_nivel("Fulano", 3, 32, 5, 10, "https://example.test/a.png")
-        self.assertEqual(embed.title, "🎉 Nível 30!")
-        self.assertEqual(embed.description, "**Fulano** chegou ao nível **30**!")
+        embed = estilo.embed_nivel(
+            "Fulano", 32, (32, 5, 10), PATENTE, avatar_url="https://example.test/a.png"
+        )
         campo = embed.fields[0]
         self.assertEqual(campo.name, "Nível 32")
-        self.assertEqual(campo.value, "▰▰▰▰▰▱▱▱▱▱ 5/10")
+        self.assertEqual(campo.value, "▰▰▰▰▰▱▱▱▱▱ 5/10 XP")
         self.assertEqual(embed.thumbnail.url, "https://example.test/a.png")
 
+    def test_troca_de_patente_tem_destaque_e_cor_da_patente(self):
+        embed = estilo.embed_nivel(
+            "Fulano", 20, (20, 0, 820), PATENTE, trocou=True, icone="<:mm_x:1>"
+        )
+        self.assertEqual(embed.title, "🎖️ Nova patente: Resenheiro")
+        self.assertIn("agora é <:mm_x:1> **Resenheiro**", embed.description)
+        self.assertEqual(embed.color.value, 0xCD7F32)
+
+    def test_nivel_maximo(self):
+        embed = estilo.embed_nivel("Fulano", 100, (100, 1, 1), PATENTE)
+        self.assertIn("nível máximo", embed.fields[0].value)
+
     def test_sem_avatar_e_com_nome_enorme(self):
-        embed = estilo.embed_nivel("N" * 3000, 1, 10, 0, 10)
+        embed = estilo.embed_nivel("N" * 3000, 2, (2, 0, 60), PATENTE)
         self.assertIsNone(embed.thumbnail.url)
         self.assertLessEqual(len(embed), estilo.LIMITE_EMBED)
         self.assertLessEqual(len(embed.description), estilo.LIMITE_DESCRICAO)

@@ -229,19 +229,47 @@ def embed_resumo(tipo, periodo, dados, nome, com_imagem=False):
     return embed
 
 
-def embed_nivel(nome, marco, nivel, avanco, meta, avatar_url="", com_imagem=False):
-    """Aviso de que `nome` alcançou o marco (nível marco*10). Sem imagem, mostra o progresso e o
-    avatar; com imagem (que já traz os dois), o embed fica só com o texto."""
+def texto_progresso(nivel, avanco, meta, maximo=100):
+    """'▰▰▰▱▱ 120/380 XP' ou 'nível máximo'."""
+    if nivel >= maximo:
+        return f"{barra(1, 1)} nível máximo"
+    return f"{barra(avanco, meta)} {milhar(avanco)}/{milhar(meta)} XP"
+
+
+def embed_nivel(
+    nome,
+    nivel,
+    progresso,
+    patente,
+    *,
+    trocou=False,
+    icone="",
+    avatar_url="",
+    com_imagem=False,
+):
+    """Aviso de level up. `progresso` = (nível atual, avanço, meta); `patente` = dict com nome e
+    cor. Troca de patente ganha título e cor próprios. Sem imagem, mostra o progresso e o avatar;
+    com imagem (que já traz os dois), o embed fica só com o texto."""
+    marca = f"{icone} " if icone else ""
+    if trocou:
+        titulo = f"🎖️ Nova patente: {patente['nome']}"
+        texto = f"**{nome}** chegou ao nível **{nivel}** e agora é {marca}**{patente['nome']}**!"
+        cor = patente.get("cor") or COR_ANO
+    else:
+        titulo = f"⬆️ Nível {nivel}"
+        texto = f"**{nome}** subiu para o nível **{nivel}** · {marca}{patente['nome']}"
+        cor = COR_ANO
     embed = discord.Embed(
-        title=f"🎉 Nível {marco * 10}!",
-        description=cortar(f"**{nome}** chegou ao nível **{marco * 10}**!", LIMITE_DESCRICAO),
-        color=COR_ANO,
+        title=cortar(titulo, LIMITE_TITULO),
+        description=cortar(texto, LIMITE_DESCRICAO),
+        color=cor,
     )
+    atual, avanco, meta = progresso
     if not com_imagem:
-        campo(embed, f"Nível {nivel}", f"{barra(avanco, meta)} {avanco}/{meta}", False)
+        campo(embed, f"Nível {atual}", texto_progresso(atual, avanco, meta), False)
         if avatar_url:
             embed.set_thumbnail(url=avatar_url)
-    embed.set_footer(text=rodape("a cada 10 níveis"))
+    embed.set_footer(text=rodape("mm!levels"))
     return embed
 
 
