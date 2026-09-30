@@ -11,6 +11,7 @@ memi.db-*
 *.sqlite
 *.sqlite-*
 *.log
+*.log.*
 backups/
 
 # Python-generated files
