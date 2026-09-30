@@ -219,6 +219,20 @@ def embed_resumo(tipo, periodo, dados, nome, com_imagem=False):
             campo(embed, "💬 Tagarela do Mês", mensagens(tagarelas[0]), False)
         if musicas and not com_imagem:
             campo(embed, "🎵 Música do mês", linha_faixa(*musicas[0]), False)
+    jogo = dados.get("mudae") or {}
+    if jogo.get("rolls") or jogo.get("casamentos"):
+        # A imagem não traz o Mudae: o campo aparece com ou sem ela.
+        partes = [
+            f"{plural(jogo.get('rolls', 0), 'roll', 'rolls')}"
+            f" · {plural(jogo.get('casamentos', 0), 'casamento', 'casamentos')}"
+        ]
+        if jogo.get("roletador"):
+            uid, n = jogo["roletador"]
+            partes.append(f"🎲 **{nome(uid)}** · {plural(n, 'roletada', 'roletadas')}")
+        if jogo.get("personagem"):
+            personagem, n = jogo["personagem"]
+            partes.append(f"⭐ **{cortar(personagem, 80)}** saiu {n}x")
+        campo(embed, f"{EMOJI['mudae']} Mudae", "\n".join(partes), False)
     if not com_imagem:
         numeros = (
             f"{plural(dados.get('mensagens', 0), 'mensagem', 'mensagens')}"

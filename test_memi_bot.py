@@ -1163,7 +1163,7 @@ class RankingsPerfilTests(CogBase):
         for comando, alvo, args in (
             (m.Atividade.tagarelas, social, ()),
             (m.Atividade.levels, social, ()),
-            (m.Atividade.mudae, social, ()),
+            (m.Atividade.mudae_roletadores, social, ()),
             (m.Musicas.musicas, self.cog, ("ios",)),
         ):
             ctx = NS(send=AsyncMock(), author=pessoa(10))
@@ -1391,7 +1391,7 @@ class VisualTests(CogBase):
 
     async def test_66_ranking_vazio_mostra_mensagem(self):
         ctx = NS(send=AsyncMock(), author=pessoa(10))
-        await m.Atividade.mudae.callback(self.social(), ctx)
+        await m.Atividade.mudae_roletadores.callback(self.social(), ctx)
         self.assertIn("Ninguém no ranking ainda", embed_enviado(ctx).description)
 
     async def test_67_musicas_usa_subtitulo_do_periodo_e_linha_enxuta(self):
@@ -1414,8 +1414,8 @@ class VisualTests(CogBase):
             "🥇 **Apelido 10** · Nv. 1 · 🎖️ Figurante · 1 XP", embed_enviado(ctx).description
         )
         ctx = NS(send=AsyncMock(), author=pessoa(10))
-        await m.Atividade.mudae.callback(self.social(), ctx)
-        self.assertIn("🥇 **Apelido 10** · 1 roletadas", embed_enviado(ctx).description)
+        await m.Atividade.mudae_roletadores.callback(self.social(), ctx)
+        self.assertIn("🥇 **Apelido 10** · 1 roletada", embed_enviado(ctx).description)
 
     def todos_os_campos(self, paginas):
         return [(i, f.name, f.value) for i, p in enumerate(paginas) for f in p.fields]
@@ -2184,6 +2184,205 @@ class VisualTests(CogBase):
         ctx.send.reset_mock()
         await bot.on_command_error(ctx, m.commands.CommandNotFound("x"))
         ctx.send.assert_not_called()
+
+
+KAKERA = "<:kakera:469835869059153940>"
+
+
+def roll_mudae(seq, personagem="Rem", serie="Re:Zero", kakera="300", dono="", canal=1):
+    e = discord.Embed(
+        description=f"{serie}\nClaims: #1.234\n**{kakera}**{KAKERA}\n"
+        + ("" if dono else "Reaja com qualquer emoji para casar!")
+    )
+    e.set_author(name=personagem)
+    e.set_image(url="https://mudae.test/x.png")
+    if dono:
+        e.set_footer(text=f"Pertence a {dono}.")
+    evento = msg(m.mudae_tracker.MUDAE_ID, seq, content="", bot=True, channel=canal)
+    evento.author.name = "Mudae"
+    evento.embeds = [e]
+    evento.interaction_metadata = None
+    return evento
+
+
+def texto_mudae(seq, texto, canal=1):
+    evento = msg(m.mudae_tracker.MUDAE_ID, seq, content=texto, bot=True, channel=canal)
+    evento.author.name = "Mudae"
+    evento.interaction_metadata = None
+    return evento
+
+
+class MudaeBotTests(CogBase):
+    def social(self):
+        return m.Atividade(NS(get_cog=lambda _: self.cog))
+
+    def jogar(self):
+        """10 rola Rem e Emilia; 20 casa com a Rem do 10 (snipe) e coleta kakera."""
+        self.b.receber(msg(10, 1, content="$wa"))
+        self.b.receber(roll_mudae(2, "Rem", kakera="300"))
+        self.b.receber(msg(10, 3, content="$wa"))
+        self.b.receber(roll_mudae(4, "Emilia", kakera="90"))
+        self.b.receber(msg(20, 5, content="oi"))
+        self.b.receber(texto_mudae(6, "💖 **Apelido 20** e **Rem** agora são casados! 💖"))
+        self.b.receber(texto_mudae(7, "<:kakeraY:1> **u20 +401** ($k)"))
+
+    async def test_121_receber_liga_o_roll_a_quem_rolou_e_guarda_casamento_e_kakera(self):
+        self.jogar()
+        con = self.b.con
+        self.assertEqual(
+            con.execute(
+                "SELECT personagem, roletador_id FROM mudae_rolls ORDER BY message_id"
+            ).fetchall(),
+            [("Rem", 10), ("Emilia", 10)],
+        )
+        self.assertEqual(
+            con.execute("SELECT usuario_id, roletador_id, kakera FROM mudae_casamentos").fetchone(),
+            (20, 10, 300),
+        )
+        self.assertEqual(
+            con.execute("SELECT usuario_id, valor FROM mudae_kakera").fetchone(), (20, 401)
+        )
+        self.assertEqual(self.b.total_usuario(10, "mudae"), 2)  # contagem antiga continua
+
+    async def test_122_panorama_pessoa_e_personagem(self):
+        self.jogar()
+        social = self.social()
+        ctx = NS(send=AsyncMock(), author=pessoa(10))
+        await m.Atividade.mudae.callback(social, ctx, None)
+        embed = embed_enviado(ctx)
+        self.assertEqual(embed.title, "🎎 Mudae no servidor")
+        self.assertIn("**2** rolls · **1** casamentos · **401** kakera", embed.description)
+        campos = {f.name: f.value for f in embed.fields}
+        self.assertIn("**Apelido 10** · 2 roletadas", campos["🎲 Quem mais rola"])
+        self.assertIn("**Apelido 20** · 1 casamento", campos["💍 Quem mais casa"])
+        self.assertIn(
+            "**Rem** · 300 kakera · por **Apelido 20**", campos["💎 Casamento mais valioso"]
+        )
+        self.assertIn("lendo o histórico do Mudae", embed.footer.text)
+
+        ctx = NS(send=AsyncMock(), author=pessoa(10))
+        await m.Atividade.mudae.callback(social, ctx, pessoa(20))
+        campos = {f.name: f.value for f in embed_enviado(ctx).fields}
+        self.assertEqual(campos["💍 Casamentos"], "**1**")
+        self.assertEqual(campos["🥷 Snipes"], "deu **1** · sofreu **0**")
+
+        ctx = NS(send=AsyncMock(), author=pessoa(10))
+        await m.Atividade.mudae_personagem.callback(social, ctx, nome="rem")
+        embed = embed_enviado(ctx)
+        self.assertEqual(embed.title, "⭐ Rem")
+        campos = {f.name: f.value for f in embed.fields}
+        self.assertIn("**Apelido 10** · 1x", campos["🙋 Quem mais rolou"])
+        self.assertEqual(campos["💍 Casou com"], "**Apelido 20**")
+
+        ctx = NS(send=AsyncMock(), author=pessoa(10))
+        await m.Atividade.mudae_personagem.callback(social, ctx, nome="Goku")
+        self.assertIn("Ainda não vi", texto_enviado(ctx))
+
+    async def test_123_rankings_do_mudae_com_periodo_e_uso(self):
+        self.jogar()
+        social = self.social()
+        for comando, esperado in (
+            (m.Atividade.mudae_casamentos, "**Apelido 20** · 1 casamento"),
+            (m.Atividade.mudae_kakera, "**Apelido 20** · 401 kakera"),
+            (m.Atividade.mudae_snipers, "**Apelido 20** · 1 snipe"),
+            (m.Atividade.mudae_personagens, "**Rem** · Re:Zero · 1x"),
+            (m.Atividade.mudae_series, "**Re:Zero** · 2x"),
+        ):
+            ctx = NS(send=AsyncMock(), author=pessoa(10))
+            await comando.callback(social, ctx)
+            self.assertIn(esperado, embed_enviado(ctx).description)
+        ctx = NS(send=AsyncMock(), author=pessoa(10))
+        await m.Atividade.mudae_casamentos.callback(social, ctx, "semana")
+        self.assertIn("mm!mudae casamentos [mes|ano]", texto_enviado(ctx))
+        ctx = NS(send=AsyncMock(), author=pessoa(10))
+        await m.Atividade.mudae.callback(social, ctx, None, resto="qualquer")
+        self.assertIn("mm!mudae personagem NOME", texto_enviado(ctx))
+
+    async def test_124_edicao_do_roll_registra_o_dono(self):
+        self.b.receber(roll_mudae(2, "Rem"))
+        editado = roll_mudae(2, "Rem", dono="Apelido 20")
+        editado.guild = NS(id=self.cog.guild_id)
+        await self.cog.on_message_edit(None, editado)
+        self.assertEqual(
+            self.b.con.execute("SELECT dono FROM mudae_rolls").fetchone()[0], "Apelido 20"
+        )
+
+    async def test_125_historico_do_mudae_e_relido_uma_vez_e_retomado(self):
+        eventos = [
+            msg(10, 1, content="$wa"),
+            roll_mudae(2, "Rem"),
+            msg(10, 3, content="$wa"),
+            roll_mudae(4, "Ram"),
+        ]
+        with self.b.con:  # o que a versão anterior guardou: só comandos e contagem de mensagens
+            for e in eventos:
+                self.b.con.execute(
+                    "INSERT INTO mensagens VALUES (?,?,?,?)",
+                    (e.id, e.author.id, 1, int(e.author.bot)),
+                )
+                if not e.author.bot:
+                    self.b.con.execute("INSERT INTO mudae VALUES (?,?)", (e.id, 10))
+        canal = Canal(1, eventos)
+        self.cog.guild = lambda: NS(get_channel_or_thread=lambda cid: canal if cid == 1 else None)
+        self.assertTrue(await self.cog.ler_historico_mudae())
+        self.assertEqual(
+            self.b.con.execute(
+                "SELECT personagem, roletador_id FROM mudae_rolls ORDER BY message_id"
+            ).fetchall(),
+            [("Rem", 10), ("Ram", 10)],
+        )
+        self.assertEqual(self.b.estado("mudae_historico"), "1")
+        self.assertTrue(await self.cog.ler_historico_mudae())  # de novo: nada duplica
+        self.assertEqual(self.b.con.execute("SELECT COUNT(*) FROM mudae_rolls").fetchone()[0], 2)
+
+    async def test_126_falha_passageira_nao_marca_o_historico_como_lido(self):
+        with self.b.con:
+            self.b.con.execute(
+                "INSERT INTO mensagens VALUES (?,?,?,1)", (sid(), m.mudae_tracker.MUDAE_ID, 2)
+            )
+        canal = CanalComFalha(2, [])
+        self.cog.guild = lambda: NS(get_channel_or_thread=lambda cid: canal)
+        with self.assertLogs(level="WARNING"):
+            self.assertFalse(await self.cog.ler_historico_mudae())
+        self.assertEqual(self.b.estado("mudae_historico"), "")
+
+    async def test_127_resumo_do_periodo_inclui_o_mudae(self):
+        self.jogar()
+        dados = self.b.resumo_periodo("mes", "2026-09")
+        self.assertEqual(dados["mudae"]["rolls"], 2)
+        self.assertEqual(dados["mudae"]["casamentos"], 1)
+        self.assertEqual(dados["mudae"]["personagem"], ["Rem", 1])
+        self.assertEqual(dados["mudae"]["roletador"], [10, 2])
+        embed = estilo.embed_resumo("mes", "2026-09", dados, lambda uid: f"P{uid}")
+        campo = next(f for f in embed.fields if f.name == "🎎 Mudae")
+        self.assertIn("2 rolls · 1 casamento", campo.value)
+        self.assertIn("**P10**", campo.value)
+
+    async def test_128_mudaedump_exporta_e_diz_o_que_entendeu(self):
+        eventos = [
+            msg(10, 1, content="$wa"),
+            roll_mudae(2, "Rem"),
+            texto_mudae(3, "Wishlist salva."),
+            msg(10, 4, content="oi"),
+        ]
+        canal = Canal(1, eventos)
+
+        async def historico(limit=None, **kw):
+            for e in sorted(eventos, key=lambda x: x.id, reverse=True)[:limit]:
+                yield e
+
+        canal.history = historico
+        ctx = NS(
+            send=AsyncMock(), author=NS(id=m.MEMI_ID), channel=canal, typing=Typing, guild=NS()
+        )
+        await m.Atividade.mudaedump.callback(self.social(), ctx)
+        texto = ctx.send.call_args.args[0]
+        self.assertIn("3 mensagens do Mudae e comandos", texto)
+        self.assertIn("roll: 1", texto)
+        self.assertIn("não reconhecida: 1", texto)
+        dados = json.loads(ctx.send.call_args.kwargs["file"].fp.read())
+        self.assertEqual([x["entendido_como"] for x in dados], ["comando", "roll", None])
+        self.assertEqual(dados[1]["embeds"][0]["author"]["name"], "Rem")
 
 
 class ChangelogComandoTests(unittest.IsolatedAsyncioTestCase):
