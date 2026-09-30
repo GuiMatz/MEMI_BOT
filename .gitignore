@@ -1,0 +1,26 @@
+# Secrets and local configuration
+token.txt
+config.json
+.env
+
+# Runtime state and personal Discord data
+memi.db
+memi.db-*
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.log
+backups/
+
+# Python-generated files
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Local editor and OS files
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

@@ -1,0 +1,38 @@
+name: Relatar um bug
+description: Reporte um comportamento inesperado
+labels: ["bug"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Descrição
+      description: O que aconteceu?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Como reproduzir
+      description: Liste os passos para reproduzir o problema.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Resultado esperado
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Versão do Python
+      placeholder: "3.12"
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacidade
+      options:
+        - label: Removi tokens, IDs privados, nomes de usuários, mensagens, bancos e outros dados sensíveis.
+          required: true
