@@ -26,10 +26,18 @@ Obrigado por considerar uma contribuição ao MeMi BOT. Issues e pull requests s
 
 - Mantenha as mudanças focadas e compatíveis com Python 3.10 ou superior.
 - Adicione ou atualize testes para mudanças de comportamento.
+- O código segue o formato do `black` (configuração em `pyproject.toml`, linhas de 100
+  colunas). A integração contínua usa a versão fixada abaixo:
+
+  ```powershell
+  python -m pip install black==26.5.1
+  python -m black memi_bot.py memi_tray.py estilo.py imagens.py changelog.py test_memi_bot.py test_estilo.py test_imagens.py test_changelog.py
+  ```
+
 - Antes de abrir o pull request, execute:
 
   ```powershell
-  python -m unittest -v test_memi_bot.py
+  python -m unittest discover -v -p "test_*.py"
   ```
 
 - Não inclua arquivos gerados, dados de usuários ou configurações locais.

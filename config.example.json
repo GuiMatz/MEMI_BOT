@@ -1,6 +1,5 @@
 {
   "owner_id": 0,
   "notice_channel_id": 0,
-  "guild_id": 0,
-  "music_channel_ids": []
+  "guild_id": 0
 }
