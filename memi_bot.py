@@ -19,6 +19,7 @@ import io
 import re
 import sqlite3
 import time
+from time import monotonic
 from collections import Counter
 from contextlib import closing
 from datetime import datetime, timedelta, timezone
@@ -117,6 +118,7 @@ MANUTENCAO_INTERVALO = 15  # segundos entre passadas da manutenção (avisos, fe
 IMAGEM_TIMEOUT = 15  # segundos para gerar uma imagem (em thread) antes de desistir
 SYNC_PERIODICO = 900  # segundos entre leituras de segurança (eventos perdidos sem reconexão)
 SYNC_REPETIR_APOS_ERRO = 900  # segundos de espera antes de repetir uma leitura que falhou
+SYNC_PROGRESS_INTERVAL = 30  # evita limitar a API ao editar a mensagem de progresso
 PORTA_UNICA = 47653  # impede abrir o bot duas vezes (senão ele responderia em dobro)
 # --------------------------------------------------------------------------
 
@@ -2099,14 +2101,18 @@ class Musicas(commands.Cog):
                         elegiveis=elegiveis,
                     )
                     total += 1
-                    if status and time.monotonic() - ultima_edicao >= 5:
-                        ultima_edicao = time.monotonic()
+                    if status and monotonic() - ultima_edicao >= SYNC_PROGRESS_INTERVAL:
                         try:
                             await status.edit(
                                 content=f"📖 Lendo {len(canais)} chats e threads • {milhar(total)} mensagens verificadas..."
                             )
-                        except discord.HTTPException:
-                            pass
+                        except discord.HTTPException as exc:
+                            logging.warning(
+                                "Não foi possível atualizar o progresso da leitura: %s", exc
+                            )
+                        finally:
+                            # Conta o intervalo depois da resposta do Discord, inclusive após um 429.
+                            ultima_edicao = monotonic()
                     await proxima(canal, it)
                     if total % 200 == 0:
                         await asyncio.sleep(0)
@@ -3213,269 +3219,98 @@ class Atividade(commands.Cog):
             return f"{emoji_simples('importando')} lendo o histórico do Mudae"
         return ""
 
-    def _topo(self, linhas, formatar, limite=3):
-        return "\n".join(
-            f"{MEDALHAS[i] if i < 3 else '·'} {formatar(x)}" for i, x in enumerate(linhas[:limite])
+    def _topo(self, linhas, formatar, limite=5):
+        return (
+            "\n".join(
+                f"{MEDALHAS[i] if i < 3 else '·'} {formatar(x)}"
+                for i, x in enumerate(linhas[:limite])
+            )
+            or "Ainda não há rolls registrados."
         )
 
     def embed_panorama_mudae(self):
-        con, nome = self.banco.con, self.musicas.nome_pessoa
-        dados = mudae_tracker.panorama(con)
+        nome = self.musicas.nome_pessoa
         elegiveis = self.musicas.elegiveis()
 
-        def presente(uid):
-            return uid is not None and (elegiveis is None or uid in elegiveis)
+        def ranking(tipo, limite=None):
+            linhas = mudae_tracker.ranking(self.banco.con, tipo, limite=limite)
+            if tipo == "ios" and elegiveis is not None:
+                linhas = [x for x in linhas if x[0] in elegiveis]
+            return linhas
 
-        embed = discord.Embed(title=f"{emoji_simples('mudae')} Mudae no servidor", color=COR_PADRAO)
-        if not dados["rolls"] and not dados["casamentos"]:
-            embed.description = (
-                "Ainda não li nenhum roll do Mudae."
-                if not self._aviso_mudae()
-                else "Estou lendo o histórico do Mudae. Volte daqui a pouco."
-            )
-        else:
-            embed.description = (
-                f"**{milhar(dados['rolls'])}** rolls · **{milhar(dados['casamentos'])}** casamentos"
-                f" · **{milhar(dados['kakera'])}** kakera coletados\n"
-                f"{dados['taxa']}% dos personagens livres foram casados"
-            )
+        embed = discord.Embed(title=f"{emoji_simples('mudae')} Rankings do Mudae", color=COR_PADRAO)
+        embed.description = "Top 5 dos rolls registrados após comandos do Mudae."
         campo(
             embed,
-            "🎲 Quem mais rola",
-            self._topo(
-                self.musicas.ranking("mudae", eh_bot=False),
-                lambda x: f"**{nome(x[0])}** · {plural(x[1], 'roletada', 'roletadas')}",
-            ),
+            "📱 IOS · usuários",
+            self._topo(ranking("ios", 5), lambda x: f"**{nome(x[0])}** · {x[1]} rolls"),
+            False,
         )
         campo(
             embed,
-            "💍 Quem mais casa",
-            self._topo(
-                [x for x in mudae_tracker.ranking(con, "casamentos") if presente(x[0])],
-                lambda x: f"**{nome(x[0])}** · {plural(x[1], 'casamento', 'casamentos')}",
-            ),
-        )
-        campo(
-            embed,
-            "⭐ Mais roletados",
-            self._topo(dados["personagens"], lambda x: f"**{x[0][:40]}** · {x[1]}x", 5),
+            "⭐ Personagens",
+            self._topo(ranking("personagens", 5), lambda x: f"**{x[0][:50]}** · {x[2]}x"),
             False,
         )
         campo(
             embed,
             "📚 Séries",
-            self._topo(dados["series"], lambda x: f"**{x[0][:40]}** · {x[1]}x"),
+            self._topo(ranking("series", 5), lambda x: f"**{x[0][:50]}** · {x[1]}x"),
             False,
         )
-        if dados["maior_casamento"]:
-            personagem, uid, kakera = dados["maior_casamento"]
-            quem = f" · por **{nome(uid)}**" if presente(uid) else ""
-            campo(
-                embed,
-                "💎 Casamento mais valioso",
-                f"**{personagem}** · {milhar(kakera)} kakera{quem}",
-            )
-        if dados["escapou"]:
-            personagem, kakera = dados["escapou"]
-            campo(embed, "🏃 Ninguém casou", f"**{personagem}** · {milhar(kakera)} kakera")
-        if any(dados["horas"]):
-            hora = max(range(24), key=lambda h: dados["horas"][h])
-            campo(
-                embed,
-                "🕐 Horário nobre",
-                f"**{hora}h** · {plural(dados['horas'][hora], 'roll', 'rolls')}",
-            )
         embed.set_footer(
-            text=rodape_do_bot("mm!mudae @pessoa", "mm!mudae personagem NOME", self._aviso_mudae())
-        )
-        return embed
-
-    def embed_pessoa_mudae(self, pessoa):
-        con = self.banco.con
-        dados = mudae_tracker.perfil(con, pessoa.id)
-        linhas = self.musicas.ranking("mudae", eh_bot=False)
-        posicao = indice_do_usuario(linhas, pessoa.id)
-        embed = discord.Embed(
-            title=f"{emoji_simples('mudae')} {pessoa.display_name} no Mudae"[:256],
-            color=COR_PADRAO,
-        )
-        embed.set_thumbnail(url=pessoa.display_avatar.with_size(128).url)
-        roletadas = self.banco.total_usuario(pessoa.id, "mudae")
-        campo(
-            embed,
-            "🎲 Roletadas",
-            f"**{milhar(roletadas)}**"
-            + (f"\n{posicao_texto(posicao + 1, len(linhas))}" if posicao is not None else ""),
-        )
-        campo(embed, "💍 Casamentos", f"**{milhar(dados['casamentos'])}**")
-        campo(embed, "💎 Kakera coletado", f"**{milhar(dados['kakera'])}**")
-        if dados["rolls"]:
-            campo(
-                embed,
-                "🎯 Aproveitamento",
-                f"casou com **{dados['aproveitamento']}%** dos próprios rolls"
-                f" ({milhar(dados['rolls'])} rolls lidos)",
-                False,
+            text=rodape_do_bot(
+                "mm!mudae ios", "mm!mudae personagens", "mm!mudae series", self._aviso_mudae()
             )
-        if dados["favorito"]:
-            nome_p, vezes = dados["favorito"]
-            campo(embed, "⭐ Mais saiu para você", f"**{nome_p}** · {vezes}x")
-        if dados["maior_casamento"]:
-            nome_p, kakera = dados["maior_casamento"]
-            campo(embed, "👑 Maior casamento", f"**{nome_p}** · {milhar(kakera)} kakera")
-        if dados["snipes"] or dados["sofridos"]:
-            campo(
-                embed,
-                "🥷 Snipes",
-                f"deu **{dados['snipes']}** · sofreu **{dados['sofridos']}**",
-            )
-        if any(dados["horas"]):
-            hora = max(range(24), key=lambda h: dados["horas"][h])
-            campo(embed, "🕐 Horário favorito", f"**{hora}h**")
-        embed.set_footer(text=rodape_do_bot("mm!mudae", self._aviso_mudae()))
+        )
         return embed
 
     @commands.group(
         name="mudae", aliases=["md"], invoke_without_command=True, case_insensitive=True
     )
     @commands.guild_only()
-    async def mudae(self, ctx, pessoa: typing.Optional[discord.Member] = None, *, resto: str = ""):
-        """Mudae tracker: panorama do servidor, ou os números de alguém."""
-        if resto:
-            await responder(
-                ctx,
-                "aviso",
-                "Use mm!mudae [@pessoa], mm!mudae personagem NOME ou mm!mudae "
-                "roletadores|casamentos|kakera|personagens|series|snipers|azarados [mes|ano].",
-            )
-            return
-        embed = self.embed_pessoa_mudae(pessoa) if pessoa else self.embed_panorama_mudae()
+    async def mudae(self, ctx):
+        """Resumo top 5 dos usuários IOS, personagens e séries do Mudae."""
+        embed = self.embed_panorama_mudae()
         await ctx.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
-    async def _ranking_mudae(self, ctx, tipo, args):
-        periodos = [sem_acento(x) for x in args]
-        if any(x not in ("mes", "ano") for x in periodos) or len(periodos) > 1:
-            await responder(ctx, "aviso", f"Use mm!mudae {tipo} [mes|ano].")
-            return
-        desde, rotulo = intervalo(periodos[0] if periodos else "")
-        con, nome = self.banco.con, self.musicas.nome_pessoa
-        elegiveis = self.musicas.elegiveis()
-        meu_indice = None
-        if tipo == "roletadores":
-            linhas = self.musicas.ranking("mudae", desde, False)
-            itens = [f"**{nome(u)}** · {plural(n, 'roletada', 'roletadas')}" for u, n in linhas]
-            titulo = "🎲 Quem mais rola"
-        elif tipo in ("personagens", "series"):
-            linhas = mudae_tracker.ranking(con, tipo, desde)
-            if tipo == "personagens":
-                itens = [
-                    f"**{n[:60]}**" + (f" · {s[:40]}" if s else "") + f" · {q}x"
-                    for n, s, q in linhas
-                ]
-                titulo = "⭐ Personagens mais roletados"
-            else:
-                itens = [f"**{n[:60]}** · {q}x" for n, q in linhas]
-                titulo = "📚 Séries mais roletadas"
-        else:
-            linhas = [
-                (u, n)
-                for u, n in mudae_tracker.ranking(con, tipo, desde)
-                if elegiveis is None or u in elegiveis
+    async def _ranking_mudae(self, ctx, tipo):
+        linhas = mudae_tracker.ranking(self.banco.con, tipo)
+        titulo, itens = "", []
+        if tipo == "ios":
+            elegiveis = self.musicas.elegiveis()
+            if elegiveis is not None:
+                linhas = [x for x in linhas if x[0] in elegiveis]
+            titulo = "📱 Ranking IOS · usuários"
+            itens = [
+                f"**{self.musicas.nome_pessoa(uid)}** · {plural(n, 'roll', 'rolls')}"
+                for uid, n in linhas
             ]
-            unidade, titulo = {
-                "casamentos": (("casamento", "casamentos"), "💍 Quem mais casa"),
-                "kakera": (("kakera", "kakera"), "💎 Quem mais coleta kakera"),
-                "snipers": (("snipe", "snipes"), "🥷 Quem mais rouba personagem"),
-                "azarados": (("roll sem casar", "rolls sem casar"), "🍀 Azarados"),
-            }[tipo]
-            itens = [f"**{nome(u)}** · {plural(n, *unidade)}" for u, n in linhas]
-        if tipo not in ("personagens", "series"):
-            meu_indice = indice_do_usuario(linhas, ctx.author.id)
-        aviso = self._aviso_mudae()
+        elif tipo == "personagens":
+            titulo = "⭐ Personagens mais roletados"
+            itens = [f"**{nome[:60]}** · {quantidade}x" for nome, _, quantidade in linhas]
+        else:
+            titulo = "📚 Séries mais roletadas"
+            itens = [f"**{nome[:60]}** · {quantidade}x" for nome, quantidade in linhas]
         await self.musicas.enviar_ranking(
             ctx,
             titulo,
             itens,
-            rodape_partes=(f"{len(linhas)} no ranking", aviso),
-            subtitulo=rotulo,
-            meu_indice=meu_indice,
+            rodape_partes=(f"{len(linhas)} no ranking", self._aviso_mudae()),
+            meu_indice=indice_do_usuario(linhas, ctx.author.id) if tipo == "ios" else None,
         )
 
-    @mudae.command(name="roletadores", aliases=["rolls", "roletadas", "ranking"])
-    async def mudae_roletadores(self, ctx, *args):
-        await self._ranking_mudae(ctx, "roletadores", args)
-
-    @mudae.command(name="casamentos", aliases=["casados", "claims"])
-    async def mudae_casamentos(self, ctx, *args):
-        await self._ranking_mudae(ctx, "casamentos", args)
-
-    @mudae.command(name="kakera", aliases=["kk"])
-    async def mudae_kakera(self, ctx, *args):
-        await self._ranking_mudae(ctx, "kakera", args)
+    @mudae.command(name="ios", aliases=["usuarios", "usuários"])
+    async def mudae_ios(self, ctx):
+        await self._ranking_mudae(ctx, "ios")
 
     @mudae.command(name="personagens", aliases=["chars", "waifus"])
-    async def mudae_personagens(self, ctx, *args):
-        await self._ranking_mudae(ctx, "personagens", args)
+    async def mudae_personagens(self, ctx):
+        await self._ranking_mudae(ctx, "personagens")
 
     @mudae.command(name="series", aliases=["séries"])
-    async def mudae_series(self, ctx, *args):
-        await self._ranking_mudae(ctx, "series", args)
-
-    @mudae.command(name="snipers", aliases=["snipes"])
-    async def mudae_snipers(self, ctx, *args):
-        await self._ranking_mudae(ctx, "snipers", args)
-
-    @mudae.command(name="azarados", aliases=["azar"])
-    async def mudae_azarados(self, ctx, *args):
-        await self._ranking_mudae(ctx, "azarados", args)
-
-    @mudae.command(name="personagem", aliases=["char", "p"])
-    async def mudae_personagem(self, ctx, *, nome: str = ""):
-        info = mudae_tracker.personagem(self.banco.con, nome)
-        if info is None:
-            await responder(
-                ctx,
-                "aviso",
-                (
-                    "Ainda não vi esse personagem num roll."
-                    if nome
-                    else "Use mm!mudae personagem NOME."
-                ),
-            )
-            return
-        quem = self.musicas.nome_pessoa
-        embed = discord.Embed(title=f"⭐ {info['nome']}"[:256], color=COR_PADRAO)
-        if info["serie"]:
-            embed.description = f"*{discord.utils.escape_markdown(info['serie'])}*"
-        campo(embed, "🎲 Saiu", f"**{info['vezes']}x**")
-        if info["maior_kakera"]:
-            campo(embed, "💎 Maior valor", f"**{milhar(info['maior_kakera'])}** kakera")
-        if info["claims"]:
-            campo(embed, "📈 Rank de claims", f"#{milhar(info['claims'])}")
-        campo(
-            embed,
-            "🙋 Quem mais rolou",
-            self._topo(info["roletadores"], lambda x: f"**{quem(x[0])}** · {x[1]}x"),
-            False,
-        )
-        casamentos = [
-            f"**{quem(uid) if uid else discord.utils.escape_markdown(nome_txt)}**"
-            for uid, nome_txt in info["casamentos"]
-        ]
-        campo(
-            embed,
-            "💍 Casou com",
-            (
-                juntar_ate(casamentos, LIMITE_CAMPO, " · ", " · +{n}")
-                if casamentos
-                else "ninguém ainda"
-            ),
-            False,
-        )
-        embed.set_footer(
-            text=rodape_do_bot(f"primeira vez: {data_local(info['primeira']).strftime('%d/%m/%Y')}")
-        )
-        await ctx.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+    async def mudae_series(self, ctx):
+        await self._ranking_mudae(ctx, "series")
 
     @commands.command(name="mudaedump", hidden=True)
     @commands.guild_only()
@@ -3542,7 +3377,7 @@ class Atividade(commands.Cog):
     @commands.guild_only()
     @so_memi()
     async def give(self, ctx, *, texto: str = ""):
-        """mm!give @pessoa TAG (o formato antigo mm!give titulo @pessoa TAG também vale)."""
+        """mm!give @pessoa TAG[, TAG...] (também aceita o formato antigo com titulo)."""
         palavras = texto.split()
         if palavras and sem_acento(palavras[0]) in ("titulo", "insignia", "tag"):
             palavras = palavras[1:]
@@ -3564,17 +3399,49 @@ class Atividade(commands.Cog):
             except discord.HTTPException:
                 await responder(ctx, "aviso", "Não achei essa pessoa no servidor.")
                 return
+        identificadores = []
+        manual = set(tags.manuais())
+        erro_tags = "Tag inexistente ou automática. Tags manuais: " + ", ".join(
+            CATALOGO[k]["nome"] for k in tags.manuais()
+        )
+        for parte in " ".join(resto).replace(";", ",").split(","):
+            tokens = parte.split()
+            while tokens:
+                encontrado = None
+                tamanho = len(tokens)
+                while tamanho:
+                    candidato = tags.buscar(" ".join(tokens[:tamanho]))
+                    if candidato is not None:
+                        if candidato not in manual:
+                            await responder(ctx, "erro", erro_tags)
+                            return
+                        encontrado = candidato, tamanho
+                        break
+                    tamanho -= 1
+                if encontrado is None:
+                    await responder(ctx, "erro", erro_tags)
+                    return
+                ident, tamanho = encontrado
+                identificadores.append(ident)
+                tokens = tokens[tamanho:]
         try:
-            novo = self.banco.conceder_manual(pessoa.id, " ".join(resto), pessoa.bot)
+            resultados = [
+                (ident, self.banco.conceder_manual(pessoa.id, CATALOGO[ident]["nome"], pessoa.bot))
+                for ident in identificadores
+            ]
         except ValueError as erro:
             await responder(ctx, "erro", str(erro)[:1900])
             return
-        rotulo = tags.rotulo(tags.buscar(" ".join(resto)))
         nome = discord.utils.escape_markdown(pessoa.display_name)
-        if novo:
-            await responder(ctx, "sucesso", f"{rotulo} concedida a **{nome}**.")
+        concedidas = [tags.rotulo(ident) for ident, novo in resultados if novo]
+        existentes = [tags.rotulo(ident) for ident, novo in resultados if not novo]
+        if concedidas:
+            mensagem = f"Tags concedidas a **{nome}**: {', '.join(concedidas)}."
+            if existentes:
+                mensagem += f" Já possuía: {', '.join(existentes)}."
+            await responder(ctx, "sucesso", mensagem)
         else:
-            await responder(ctx, "aviso", f"**{nome}** já possui {rotulo}.")
+            await responder(ctx, "aviso", f"**{nome}** já possui {', '.join(existentes)}.")
 
     def embed_tags(self, pessoa):
         posses = self.banco.tags_usuario(pessoa.id)
@@ -3777,12 +3644,10 @@ AJUDA = [
     (
         "🎎 Mudae",
         [
-            ("mm!mudae [@pessoa]", "panorama do servidor ou os números de alguém"),
-            ("mm!mudae personagem NOME", "quem rolou, quem casou e quanto vale"),
-            (
-                "mm!mudae roletadores",
-                "também casamentos, kakera, personagens, series, snipers, azarados · mes, ano",
-            ),
+            ("mm!mudae", "resumo top 5: usuários IOS, personagens e séries"),
+            ("mm!mudae ios", "ranking de usuários IOS por quantidade de rolls"),
+            ("mm!mudae personagens", "personagens mais roletados"),
+            ("mm!mudae series", "séries mais roletadas"),
         ],
     ),
     (

@@ -182,6 +182,7 @@ _TAGS = {
         "Ser Bréca",
         "🧱",
         manual=True,
+        imagem="breca.png",
         antigos=("Bréca Games",),
     ),
     "papagaio": _tag(
@@ -210,7 +211,9 @@ _TAGS = {
     "rei_resenha": _tag(
         "Rei da Resenha", "Mensagens", "100k+ mensagens", "👑", imagem="rei_resenha.png"
     ),
-    "demiurgo": _tag("Demiurgo do Clubex", "Mensagens", "200k+ mensagens", "🌌"),
+    "demiurgo": _tag(
+        "Demiurgo do Clubex", "Mensagens", "200k+ mensagens", "🌌", imagem="demiurgo.png"
+    ),
     # Metas de músicas
     "dj_piolho": _tag("DJ Piolho", "Músicas", "50+ músicas pedidas", "🎶", imagem="dj_piolho.png"),
     "dj_overload": _tag(

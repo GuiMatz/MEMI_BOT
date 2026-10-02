@@ -198,9 +198,10 @@ no log. Os emojis do bot aparecem no Developer Portal, em "Emojis" do aplicativo
 | `mm!tagarelas [bots/todos] [mes/ano]` (`mm!tg`) | Mensagens de pessoas; `bots` mostra só os bots e `todos` mistura os dois |
 | `mm!levels` (`mm!lvl`) | Nível, patente e XP de cada pessoa |
 | `mm!hall [mes/ano]` (`mm!h`) | Vencedores (DJ e Resenhex) dos meses ou anos já fechados, seis por página |
-| `mm!mudae [@pessoa]` (`mm!md`) | Panorama do Mudae no servidor, ou os números de alguém |
-| `mm!mudae personagem NOME` | Quantas vezes saiu, quem mais rolou, quem casou e o maior valor |
-| `mm!mudae roletadores [mes/ano]` | Quem mais rola (também: `casamentos`, `kakera`, `personagens`, `series`, `snipers`, `azarados`) |
+| `mm!mudae` (`mm!md`) | Resumo top 5 de usuários IOS, personagens e séries |
+| `mm!mudae ios` | Usuários IOS ordenados pela quantidade de rolls |
+| `mm!mudae personagens` | Personagens mais roletados, contando apenas rolls ligados a comandos |
+| `mm!mudae series` | Séries mais roletadas, contando apenas rolls ligados a comandos |
 | `mm!perfil [@pessoa]` (`mm!p`) | Três páginas, botões públicos com timeout de três minutos |
 | `mm!cartao [@pessoa]` (`mm!c`) | Cartão de perfil em imagem (precisa do Pillow; sem ele mostra o perfil comum) |
 | `mm!tags [@pessoa]` (`mm!t`, `mm!titulos`, `mm!insignias`, `mm!i`) | Tags por categoria, com como ganhou e quantas vezes |
@@ -216,7 +217,7 @@ no log. Os emojis do bot aparecem no Developer Portal, em "Emojis" do aplicativo
 
 As barras da tabela indicam alternativas; não são digitadas. Os atalhos entre parênteses não
 aparecem na ajuda. Exemplos: `mm!tagarelas bots mes`, `mm!musicas artista ano`,
-`mm!mudae casamentos ano`.
+`mm!mudae personagens`.
 
 Somente o ID definido em `owner_id` em `config.json` pode usar:
 
@@ -235,8 +236,10 @@ nomes e o texto dos pedidos de todos os membros, o comando é restrito ao dono (
 original qualquer membro podia usá-lo).
 
 `mm!give @pessoa TAG` concede uma tag manual (as do Cartola e da comunidade); aceita o nome atual
-ou o antigo, sem acentos, e o formato antigo `mm!give titulo @pessoa NOME`. Tags automáticas
-(rankings, metas, patentes) não podem ser dadas à mão. Concessões manuais não enviam aviso.
+ou o antigo, sem acentos, e o formato antigo `mm!give titulo @pessoa NOME`. Para conceder várias de
+uma vez, separe os nomes por vírgula ou ponto e vírgula, por exemplo
+`mm!give @pessoa Bréca Games, Demiurgo do Clubex`. Tags automáticas (rankings, metas, patentes)
+não podem ser dadas à mão. Concessões manuais não enviam aviso.
 
 `mm!mudaedump` exporta em JSON as últimas mensagens do Mudae e os comandos `$` de um canal (300
 por padrão, até 2000), dizendo como o tracker entendeu cada uma. Serve para conferir a leitura
@@ -265,8 +268,8 @@ imagem; a troca de patente tem título e cor próprios. Se alguém sobe vários 
 nome, categoria, "como ganhar", emoji padrão e imagem. Os identificadores são persistentes:
 mantenha-os ao trocar nome, emoji ou imagem. Para criar uma tag manual nova, acrescente uma
 entrada com `manual=True` e, se quiser, a imagem em `assets/insignias/`; ela passa a valer para
-o `mm!give` e vira emoji sozinha na próxima vez que o bot ligar. Brécagames e Demiurgo do
-Clubex ainda usam o emoji padrão porque não têm imagem.
+o `mm!give` e vira emoji sozinha na próxima vez que o bot ligar. BrécaGames e Demiurgo do Clubex
+agora usam suas imagens como insígnias.
 
 Os 12 comandos curtos de roleta do Mudae estão em `COMANDOS_MUDAE`; o prefixo está em
 `PREFIXO_MUDAE`.
@@ -289,7 +292,8 @@ Limites: o Mudae mostra as pessoas pelo nome, não pelo ID. O bot resolve o nome
 já viu no servidor (usuário, nome global e apelido); nome ambíguo ou de quem nunca falou fica sem
 dono nas estatísticas por pessoa, mas conta nas do servidor. Kakera e ranks só aparecem se
 estiverem ligados no Mudae do servidor. Textos personalizados com `$renameclaim` não são
-reconhecidos. As roletadas do `mm!mudae roletadores` continuam contando os comandos, como antes.
+reconhecidos. Os rankings do Mudae contam rolls reconhecidos ligados a um comando de roletar;
+respostas sem vínculo com comando não entram nas listas de usuários, personagens ou séries.
 
 Os textos em português foram escritos com base na documentação do Mudae e em bots que o leem.
 Se algo não for reconhecido no seu servidor, rode `mm!mudaedump` no canal do Mudae: o resumo
@@ -361,7 +365,7 @@ Validação ao vivo que falta realizar no seu servidor:
 3. Desligar, enviar mensagens e pedidos, religar e conferir a recuperação.
 4. Executar `mm!scan` e conferir usuários com histórico conhecido, sem avisos de importação.
 5. Testar os pedidos de música, uma playlist e `m!loop`.
-6. Testar `$w`, `$wa`, `$h`, `$m` e conferir `mm!mudae roletadores`.
+6. Testar `$w`, `$wa`, `$h`, `$m` e conferir `mm!mudae ios`.
 7. Conferir as três páginas, a favorita e a navegação por outra pessoa.
 8. Conferir um desbloqueio de tag no canal de avisos, sem menção e com a insígnia como emoji.
 9. Conferir que quem saiu some de todos os rankings e reaparece ao voltar (com Members Intent).
@@ -374,9 +378,9 @@ Validação ao vivo que falta realizar no seu servidor:
     emoji no `mm!tags`, no `mm!perfil` e no `mm!hall`.
 15. Conferir `mm!levels` (nível, patente e XP) e o `mm!cartao` com o fundo novo e o título com a
     insígnia.
-16. Rolar no Mudae e casar: conferir `mm!mudae`, `mm!mudae @pessoa` e `mm!mudae personagem NOME`.
-    Rodar `mm!mudaedump` no canal do Mudae e conferir que nada importante ficou como "não
-    reconhecida".
+16. Rolar no Mudae e conferir `mm!mudae`, `mm!mudae ios`, `mm!mudae personagens` e
+    `mm!mudae series`. Rodar `mm!mudaedump` no canal do Mudae e conferir que nada importante ficou
+    como "não reconhecida".
 17. Conferir `mm!tagarelas` (só pessoas) e `mm!tagarelas bots`, `mm!give @pessoa Papagaio da
     Call` e os atalhos (`mm!tg`, `mm!lvl`, `mm!p`, `mm!c`, `mm!cl`).
 

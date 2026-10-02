@@ -306,6 +306,13 @@ class EstatisticasTests(unittest.TestCase):
         self.b.ler(mensagem(sid(65), MUDAE, "💖 **u20** e **Rem** agora são casados! 💖"))
         self.b.ler(mensagem(sid(80), MUDAE, "<:kakeraY:1> **u10 +500** ($k)"))
 
+    def test_panorama_usa_indice_para_buscar_casamentos_por_roll(self):
+        plano = self.b.con.execute(
+            "EXPLAIN QUERY PLAN SELECT 1 FROM mudae_rolls r "
+            "WHERE NOT EXISTS (SELECT 1 FROM mudae_casamentos c WHERE c.roll_id=r.message_id)"
+        ).fetchall()
+        self.assertTrue(any("idx_mudae_casamentos_roll_id" in linha[3] for linha in plano))
+
     def test_panorama(self):
         p = mudae.panorama(self.b.con)
         self.assertEqual((p["rolls"], p["casamentos"], p["kakera"]), (4, 1, 500))
@@ -328,9 +335,19 @@ class EstatisticasTests(unittest.TestCase):
         self.assertEqual(mudae.ranking(self.b.con, "casamentos"), [(20, 1)])
         self.assertEqual(mudae.ranking(self.b.con, "kakera"), [(10, 500)])
         self.assertEqual(mudae.ranking(self.b.con, "snipers"), [(20, 1)])
+        self.assertEqual(mudae.ranking(self.b.con, "ios"), [(10, 3), (20, 1)])
         self.assertEqual(mudae.ranking(self.b.con, "personagens")[0], ("Rem", "Re:Zero", 3))
         self.assertEqual(mudae.ranking(self.b.con, "series"), [("Re:Zero", 4)])
         self.assertEqual(mudae.ranking(self.b.con, "azarados", minimo=1)[0], (10, 3))
+
+    def test_rankings_de_rolls_ignoram_respostas_sem_comando(self):
+        self.b.con.execute(
+            "INSERT INTO mudae_rolls VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            (sid(100), 1, None, None, "Hors-série", "hors-série", "Extra", 1, None, 10, 1, ""),
+        )
+        self.assertNotIn(("Hors-série", "Extra", 1), mudae.ranking(self.b.con, "personagens"))
+        self.assertNotIn(("Extra", 1), mudae.ranking(self.b.con, "series"))
+        self.assertEqual(mudae.ranking(self.b.con, "personagens", limite=1)[0][0], "Rem")
 
     def test_ranking_por_periodo(self):
         depois = sid(30)

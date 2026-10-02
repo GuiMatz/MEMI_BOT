@@ -114,7 +114,8 @@ class ItensTests(unittest.TestCase):
         for ident, info in tags.CATALOGO.items():
             if info.get("imagem"):
                 self.assertIn(emojis.nome_emoji(ident), itens)
-        self.assertNotIn(emojis.nome_emoji("breca"), itens)  # ainda sem imagem
+        self.assertIn(emojis.nome_emoji("breca"), itens)
+        self.assertIn(emojis.nome_emoji("demiurgo"), itens)
 
     def test_emojis_do_bot_so_entram_se_houver_arquivo(self):
         with tempfile.TemporaryDirectory() as pasta:

@@ -35,6 +35,8 @@ class CatalogoTests(unittest.TestCase):
         self.assertEqual(c["dj_cupcake"]["nome"], "DJ Cupcake Party")
         self.assertEqual(c["bongas"]["nome"], "Bongador")
         self.assertEqual(c["dj_call"]["como"], "Top 1 Músicas")
+        self.assertEqual(c["breca"]["imagem"], "breca.png")
+        self.assertEqual(c["demiurgo"]["imagem"], "demiurgo.png")
 
     def test_tags_manuais_novas(self):
         for ident in (

@@ -47,6 +47,8 @@ CREATE TABLE IF NOT EXISTS mudae_casamentos (
     message_id INTEGER PRIMARY KEY, canal_id INTEGER NOT NULL, usuario_id INTEGER,
     nome TEXT NOT NULL, personagem TEXT NOT NULL, chave TEXT NOT NULL, roll_id INTEGER,
     roletador_id INTEGER, kakera INTEGER);
+CREATE INDEX IF NOT EXISTS idx_mudae_casamentos_roll_id ON mudae_casamentos(roll_id)
+    WHERE roll_id IS NOT NULL;
 CREATE TABLE IF NOT EXISTS mudae_kakera (
     message_id INTEGER NOT NULL, ordem INTEGER NOT NULL, usuario_id INTEGER, nome TEXT NOT NULL,
     tipo TEXT NOT NULL, valor INTEGER NOT NULL, PRIMARY KEY (message_id, ordem));
@@ -447,14 +449,21 @@ def perfil(con, uid):
     }
 
 
-RANKINGS = ("casamentos", "kakera", "snipers", "personagens", "series", "azarados")
+RANKINGS = ("ios", "personagens", "series")
 
 
-def ranking(con, tipo, desde=0, ate=None, minimo=50):
-    """Rankings do Mudae. Pessoas: [(uid, n)]; personagens: [(nome, série, n)]; séries:
-    [(série, n)]. `azarados` = rolls sem casar (quem tem pelo menos `minimo` rolls)."""
-    f, p = _faixa("message_id", desde, ate)
-    if tipo == "casamentos":
+def ranking(con, tipo, desde=0, ate=None, minimo=50, limite=None):
+    """Rankings: usuários IOS, personagens e séries. Personagens/séries ignoram rolls sem comando."""
+    coluna = "r.message_id" if tipo == "ios" else "message_id"
+    f, p = _faixa(coluna, desde, ate)
+    if tipo == "ios":
+        sql = (
+            f"SELECT r.roletador_id, COUNT(*) FROM mudae_rolls r "
+            "LEFT JOIN autores a ON a.usuario_id=r.roletador_id "
+            f"WHERE {f} AND r.roletador_id IS NOT NULL AND COALESCE(a.eh_bot,0)=0 "
+            "GROUP BY r.roletador_id ORDER BY COUNT(*) DESC, MIN(r.message_id)"
+        )
+    elif tipo == "casamentos":
         sql = (
             f"SELECT usuario_id, COUNT(*) FROM mudae_casamentos WHERE{f} AND usuario_id IS NOT NULL "
             "GROUP BY usuario_id ORDER BY COUNT(*) DESC, MIN(message_id)"
@@ -472,13 +481,18 @@ def ranking(con, tipo, desde=0, ate=None, minimo=50):
         )
     elif tipo == "personagens":
         sql = (
-            f"SELECT MIN(personagem), MIN(NULLIF(serie,'')), COUNT(*) FROM mudae_rolls WHERE{f} "
+            f"SELECT MIN(personagem), MIN(NULLIF(serie,'')), COUNT(*) FROM mudae_rolls "
+            f"WHERE{f} AND (comando_id IS NOT NULL OR roletador_id IS NOT NULL) "
             "GROUP BY chave ORDER BY COUNT(*) DESC, MIN(message_id)"
         )
+        if limite is not None:
+            sql += " LIMIT ?"
+            p.append(limite)
         return [(n, s or "", q) for n, s, q in con.execute(sql, p)]
     elif tipo == "series":
         sql = (
-            f"SELECT MIN(serie), COUNT(*) FROM mudae_rolls WHERE{f} AND serie<>'' "
+            f"SELECT MIN(serie), COUNT(*) FROM mudae_rolls WHERE{f} "
+            "AND (comando_id IS NOT NULL OR roletador_id IS NOT NULL) AND serie<>'' "
             "GROUP BY lower(serie) ORDER BY COUNT(*) DESC, MIN(message_id)"
         )
     elif tipo == "azarados":
@@ -493,6 +507,9 @@ def ranking(con, tipo, desde=0, ate=None, minimo=50):
         return [tuple(x) for x in con.execute(sql, [*p, *p, minimo])]
     else:
         raise ValueError(f"ranking desconhecido: {tipo}")
+    if limite is not None:
+        sql += " LIMIT ?"
+        p.append(limite)
     return [tuple(x) for x in con.execute(sql, p)]
 
 

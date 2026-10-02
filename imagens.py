@@ -28,6 +28,8 @@ FONTE_DEJAVU = PASTA_FONTES / "DejaVuSans.ttf"
 PASTA_BANNERS = Path(__file__).with_name("assets") / "banners"
 FUNDO_CARTAO = PASTA_BANNERS / "cartao.jpg"  # fundo fixo do mm!cartao (1200x400)
 BANNER_AJUDA = PASTA_BANNERS / "ajuda.jpg"  # banner do mm!help (1200x400)
+FUNDO_NIVEL = PASTA_BANNERS / "nivel.png"
+FUNDO_RESUMO = PASTA_BANNERS / "resumo.png"
 # Lentes dos óculos no fundo do cartão: (centro x, centro y, raio). O avatar entra na direita.
 LENTE_DIREITA = (238.5, 199.5, 88.5)
 LENTE_ESQUERDA = (1.5, 204.5, 88.5)
@@ -239,6 +241,13 @@ def _avatar_redondo(dados, lado, cor):
     ImageDraw.Draw(mascara).ellipse((0, 0, lado * 2 - 1, lado * 2 - 1), fill=255)
     img.putalpha(mascara.resize((lado, lado), Image.LANCZOS))
     return img
+
+
+def _avatar_template(base, cx, cy, raio, dados, cor):
+    lado = _s(raio * 2)
+    avatar = _avatar_redondo(dados, lado, cor)
+    base.alpha_composite(avatar, (_s(cx) - lado // 2, _s(cy) - lado // 2))
+    return base
 
 
 def _disco(base, cx, cy, raio, avatar, acento, giro=30):
@@ -574,6 +583,20 @@ def gerar_nivel(dados, avatar_bytes=None):
     _exigir()
     acento = _rgb(dados.get("cor"))
     anunciado = int(dados.get("nivel", 1))
+    modelo = _foto(FUNDO_NIVEL, 1200, 400)
+    if modelo is not None:
+        modelo = _avatar_template(modelo, 225, 200, 84, avatar_bytes, acento)
+        rotulo = "Nova patente" if dados.get("trocou") else "Level up"
+        modelo = _rotulo(modelo, (500, 92), rotulo, acento)
+        modelo = texto(modelo, (500, 220), str(anunciado), "forte", 132)
+        nome, corpo = _nome(dados, 680, "negrito", 44)
+        modelo = texto(modelo, (505, 278), nome, "negrito", corpo)
+        patente = limpo(dados.get("patente"))
+        if patente:
+            cor_patente = dados.get("cor_patente") or 0x9AA0A6
+            patente_ok, corpo_p = ajustar(patente, "negrito", 34, 650)
+            modelo = texto(modelo, (505, 340), patente_ok, "negrito", corpo_p, _rgb(cor_patente))
+        return _png(_finalizar(modelo))
     base = _fundo(1200, 400, acento)
     base = _disco(base, 225, 200, 160, avatar_bytes, acento)
     x = 470
@@ -629,6 +652,48 @@ def gerar_resumo(dados, avatar_dj=None, avatar_tagarela=None, capa=None):
     _exigir()
     acento = _rgb(dados.get("cor"))
     ano_tipo = dados.get("tipo") == "ano"
+    modelo = _foto(FUNDO_RESUMO, 1200, 480)
+    if modelo is not None:
+        modelo = _avatar_template(modelo, 584, 160, 42, avatar_dj, acento)
+        modelo = _avatar_template(modelo, 800, 160, 42, avatar_tagarela, LILAS)
+        rotulo = "Resumo do ano" if ano_tipo else f"Resumo · {dados.get('ano', '')}"
+        modelo = texto(modelo, (55, 75), rotulo, "negrito", 28, acento)
+        titulo, corpo = ajustar(dados.get("titulo") or "—", "forte", 54, 440)
+        modelo = texto(modelo, (52, 165), titulo, "forte", corpo)
+        modelo = texto(modelo, (65, 275), str(dados.get("mensagens", "0")), "forte", 46)
+        modelo = texto(modelo, (65, 310), "mensagens", "medio", 24, SLATE)
+        modelo = texto(modelo, (285, 275), str(dados.get("pedidos", "0")), "forte", 46)
+        modelo = texto(modelo, (285, 310), "músicas", "medio", 24, SLATE)
+        for cx, pessoa, papel, cor in (
+            (584, dados.get("dj"), "DJ", acento),
+            (800, dados.get("tagarela"), "Resenhex", LILAS),
+        ):
+            nome, detalhe = pessoa if pessoa else ("—", "")
+            nome, corpo_nome = ajustar(limpo(nome) or "Membro", "negrito", 28, 190)
+            detalhe, corpo_detalhe = ajustar(detalhe, "medio", 22, 205)
+            modelo = texto_espacado(modelo, (cx, 235), papel, "negrito", 22, cor, 2, "ms")
+            modelo = texto(modelo, (cx, 275), nome, "negrito", corpo_nome, BRANCO, "ms")
+            if detalhe:
+                modelo = texto(modelo, (cx, 310), detalhe, "medio", corpo_detalhe, SLATE, "ms")
+        lado = 142
+        try:
+            cover = Image.open(io.BytesIO(capa)).convert("RGBA")
+        except Exception:  # noqa: BLE001 - sem capa ou capa inválida
+            cover = Image.open(io.BytesIO(_capa_reserva(acento))).convert("RGBA")
+        cover = _cantos(cover.resize((_s(lado), _s(lado)), Image.LANCZOS), _s(12))
+        cx_capa, cy_capa = 1025, 275
+        modelo = _sombra_caixa(modelo, (cx_capa, cy_capa, cx_capa + lado, cy_capa + lado), 12)
+        modelo.alpha_composite(cover, (_s(cx_capa), _s(cy_capa)))
+        musica = dados.get("musica")
+        if musica:
+            faixa, artista, vezes = musica
+            faixa, corpo_faixa = ajustar(faixa, "negrito", 24, 205)
+            artista, corpo_artista = ajustar(f"{artista} · {vezes}x", "medio", 20, 205)
+            modelo = texto(modelo, (810, 378), faixa, "negrito", corpo_faixa)
+            modelo = texto(modelo, (810, 414), artista, "medio", corpo_artista, SLATE)
+        else:
+            modelo = texto(modelo, (810, 378), "Sem músicas", "negrito", 24)
+        return _png(_finalizar(modelo))
     periodo = "ano" if ano_tipo else "mês"
     base = _fundo(1200, 480, acento)
     x = 60

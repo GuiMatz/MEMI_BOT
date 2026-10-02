@@ -119,6 +119,10 @@ class GeradoresTests(unittest.TestCase):
         for nome, (azul, pixel) in casos.items():
             with self.subTest(nome):
                 sem_cor = {"cartao": dict(CARTAO, cor=None), "ajuda": {"cor": 0xF0704E}}.get(nome)
+                if nome in ("nivel", "resumo"):
+                    pessoal = abrir(gerar(nome, azul, avatar())).convert("RGB")
+                    self.assertIn((34, 85, 255), [cor for _, cor in pessoal.getcolors(2_000_000)])
+                    continue
                 padrao = abrir(gerar(nome, sem_cor, avatar())).convert("RGB").getpixel(pixel)
                 pessoal = abrir(gerar(nome, azul, avatar())).convert("RGB").getpixel(pixel)
                 self.assertTrue(perto(padrao, (240, 112, 78)), padrao)  # coral padrão
@@ -143,6 +147,17 @@ class GeradoresTests(unittest.TestCase):
         self.assertTrue(perto(cartao.getpixel((1157, 29)), (253, 118, 37), 30))  # logo intacto
         with patch.object(imagens, "FUNDO_CARTAO", Path("nao-existe.jpg")):
             self.assertEqual(abrir(imagens.gerar_cartao(CARTAO, avatar())).size, (1200, 400))
+
+    def test_nivel_e_resumo_usam_templates_e_preenchem_avatars(self):
+        nivel = abrir(imagens.gerar_nivel(NIVEL, avatar((200, 30, 30)))).convert("RGB")
+        resumo = abrir(
+            imagens.gerar_resumo(RESUMO, avatar((200, 30, 30)), avatar((30, 30, 200)), avatar())
+        ).convert("RGB")
+        self.assertTrue(perto(nivel.getpixel((225, 200)), (200, 30, 30)))
+        self.assertTrue(perto(resumo.getpixel((584, 160)), (200, 30, 30)))
+        self.assertTrue(perto(resumo.getpixel((800, 160)), (30, 30, 200)))
+        self.assertEqual(nivel.size, (1200, 400))
+        self.assertEqual(resumo.size, (1200, 480))
 
     def test_insignia_invalida_no_cartao_nao_quebra(self):
         for icone in (None, b"lixo"):
