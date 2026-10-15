@@ -114,7 +114,8 @@ O coletor baixa URLs já fornecidas pelas fontes; `--thesportsdb` habilita a
 busca por nome exato para imagens ausentes e requer `THESPORTSDB_API_KEY` no
 `.env`. Respostas 404 e imagens ausentes são ignoradas; erros de rede ou HTTP
 inesperados são mostrados. O relatório resume fontes, posições, faixas de
-overall e jogadores sem foto.
+overall, jogadores sem posição, notas 87+, cruzamentos confirmados e pendentes,
+clubes sem jogador e jogadores sem foto.
 
 ## Fontes planejadas
 

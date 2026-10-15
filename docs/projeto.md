@@ -170,7 +170,8 @@ execução com mensagem explícita.
 ## Relatório
 
 Execute `python -m src.report` para ver o total de jogadores, a contagem por
-fonte, posição e faixa de overall, e quantos ainda estão sem foto.
+fonte, posição e faixa de overall, além de notas 87+, jogadores sem posição,
+cruzamentos confirmados ou pendentes, clubes sem jogadores e fotos ausentes.
 
 ## Schema inicial
 

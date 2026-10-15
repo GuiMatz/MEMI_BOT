@@ -42,18 +42,28 @@ class ReportTests(unittest.TestCase):
 
         self.assertEqual(report["players_total"], 3)
         self.assertEqual(report["source_counts"], {"ea_fc25": 1})
+        self.assertEqual(report["cross_source_players"], 0)
+        self.assertEqual(report["pending_match_candidates"], 0)
         self.assertEqual(report["positions"], {"(não mapeada)": 1, "CA": 1, "GOL": 1})
+        self.assertEqual(report["players_without_position"], 1)
         self.assertEqual(report["overall_bands"]["80-87"], 1)
         self.assertEqual(report["overall_bands"]["88-99"], 1)
         self.assertEqual(report["overall_bands"]["sem overall"], 1)
+        self.assertEqual(report["overall_87_plus"], 2)
         self.assertEqual(report["players_without_photo"], 2)
+        self.assertEqual(report["clubs_without_players"], 0)
 
     def test_empty_database_reports_zero_counts(self):
         report = build_report(self.database_path)
         self.assertEqual(report["players_total"], 0)
         self.assertEqual(report["source_counts"], {})
+        self.assertEqual(report["cross_source_players"], 0)
+        self.assertEqual(report["pending_match_candidates"], 0)
         self.assertEqual(report["positions"], {})
+        self.assertEqual(report["players_without_position"], 0)
+        self.assertEqual(report["overall_87_plus"], 0)
         self.assertEqual(report["players_without_photo"], 0)
+        self.assertEqual(report["clubs_without_players"], 0)
         self.assertEqual(
             report["overall_bands"],
             {
