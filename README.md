@@ -106,11 +106,20 @@ Importa páginas de 20 jogadores e salva página/offset para retomar. Repita o
 mesmo comando no dia seguinte para continuar do ponto salvo; a carga pode ser
 limitada com `--limit` durante testes.
 
-O Transfermarkt fornece clube e última temporada conhecida, mas um registro com
-última temporada 2025 não confirma atividade em 2026/27. Esses jogadores ficam
-com atividade `unknown`, marcados como candidatos à fase 2 e fora do pool.
-Somente uma importação API-Football explicitamente consultada para a temporada
-atual confirma atividade. Jogadores sem overall também ficam fora do pool.
+Na temporada 2026/27, o Transfermarkt confirma atividade quando `last_season`
+é 2025 ou posterior e `current_club_id` está preenchido. O ID não precisa estar
+presente em `clubs.csv.gz`: nesses casos o jogador é considerado ativo, mas
+fica sem clube vinculado até haver um registro correspondente. Registros sem
+esses critérios ficam com atividade `unknown`; não são automaticamente
+marcados como inativos. A API-Football pode continuar fornecendo confirmação
+adicional, mas não é necessária para popular o pool. Jogadores sem overall
+continuam fora do pool. Esse status é uma heurística: o aviso do dataset
+Transfermarkt informa que os dados vão até 6 de julho de 2026 e não cobrem
+elencos de 2026/27, portanto não comprova participação atual em campo.
+
+O repositório dos dados informa licença CC0 1.0 para o dataset. Isso não
+estabelece licença para as imagens hospedadas por Transfermarkt; não baixe nem
+reutilize imagens de `image_url` sem confirmar os direitos separadamente.
 
 ## Fotos e relatório
 
@@ -127,6 +136,10 @@ inesperados são mostrados. O relatório resume fontes, posições, faixas de ov
 marcados para revisão, notas 87+, atividade conhecida/desconhecida, elegíveis
 para roleta, tops 30 por overall e valor de mercado, clubes sem jogadores,
 cruzamentos confirmados e pendentes e jogadores sem foto.
+
+O repositório Transfermarkt declara CC0 1.0 para o dataset, mas isso não concede
+por si só direitos sobre as imagens externas apontadas em `image_url`; não
+baixe nem reutilize essas imagens sem confirmar licença ou autorização própria.
 
 ## Fontes planejadas
 

@@ -44,8 +44,12 @@ completas.
 - O clube atual vem do Transfermarkt; o clube EA é apenas metadado da fonte.
 - Cruzar fontes por nome normalizado e data de nascimento; usar clube somente
   para desempatar homônimos.
-- Guardar edição do overall e temporada de cada fonte. Dados de atividade só
-  são confirmados quando a API-Football é consultada para a temporada atual.
+- Guardar edição do overall e temporada de cada fonte. Na temporada 2026/27,
+  considerar ativo pelo critério Transfermarkt quando `last_season >= 2025` e
+  `current_club_id` estiver preenchido; correspondência com a tabela `clubs`
+  não é obrigatória. É uma heurística, não prova de atividade em campo: o
+  dataset publicado informa dados até 6 de julho de 2026, sem elencos 2026/27.
+  A API-Football pode confirmar atividade adicionalmente.
 - Jogadores com atividade desconhecida ou sem overall não entram no pool da
   roleta. Dados desatualizados/inativos ficam candidatos à fase 2.
 - Fotos e escudos são opcionais; falhas de imagem não impedem a importação.
@@ -89,6 +93,12 @@ O dataset testado contém 50.149 jogadores e 796 clubes. Sua coluna `position`
 contém Attack, Defender, Goalkeeper, Midfield e Missing; `sub_position` contém
 as categorias acima e está vazia para parte dos jogadores. Linhas com posição
 geral conhecida usam o fallback indicado; Missing permanece sem inferência.
+Para a temporada 2026/27, jogadores com `last_season >= 2025` e
+`current_club_id` preenchido são considerados ativos. O ID de clube não precisa
+estar em `clubs.csv.gz`; nesses casos `players.club_id` permanece nulo, embora
+o jogador possa entrar no pool se tiver overall. O dataset publicado está
+defasado em relação à temporada 2026/27; esse campo é um critério operacional,
+não confirmação de que o atleta está jogando atualmente.
 
 ## EA FC
 
@@ -160,10 +170,9 @@ saldo observado por dia UTC. Com saldo zero, nenhuma chamada nova é feita.
 Importa 20 jogadores por página e registra página/offset para retomar após
 interrupção. A chamada de teste salva o offset para a próxima execução; os
 registros da API-Football permanecem como fonte independente até revisão de
-correspondências. A temporada consultada é registrada em cada fonte. Só
-consultas da temporada atual confirmam atividade; a última temporada do
-Transfermarkt, por si só, não prova atividade. Atividade desconhecida ou overall
-ausente mantém o jogador fora do pool.
+correspondências. A temporada consultada é registrada em cada fonte. Essa API
+é opcional para atividade: a regra Transfermarkt por `last_season` e clube atual
+preenchido também confirma atividade. Jogadores sem overall ficam fora do pool.
 
 ## Fotos e escudos
 
@@ -178,7 +187,10 @@ O primeiro modo baixa URLs já obtidas da API-Football. O segundo também busca
 imagens ausentes no TheSportsDB, mas só aceita resultados com nome exato
 normalizado. Arquivos vão para `data/photos/`; URLs vazias, 404 e recursos que
 não sejam imagens são pulados. Erros de rede e respostas inesperadas param a
-execução com mensagem explícita.
+execução com mensagem explícita. O repositório Transfermarkt declara CC0 1.0
+para o dataset, mas isso não concede por si só direitos sobre as imagens
+externas apontadas por `image_url`; não as baixe nem reutilize sem confirmar
+uma licença ou autorização própria.
 
 ## Relatório
 
@@ -198,11 +210,15 @@ originais de cada fonte quando disponíveis.
 ## Estado atual e próximos passos
 
 - Schema, documentação, dependências e ambiente virtual inicializados.
-- Transfermarkt importado em amostra real: 100 jogadores e 796 clubes. O dataset
-  disponível contém 50.149 jogadores; os arquivos brutos continuam locais e
-  ignorados pelo Git.
-- Importador EA FC implementado, mas a inspeção das categorias reais depende dos
-  CSVs do Kaggle em `data/raw/`.
+- Transfermarkt completo importado: 50.149 jogadores e 796 clubes. Pelo critério
+  aprovado, 22.292 estão marcados ativos; o pool contém 18.404 com overall.
+  27.857 permanecem com atividade desconhecida, 8.621 sem overall e 586 sem
+  posição específica. 2.986 IDs de clube ativos não existem em `clubs.csv.gz`;
+  esses jogadores ficam sem clube vinculado. Os arquivos brutos são ignorados
+  pelo Git.
+- O CSV FC27 em Downloads é um snapshot de 2026-09-12. Há no Kaggle um snapshot
+  posterior, coletado em 2026-10-11, ainda não baixado nem importado. O
+  importador precisa ser ajustado e testado com o arquivo real antes de usá-lo.
 - Cruzamento, overall, cliente API-Football retomável, coletor de imagens e
   relatório implementados e cobertos por testes unitários. Ainda não foram
   executadas chamadas reais às APIs.

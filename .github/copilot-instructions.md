@@ -6,6 +6,9 @@
 - Fontes, em ordem: Transfermarkt Datasets, EA FC, API-Football e TheSportsDB.
 - API-Football tem cota gratuita: conferir `x-ratelimit-requests-remaining` e
   nunca exceder a cota; implementar retomada persistente.
+- Para a temporada 2026/27, considerar ativo no Transfermarkt quem tem
+  `last_season >= 2025` e `current_club_id` preenchido; a API-Football não é
+  requisito de elegibilidade.
 - Posições únicas do jogo: GOL, ZAG, LD, LE, MC, MEI, PE, PD, CA. VOL=MC,
   SA=CA; ALA precisa de revisão por ser ambígua.
 - Overall inteiro entre 1 e 99. Preferir EA FC; para os demais, estimar com o

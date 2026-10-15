@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PLAYERS_PATH = ROOT / "data" / "raw" / "players.csv.gz"
 CLUBS_PATH = ROOT / "data" / "raw" / "clubs.csv.gz"
 SOURCE = "transfermarkt"
+ACTIVE_LAST_SEASON_CUTOFF = 2025
 
 POSITION_MAP = {
     "Attacking Midfield": "MEI",
@@ -194,6 +195,7 @@ def _find_or_create_player(
     market_value: Any,
     photo_url: str | None,
     season_last_active: int | None,
+    activity_status: str,
     source_club_name: str | None,
     source_position: str | None,
     needs_position_review: bool,
@@ -223,6 +225,7 @@ def _find_or_create_player(
                       AND player_sources.source LIKE 'ea_fc%'
                 ) THEN needs_position_review ELSE ? END,
                 market_value_eur = ?, season_last_active = ?,
+                activity_status = ?, phase2_candidate = ?,
                 photo_url = ?, updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
             """,
@@ -236,6 +239,8 @@ def _find_or_create_player(
                 int(needs_position_review),
                 value,
                 season_last_active,
+                activity_status,
+                int(activity_status != "active"),
                 photo_url,
                 player_id,
             ),
@@ -255,8 +260,9 @@ def _find_or_create_player(
         INSERT INTO players (
             name, birth_date, nationality, club_id, original_position,
             game_position, market_value_eur, season_last_active,
-            needs_position_review, photo_url
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            activity_status, phase2_candidate, needs_position_review,
+            photo_url
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             name,
@@ -267,6 +273,8 @@ def _find_or_create_player(
             game_position,
             value,
             season_last_active,
+            activity_status,
+            int(activity_status != "active"),
             int(needs_position_review),
             photo_url,
         ),
@@ -343,6 +351,7 @@ def import_transfermarkt(
         club_count = _import_clubs(connection, clubs_path)
         club_ids = _club_lookup(connection)
         player_count = 0
+        active_player_count = 0
         missing_sub_position_count = 0
         position_fallback_count = 0
 
@@ -368,6 +377,14 @@ def import_transfermarkt(
             last_season = _clean(row.get("last_season"))
             if last_season is not None:
                 last_season = int(last_season)
+            current_club_id = _identifier(row.get("current_club_id"))
+            activity_status = (
+                "active"
+                if last_season is not None
+                and last_season >= ACTIVE_LAST_SEASON_CUTOFF
+                and current_club_id is not None
+                else "unknown"
+            )
             source_club_name = _identifier(row.get("current_club_name"))
             _find_or_create_player(
                 connection=connection,
@@ -375,21 +392,24 @@ def import_transfermarkt(
                 name=name,
                 birth_date=_identifier(row.get("date_of_birth")),
                 nationality=_identifier(row.get("country_of_citizenship")),
-                club_id=club_ids.get(_identifier(row.get("current_club_id"))),
+                club_id=club_ids.get(current_club_id),
                 original_position=sub_position or broad_position,
                 game_position=game_position,
                 market_value=row.get("market_value_in_eur"),
                 photo_url=_identifier(row.get("image_url")),
                 season_last_active=last_season,
+                activity_status=activity_status,
                 source_club_name=source_club_name,
                 source_position=sub_position or broad_position,
                 needs_position_review=needs_position_review,
             )
             player_count += 1
+            active_player_count += activity_status == "active"
 
     return {
         "clubs": club_count,
         "players": player_count,
+        "active_players": active_player_count,
         "missing_sub_position": missing_sub_position_count,
         "position_fallback": position_fallback_count,
     }
@@ -430,6 +450,7 @@ def main() -> None:
     print(
         "Importação concluída: "
         f"{result['players']:,} jogadores, {result['clubs']:,} clubes; "
+        f"{result['active_players']:,} ativos pelo Transfermarkt; "
         f"{result['missing_sub_position']:,} sem subposição."
     )
 

@@ -92,6 +92,7 @@ class TransfermarktImportTests(unittest.TestCase):
             {
                 "clubs": 1,
                 "players": 1,
+                "active_players": 1,
                 "missing_sub_position": 0,
                 "position_fallback": 0,
             },
@@ -103,8 +104,8 @@ class TransfermarktImportTests(unittest.TestCase):
             self.assertEqual(player["game_position"], "MEI")
             self.assertEqual(player["market_value_eur"], 5000000)
             self.assertEqual(player["season_last_active"], 2025)
-            self.assertEqual(player["activity_status"], "unknown")
-            self.assertEqual(player["phase2_candidate"], 1)
+            self.assertEqual(player["activity_status"], "active")
+            self.assertEqual(player["phase2_candidate"], 0)
             self.assertEqual(player["needs_position_review"], 0)
             self.assertEqual(
                 connection.execute("SELECT COUNT(*) FROM players").fetchone()[0], 1
@@ -163,6 +164,44 @@ class TransfermarktImportTests(unittest.TestCase):
             player = connection.execute("SELECT * FROM players").fetchone()
         self.assertEqual(player["game_position"], "ZAG")
         self.assertEqual(player["needs_position_review"], 1)
+
+    def test_recent_player_is_active_when_club_id_is_not_in_clubs_file(self):
+        frame = pd.read_csv(self.players_path, compression="gzip")
+        frame.loc[0, "current_club_id"] = "club-not-listed"
+        frame.to_csv(self.players_path, index=False, compression="gzip")
+
+        import_transfermarkt(
+            self.players_path,
+            self.clubs_path,
+            self.database_path,
+            limit=1,
+            show_positions=False,
+        )
+
+        with connect(self.database_path) as connection:
+            player = connection.execute("SELECT * FROM players").fetchone()
+        self.assertEqual(player["activity_status"], "active")
+        self.assertEqual(player["phase2_candidate"], 0)
+        self.assertIsNone(player["club_id"])
+
+    def test_player_below_activity_cutoff_remains_unknown(self):
+        frame = pd.read_csv(self.players_path, compression="gzip")
+        frame.loc[0, "last_season"] = 2024
+        frame.to_csv(self.players_path, index=False, compression="gzip")
+
+        result = import_transfermarkt(
+            self.players_path,
+            self.clubs_path,
+            self.database_path,
+            limit=1,
+            show_positions=False,
+        )
+
+        with connect(self.database_path) as connection:
+            player = connection.execute("SELECT * FROM players").fetchone()
+        self.assertEqual(result["active_players"], 0)
+        self.assertEqual(player["activity_status"], "unknown")
+        self.assertEqual(player["phase2_candidate"], 1)
 
     def test_unknown_sub_position_stops_before_import(self):
         frame = pd.read_csv(self.players_path, compression="gzip")
