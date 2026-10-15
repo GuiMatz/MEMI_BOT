@@ -76,9 +76,17 @@ CREATE TABLE IF NOT EXISTS players (
     ),
     overall INTEGER CHECK (overall IS NULL OR overall BETWEEN 1 AND 99),
     overall_source TEXT,
+    overall_edition TEXT,
     market_value_eur INTEGER CHECK (
         market_value_eur IS NULL OR market_value_eur >= 0
     ),
+    season_last_active INTEGER,
+    activity_status TEXT NOT NULL DEFAULT 'unknown'
+        CHECK (activity_status IN ('active', 'inactive', 'unknown')),
+    phase2_candidate INTEGER NOT NULL DEFAULT 1
+        CHECK (phase2_candidate IN (0, 1)),
+    needs_position_review INTEGER NOT NULL DEFAULT 0
+        CHECK (needs_position_review IN (0, 1)),
     photo_url TEXT,
     photo_path TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -93,6 +101,7 @@ CREATE TABLE IF NOT EXISTS player_sources (
     source_name TEXT,
     source_club_name TEXT,
     source_position TEXT,
+    source_season INTEGER,
     UNIQUE (source, source_id)
 );
 
@@ -168,15 +177,47 @@ def initialize_database(database_path: str | Path = DATABASE_PATH) -> None:
             row["name"]
             for row in connection.execute("PRAGMA table_info(player_sources)")
         }
-        for column in ("source_club_name", "source_position"):
+        source_migrations = {
+            "source_club_name": "TEXT",
+            "source_position": "TEXT",
+            "source_season": "INTEGER",
+        }
+        for column, definition in source_migrations.items():
             if column not in source_columns:
                 connection.execute(
-                    f"ALTER TABLE player_sources ADD COLUMN {column} TEXT"
+                    f"ALTER TABLE player_sources ADD COLUMN {column} {definition}"
                 )
-        connection.execute("INSERT OR IGNORE INTO schema_version (version) VALUES (1)")
-        connection.execute("INSERT OR IGNORE INTO schema_version (version) VALUES (2)")
-        connection.execute("INSERT OR IGNORE INTO schema_version (version) VALUES (3)")
-        connection.execute("INSERT OR IGNORE INTO schema_version (version) VALUES (4)")
+        player_columns = {
+            row["name"] for row in connection.execute("PRAGMA table_info(players)")
+        }
+        player_migrations = {
+            "overall_edition": "TEXT",
+            "season_last_active": "INTEGER",
+            "activity_status": (
+                "TEXT NOT NULL DEFAULT 'unknown' "
+                "CHECK (activity_status IN ('active', 'inactive', 'unknown'))"
+            ),
+            "phase2_candidate": (
+                "INTEGER NOT NULL DEFAULT 1 CHECK (phase2_candidate IN (0, 1))"
+            ),
+            "needs_position_review": (
+                "INTEGER NOT NULL DEFAULT 0 " "CHECK (needs_position_review IN (0, 1))"
+            ),
+        }
+        for column, definition in player_migrations.items():
+            if column not in player_columns:
+                connection.execute(
+                    f"ALTER TABLE players ADD COLUMN {column} {definition}"
+                )
+        for version in range(1, 6):
+            connection.execute(
+                "INSERT OR IGNORE INTO schema_version (version) VALUES (?)",
+                (version,),
+            )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_players_pool "
+            "ON players(activity_status, phase2_candidate, overall)"
+        )
 
 
 def main() -> None:

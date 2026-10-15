@@ -17,7 +17,8 @@ comandos Discord.
 ## Fontes, em ordem
 
 1. Transfermarkt Datasets: jogadores e clubes em CSV.
-2. EA FC 24/25: overall e posição, obtidos manualmente no Kaggle.
+2. Dataset EA FC mais recente disponível (atualmente FC27): overall e posição,
+   obtidos manualmente; não usar clube EA como clube atual.
 3. API-Football: cota gratuita limitada; conferir em cada resposta o cabeçalho
    `x-ratelimit-requests-remaining` e parar antes de esgotar a cota.
 4. TheSportsDB: fotos, escudos e estádios.
@@ -40,6 +41,13 @@ completas.
   €5 mil e €100 milhões.
 - Nunca unir automaticamente jogadores ambíguos. Exportar candidatos para
   revisão manual.
+- O clube atual vem do Transfermarkt; o clube EA é apenas metadado da fonte.
+- Cruzar fontes por nome normalizado e data de nascimento; usar clube somente
+  para desempatar homônimos.
+- Guardar edição do overall e temporada de cada fonte. Dados de atividade só
+  são confirmados quando a API-Football é consultada para a temporada atual.
+- Jogadores com atividade desconhecida ou sem overall não entram no pool da
+  roleta. Dados desatualizados/inativos ficam candidatos à fase 2.
 - Fotos e escudos são opcionais; falhas de imagem não impedem a importação.
 
 ## Transfermarkt
@@ -79,24 +87,25 @@ Mapeamento revisado das subposições observadas:
 
 O dataset testado contém 50.149 jogadores e 796 clubes. Sua coluna `position`
 contém Attack, Defender, Goalkeeper, Midfield e Missing; `sub_position` contém
-as categorias acima e está vazia para parte dos jogadores. Não há inferência de
-posição de jogo para linhas sem subposição.
+as categorias acima e está vazia para parte dos jogadores. Linhas com posição
+geral conhecida usam o fallback indicado; Missing permanece sem inferência.
 
 ## EA FC
 
-Salve os CSVs do EA FC 24/25 em `data/raw/`. Antes de importar, confira as
-categorias reais com:
+Salve o CSV da edição EA FC mais recente em `data/raw/` (atualmente FC27;
+FC26 também é aceito). Elencos e notas de edições antigas podem estar
+desatualizados. Antes de importar, confira as categorias reais com:
 
 ```bash
 python -m src.import_ea --show-positions
 ```
 
-O importador aceita cabeçalhos comuns dos exports EA/Sofifa, valida overall
-entre 1 e 99 e interrompe antes de gravar se encontrar posição sem mapeamento.
-Para dados com mais de uma posição, a primeira posição listada é considerada a
-principal, mantendo-se a lista original em `player_sources` para auditoria.
-Cada arquivo EA é uma fonte separada; os registros não são unidos ao
-Transfermarkt nem a outro arquivo EA até a etapa de revisão de correspondências.
+O importador aceita cabeçalhos comuns EA/Sofifa e o formato FC27, valida
+overall entre 1 e 99 e interrompe antes de gravar se encontrar posição principal
+ou alternativa sem mapeamento. Para dados com mais de uma posição, a primeira
+posição listada é considerada a principal. O clube EA é guardado apenas como
+metadado da fonte; não preenche nem sobrescreve `players.club_id`. Cada edição
+EA é uma fonte separada até a etapa de revisão de correspondências.
 
 | EA FC | Posição do jogo |
 | --- | --- |
@@ -118,8 +127,9 @@ Execute:
 python -m src.match
 ```
 
-O processo bloqueia pares por clube normalizado ou data de nascimento igual,
-compara nomes usando RapidFuzz e exporta candidatos acima de 75/100 para
+O processo exige data de nascimento igual e compara nomes usando RapidFuzz.
+Clube serve como critério de desempate, nunca como bloqueio, pois pode estar
+desatualizado nos dados EA. Exporta candidatos acima de 75/100 para
 `data/review/player_matches.csv`. Datas conhecidas conflitantes descartam o
 candidato. Todos os pares ficam pendentes para revisão; o processo não faz merge
 automático.
@@ -150,7 +160,10 @@ saldo observado por dia UTC. Com saldo zero, nenhuma chamada nova é feita.
 Importa 20 jogadores por página e registra página/offset para retomar após
 interrupção. A chamada de teste salva o offset para a próxima execução; os
 registros da API-Football permanecem como fonte independente até revisão de
-correspondências.
+correspondências. A temporada consultada é registrada em cada fonte. Só
+consultas da temporada atual confirmam atividade; a última temporada do
+Transfermarkt, por si só, não prova atividade. Atividade desconhecida ou overall
+ausente mantém o jogador fora do pool.
 
 ## Fotos e escudos
 
@@ -170,8 +183,10 @@ execução com mensagem explícita.
 ## Relatório
 
 Execute `python -m src.report` para ver o total de jogadores, a contagem por
-fonte, posição e faixa de overall, além de notas 87+, jogadores sem posição,
-cruzamentos confirmados ou pendentes, clubes sem jogadores e fotos ausentes.
+fonte, posição e faixas 1-59, 60-69, 70-79, 80-86, 87-89, 90-94, 95-97 e
+98-99; tops 30 por overall e valor de mercado; atividade, elegibilidade para
+roleta, jogadores sem posição, revisão, cruzamentos confirmados ou pendentes,
+clubes sem jogadores e fotos ausentes.
 
 ## Schema inicial
 

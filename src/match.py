@@ -8,6 +8,7 @@ import re
 import unicodedata
 from collections import defaultdict
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 from rapidfuzz import fuzz
@@ -50,6 +51,15 @@ def _normalize_club(value: str | None) -> str | None:
     return re.sub(r"\s+", " ", normalized).strip() or None
 
 
+def _normalize_birth_date(value: str | None) -> str | None:
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value[:10]).isoformat()
+    except ValueError:
+        return None
+
+
 def _player_sources(connection) -> list[PlayerSource]:
     rows = connection.execute("""
         SELECT ps.player_id, ps.source, ps.source_id,
@@ -73,7 +83,7 @@ def _player_sources(connection) -> list[PlayerSource]:
                 source_id=row["source_id"],
                 name=row["name"],
                 normalized_name=normalized_name,
-                birth_date=row["birth_date"],
+                birth_date=_normalize_birth_date(row["birth_date"]),
                 club=row["club"],
                 normalized_club=_normalize_club(row["club"]),
             )
@@ -94,45 +104,18 @@ def _candidate_pairs(
         for source_b in sources[source_index + 1 :]:
             group_a = by_source[source_a]
             group_b = by_source[source_b]
-            b_by_club: dict[str, list[PlayerSource]] = defaultdict(list)
             b_by_birth: dict[str, list[PlayerSource]] = defaultdict(list)
             for player in group_b:
-                if player.normalized_club:
-                    b_by_club[player.normalized_club].append(player)
                 if player.birth_date:
                     b_by_birth[player.birth_date].append(player)
 
             for player_a in group_a:
-                possible: dict[int, PlayerSource] = {}
-                if player_a.normalized_club:
-                    possible.update(
-                        {
-                            candidate.player_id: candidate
-                            for candidate in b_by_club.get(player_a.normalized_club, ())
-                        }
-                    )
-                if player_a.birth_date:
-                    possible.update(
-                        {
-                            candidate.player_id: candidate
-                            for candidate in b_by_birth.get(player_a.birth_date, ())
-                        }
-                    )
-
-                for player_b in possible.values():
+                if not player_a.birth_date:
+                    continue
+                for player_b in b_by_birth.get(player_a.birth_date, ()):
                     if player_a.player_id == player_b.player_id:
                         continue
-                    if (
-                        player_a.birth_date
-                        and player_b.birth_date
-                        and player_a.birth_date != player_b.birth_date
-                    ):
-                        continue
-                    birth_match = bool(
-                        player_a.birth_date
-                        and player_b.birth_date
-                        and player_a.birth_date == player_b.birth_date
-                    )
+                    birth_match = True
                     club_match = bool(
                         player_a.normalized_club
                         and player_b.normalized_club
@@ -169,7 +152,15 @@ def _candidate_pairs(
                         "club_match": int(club_match),
                         "status": "pending",
                     }
-    return list(candidates.values())
+    return sorted(
+        candidates.values(),
+        key=lambda candidate: (
+            not bool(candidate["club_match"]),
+            -float(candidate["name_similarity"]),
+            int(candidate["player_a_id"]),
+            int(candidate["player_b_id"]),
+        ),
+    )
 
 
 def _write_review_csv(path: Path, candidates: list[dict[str, object]]) -> None:

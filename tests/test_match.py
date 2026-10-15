@@ -88,12 +88,26 @@ class PlayerMatchingTests(unittest.TestCase):
             find_matches(self.database_path, self.review_path, threshold=50), 0
         )
 
-    def test_candidate_requires_shared_birth_date_or_club(self):
+    def test_matching_birth_date_is_required_even_when_club_matches(self):
         self._insert_player("transfermarkt", "tm-3", "Alex Silva", None, "Clube A")
-        self._insert_player("ea_fc25", "ea-3", "Alex Silva", None, "Clube B")
+        self._insert_player("ea_fc25", "ea-3", "Alex Silva", None, "Clube A")
         self.assertEqual(
             find_matches(self.database_path, self.review_path, threshold=50), 0
         )
+
+    def test_club_is_only_a_tie_breaker_after_name_and_birth_date(self):
+        self._insert_player(
+            "transfermarkt", "tm-4", "Alex Silva", "2000-01-02", "Clube A"
+        )
+        self._insert_player("ea_fc25", "ea-4", "Alex Silva", "2000-01-02", "Clube B")
+        self._insert_player("ea_fc25", "ea-5", "Alex Silva", "2000-01-02", "Clube A")
+        self.assertEqual(
+            find_matches(self.database_path, self.review_path, threshold=50), 2
+        )
+        with self.review_path.open(encoding="utf-8-sig", newline="") as file:
+            rows = list(csv.DictReader(file))
+        self.assertEqual(rows[0]["club_match"], "1")
+        self.assertEqual(rows[1]["club_match"], "0")
 
     def test_invalid_threshold_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "entre 0 e 100"):

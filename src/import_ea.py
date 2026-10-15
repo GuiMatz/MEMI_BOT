@@ -35,13 +35,18 @@ POSITION_MAP = {
 
 COLUMN_ALIASES = {
     "player_id": ("player_id", "sofifa_id", "ea_id", "id"),
-    "name": ("long_name", "player_name", "name", "short_name"),
-    "position": ("player_positions", "positions", "player_position", "position"),
+    "name": ("long_name", "common_name", "player_name", "name", "short_name"),
+    "position": ("position", "player_position", "player_positions", "positions"),
+    "alternate_position": ("alternate_positions", "alt_positions"),
     "overall": ("overall", "overall_rating", "rating", "ovr"),
     "birth_date": ("dob", "date_of_birth", "birth_date", "birthdate"),
     "nationality": ("nationality_name", "nationality", "nation", "country"),
     "club": ("club_name", "team_name", "club", "team"),
     "photo": ("player_face_url", "photo_url", "image_url", "photo"),
+    "edition": ("edition", "fifa_version", "game_version"),
+    "source_date": ("snapshot_date", "fifa_update_date", "update_date"),
+    "first_name": ("first_name", "firstname"),
+    "last_name": ("last_name", "lastname"),
 }
 
 
@@ -61,11 +66,22 @@ def _text(value: Any) -> str | None:
 
 
 def _source_name(path: Path) -> str:
-    match = re.search(r"fc[\s_-]*(?:20)?(24|25)", path.stem, re.IGNORECASE)
+    match = re.search(r"fc[\s_-]*(?:20)?(2[4-9])", path.stem, re.IGNORECASE)
     if match:
         return f"ea_fc{match.group(1)}"
     slug = re.sub(r"[^a-z0-9]+", "_", path.stem.lower()).strip("_")
     return f"ea_{slug}"
+
+
+def _edition(value: Any, path: Path) -> str | None:
+    cleaned = _text(value)
+    if cleaned:
+        match = re.search(r"(?:fc|fifa[\s_-]*)?(2[4-9])", cleaned, re.IGNORECASE)
+        if match:
+            return f"FC{match.group(1)}"
+    source = _source_name(path)
+    match = re.search(r"fc(2[4-9])", source, re.IGNORECASE)
+    return f"FC{match.group(1)}" if match else None
 
 
 def _columns(path: Path) -> dict[str, str]:
@@ -79,7 +95,16 @@ def _columns(path: Path) -> dict[str, str]:
             if alias in available:
                 selected[field] = available[alias]
                 break
+    if "name" not in selected:
+        if "first_name" in selected and "last_name" in selected:
+            selected["name"] = "__name_from_parts__"
+        else:
+            selected["name"] = ""
     missing = {"player_id", "name", "position", "overall"}.difference(selected)
+    if not selected.get("name") and not (
+        "first_name" in selected and "last_name" in selected
+    ):
+        missing.add("name (or first_name + last_name)")
     if missing:
         raise ValueError(
             f"{path.name}: não encontrei as colunas obrigatórias "
@@ -95,27 +120,33 @@ def _position_tokens(value: Any) -> list[str]:
         return []
     return [
         token.strip().upper()
-        for token in re.split(r"[,;/|]", str(cleaned))
+        for token in re.split(r"[,;/|\s]+", str(cleaned))
         if token.strip()
     ]
 
 
 def inspect_positions(paths: list[Path]) -> dict[str, list[str]]:
-    """Lista posições originais distintas e tokens individuais por arquivo."""
+    """Lista posições principais e alternativas distintas por arquivo."""
     result: dict[str, list[str]] = {}
     for path in paths:
-        column = _columns(path)["position"]
-        values: set[str] = set()
-        for chunk in pd.read_csv(path, usecols=[column], chunksize=5000):
-            values.update(chunk[column].dropna().astype(str).map(str.strip).tolist())
-        result[str(path)] = sorted(values)
+        columns = _columns(path)
+        for field in ("position", "alternate_position"):
+            column = columns.get(field)
+            if column is None:
+                continue
+            values: set[str] = set()
+            for chunk in pd.read_csv(path, usecols=[column], chunksize=5000):
+                values.update(
+                    chunk[column].dropna().astype(str).map(str.strip).tolist()
+                )
+            result[f"{path} [{column}]"] = sorted(values)
     return result
 
 
 def _show_positions(positions: dict[str, list[str]]) -> None:
     print("Posições EA FC distintas encontradas:")
     for path, values in positions.items():
-        print(f"- {Path(path).name}: {', '.join(values) if values else '(nenhuma)'}")
+        print(f"- {path}: {', '.join(values) if values else '(nenhuma)'}")
 
 
 def _unknown_position_tokens(positions: dict[str, list[str]]) -> dict[str, list[str]]:
@@ -160,7 +191,11 @@ def _iter_rows(
     rows_read = 0
     with pd.read_csv(
         path,
-        usecols=list(columns.values()),
+        usecols=[
+            value
+            for key, value in columns.items()
+            if not key.startswith("_") and value != "__name_from_parts__"
+        ],
         dtype={columns["player_id"]: "string"},
         chunksize=5000,
     ) as reader:
@@ -184,7 +219,16 @@ def _import_file(
 
     for row_number, row in enumerate(_iter_rows(path, columns, limit), start=2):
         source_id = _clean(row.get(columns["player_id"]))
-        name = _clean(row.get(columns["name"]))
+        name_column = columns["name"]
+        name = (
+            None
+            if name_column == "__name_from_parts__"
+            else _text(row.get(name_column))
+        )
+        if not name and "first_name" in columns and "last_name" in columns:
+            first_name = _text(row.get(columns["first_name"]))
+            last_name = _text(row.get(columns["last_name"]))
+            name = " ".join(part for part in (first_name, last_name) if part)
         if source_id is None or name is None or not str(name).strip():
             continue
         source_id = str(source_id).strip()
@@ -197,11 +241,12 @@ def _import_file(
             missing_position += 1
         game_position = POSITION_MAP.get(tokens[0]) if tokens else None
         overall = _overall(row.get(columns["overall"]), path, row_number)
+        edition = _edition(row.get(columns.get("edition", "")), path)
+        source = f"ea_{edition.lower()}" if edition else _source_name(path)
         source_club = _text(row.get(columns.get("club", "")))
         birth_date = _text(row.get(columns.get("birth_date", "")))
         nationality = _text(row.get(columns.get("nationality", "")))
         photo_url = _text(row.get(columns.get("photo", "")))
-
         existing = connection.execute(
             "SELECT player_id FROM player_sources WHERE source = ? AND source_id = ?",
             (source, source_id),
@@ -212,7 +257,8 @@ def _import_file(
                 """
                 UPDATE players SET
                     name = ?, birth_date = ?, nationality = ?, game_position = ?,
-                    overall = ?, overall_source = ?, photo_url = ?,
+                    overall = ?, overall_source = ?, overall_edition = ?,
+                    needs_position_review = ?, photo_url = ?,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
                 """,
@@ -223,6 +269,8 @@ def _import_file(
                     game_position,
                     overall,
                     source if overall is not None else None,
+                    edition if overall is not None else None,
+                    int(not tokens),
                     photo_url,
                     player_id,
                 ),
@@ -246,8 +294,9 @@ def _import_file(
                 """
                 INSERT INTO players (
                     name, birth_date, nationality, game_position, overall,
-                    overall_source, photo_url
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    overall_source, overall_edition, needs_position_review,
+                    photo_url
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     name,
@@ -256,6 +305,8 @@ def _import_file(
                     game_position,
                     overall,
                     source if overall is not None else None,
+                    edition if overall is not None else None,
+                    int(not tokens),
                     photo_url,
                 ),
             ).lastrowid

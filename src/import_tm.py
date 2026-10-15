@@ -32,6 +32,13 @@ POSITION_MAP = {
     "Second Striker": "CA",
 }
 
+GENERAL_POSITION_MAP = {
+    "Attack": "CA",
+    "Defender": "ZAG",
+    "Goalkeeper": "GOL",
+    "Midfield": "MC",
+}
+
 
 def _clean(value: Any) -> Any:
     """Converte valores ausentes do pandas em None e escalares numpy em Python."""
@@ -186,6 +193,10 @@ def _find_or_create_player(
     game_position: str | None,
     market_value: Any,
     photo_url: str | None,
+    season_last_active: int | None,
+    source_club_name: str | None,
+    source_position: str | None,
+    needs_position_review: bool,
 ) -> None:
     source_row = connection.execute(
         "SELECT player_id FROM player_sources WHERE source = ? AND source_id = ?",
@@ -200,7 +211,18 @@ def _find_or_create_player(
             """
             UPDATE players SET
                 name = ?, birth_date = ?, nationality = ?, club_id = ?,
-                original_position = ?, game_position = ?, market_value_eur = ?,
+                original_position = ?,
+                game_position = CASE WHEN EXISTS (
+                    SELECT 1 FROM player_sources
+                    WHERE player_sources.player_id = players.id
+                      AND player_sources.source LIKE 'ea_fc%'
+                ) THEN game_position ELSE ? END,
+                needs_position_review = CASE WHEN EXISTS (
+                    SELECT 1 FROM player_sources
+                    WHERE player_sources.player_id = players.id
+                      AND player_sources.source LIKE 'ea_fc%'
+                ) THEN needs_position_review ELSE ? END,
+                market_value_eur = ?, season_last_active = ?,
                 photo_url = ?, updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
             """,
@@ -211,14 +233,20 @@ def _find_or_create_player(
                 club_id,
                 original_position,
                 game_position,
+                int(needs_position_review),
                 value,
+                season_last_active,
                 photo_url,
                 player_id,
             ),
         )
         connection.execute(
-            "UPDATE player_sources SET source_name = ? WHERE source = ? AND source_id = ?",
-            (name, SOURCE, source_id),
+            """
+            UPDATE player_sources SET source_name = ?, source_club_name = ?,
+                source_position = ?
+            WHERE source = ? AND source_id = ?
+            """,
+            (name, source_club_name, source_position, SOURCE, source_id),
         )
         return
 
@@ -226,8 +254,9 @@ def _find_or_create_player(
         """
         INSERT INTO players (
             name, birth_date, nationality, club_id, original_position,
-            game_position, market_value_eur, photo_url
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            game_position, market_value_eur, season_last_active,
+            needs_position_review, photo_url
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             name,
@@ -237,15 +266,26 @@ def _find_or_create_player(
             original_position,
             game_position,
             value,
+            season_last_active,
+            int(needs_position_review),
             photo_url,
         ),
     ).lastrowid
     connection.execute(
         """
-        INSERT INTO player_sources (source, source_id, player_id, source_name)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO player_sources (
+            source, source_id, player_id, source_name, source_club_name,
+            source_position
+        ) VALUES (?, ?, ?, ?, ?, ?)
         """,
-        (SOURCE, source_id, player_id, name),
+        (
+            SOURCE,
+            source_id,
+            player_id,
+            name,
+            source_club_name,
+            source_position,
+        ),
     )
 
 
@@ -304,6 +344,7 @@ def import_transfermarkt(
         club_ids = _club_lookup(connection)
         player_count = 0
         missing_sub_position_count = 0
+        position_fallback_count = 0
 
         for row in _iter_players(players_path, limit):
             source_id = _identifier(row.get("player_id"))
@@ -319,6 +360,15 @@ def import_transfermarkt(
             broad_position = _identifier(row.get("position"))
             if sub_position is None:
                 missing_sub_position_count += 1
+            fallback_position = GENERAL_POSITION_MAP.get(broad_position)
+            game_position = POSITION_MAP.get(sub_position) or fallback_position
+            if sub_position is None and fallback_position is not None:
+                position_fallback_count += 1
+            needs_position_review = sub_position is None
+            last_season = _clean(row.get("last_season"))
+            if last_season is not None:
+                last_season = int(last_season)
+            source_club_name = _identifier(row.get("current_club_name"))
             _find_or_create_player(
                 connection=connection,
                 source_id=source_id,
@@ -327,9 +377,13 @@ def import_transfermarkt(
                 nationality=_identifier(row.get("country_of_citizenship")),
                 club_id=club_ids.get(_identifier(row.get("current_club_id"))),
                 original_position=sub_position or broad_position,
-                game_position=POSITION_MAP.get(sub_position),
+                game_position=game_position,
                 market_value=row.get("market_value_in_eur"),
                 photo_url=_identifier(row.get("image_url")),
+                season_last_active=last_season,
+                source_club_name=source_club_name,
+                source_position=sub_position or broad_position,
+                needs_position_review=needs_position_review,
             )
             player_count += 1
 
@@ -337,6 +391,7 @@ def import_transfermarkt(
         "clubs": club_count,
         "players": player_count,
         "missing_sub_position": missing_sub_position_count,
+        "position_fallback": position_fallback_count,
     }
 
 

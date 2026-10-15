@@ -44,7 +44,7 @@ class DatabaseSchemaTests(unittest.TestCase):
                     row["version"]
                     for row in connection.execute("SELECT version FROM schema_version")
                 },
-                {1, 2, 3, 4},
+                {1, 2, 3, 4, 5},
             )
 
     def test_player_constraints_reject_invalid_game_position_and_overall(self):
@@ -103,12 +103,30 @@ class DatabaseSchemaTests(unittest.TestCase):
                 row["name"]
                 for row in connection.execute("PRAGMA table_info(player_sources)")
             }
+            player_columns = {
+                row["name"] for row in connection.execute("PRAGMA table_info(players)")
+            }
             versions = {
                 row["version"]
                 for row in connection.execute("SELECT version FROM schema_version")
             }
-            self.assertTrue({"source_club_name", "source_position"}.issubset(columns))
-            self.assertEqual(versions, {1, 2, 3, 4})
+            self.assertTrue(
+                {
+                    "source_club_name",
+                    "source_position",
+                    "source_season",
+                }.issubset(columns)
+            )
+            self.assertTrue(
+                {
+                    "overall_edition",
+                    "season_last_active",
+                    "activity_status",
+                    "phase2_candidate",
+                    "needs_position_review",
+                }.issubset(player_columns)
+            )
+            self.assertEqual(versions, {1, 2, 3, 4, 5})
 
 
 if __name__ == "__main__":

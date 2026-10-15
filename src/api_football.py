@@ -206,7 +206,13 @@ def _upsert_team(connection, team: dict[str, Any], league_id: int) -> int | None
     ).fetchone()["id"]
 
 
-def _upsert_api_player(connection, entry: dict[str, Any], league_id: int) -> bool:
+def _upsert_api_player(
+    connection,
+    entry: dict[str, Any],
+    league_id: int,
+    season: int,
+    is_current_season: bool,
+) -> bool:
     player = entry.get("player") or {}
     player_source_id = player.get("id")
     name = player.get("name")
@@ -231,8 +237,18 @@ def _upsert_api_player(connection, entry: dict[str, Any], league_id: int) -> boo
         connection.execute(
             """
             UPDATE players SET
-                name = ?, birth_date = ?, nationality = ?, club_id = ?,
+                name = ?, birth_date = ?, nationality = ?,
+                club_id = CASE WHEN EXISTS (
+                    SELECT 1 FROM player_sources
+                    WHERE player_sources.player_id = players.id
+                      AND player_sources.source = 'transfermarkt'
+                ) THEN club_id ELSE ? END,
                 original_position = ?, photo_url = ?,
+                season_last_active = MAX(COALESCE(season_last_active, ?), ?),
+                activity_status = CASE WHEN ? = 1
+                    THEN 'active' ELSE activity_status END,
+                phase2_candidate = CASE WHEN ? = 1
+                    THEN 0 ELSE phase2_candidate END,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
             """,
@@ -243,19 +259,24 @@ def _upsert_api_player(connection, entry: dict[str, Any], league_id: int) -> boo
                 club_id,
                 original_position,
                 photo,
+                season,
+                season,
+                int(is_current_season),
+                int(is_current_season),
                 player_id,
             ),
         )
         connection.execute(
             """
             UPDATE player_sources SET source_name = ?, source_club_name = ?,
-                source_position = ?
+                source_position = ?, source_season = ?
             WHERE source = ? AND source_id = ?
             """,
             (
                 str(name),
                 team.get("name"),
                 original_position,
+                season,
                 "api_football",
                 str(player_source_id),
             ),
@@ -265,17 +286,28 @@ def _upsert_api_player(connection, entry: dict[str, Any], league_id: int) -> boo
     player_id = connection.execute(
         """
         INSERT INTO players (
-            name, birth_date, nationality, club_id, original_position, photo_url
-        ) VALUES (?, ?, ?, ?, ?, ?)
+            name, birth_date, nationality, club_id, original_position, photo_url,
+            season_last_active, activity_status, phase2_candidate
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (str(name), birth_date, nationality, club_id, original_position, photo),
+        (
+            str(name),
+            birth_date,
+            nationality,
+            club_id,
+            original_position,
+            photo,
+            season,
+            "active" if is_current_season else "unknown",
+            0 if is_current_season else 1,
+        ),
     ).lastrowid
     connection.execute(
         """
         INSERT INTO player_sources (
             source, source_id, player_id, source_name, source_club_name,
-            source_position
-        ) VALUES (?, ?, ?, ?, ?, ?)
+            source_position, source_season
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
         (
             "api_football",
@@ -284,6 +316,7 @@ def _upsert_api_player(connection, entry: dict[str, Any], league_id: int) -> boo
             str(name),
             team.get("name"),
             original_position,
+            season,
         ),
     )
     return True
@@ -295,12 +328,15 @@ def import_league_players(
     season: int,
     database_path: str | Path = DATABASE_PATH,
     limit: int | None = None,
+    current_season: int | None = None,
 ) -> dict[str, int | None]:
     """Importa páginas em transações e salva posição de retomada."""
     if league_id < 1 or season < 1900:
         raise ValueError("Informe IDs de liga e temporada válidos.")
     if limit is not None and limit < 1:
         raise ValueError("--limit deve ser um inteiro maior que zero.")
+    if current_season is None:
+        current_season = datetime.now().year
     initialize_database(database_path)
     key = _checkpoint_key(league_id, season)
     league_api_id = league_id
@@ -350,7 +386,13 @@ def import_league_players(
                 ).lastrowid
             imported_in_page = 0
             for entry in available:
-                if _upsert_api_player(connection, entry, internal_league_id):
+                if _upsert_api_player(
+                    connection,
+                    entry,
+                    internal_league_id,
+                    season,
+                    season == current_season,
+                ):
                     imported_in_page += 1
             players_count += imported_in_page
             page_count += 1
@@ -397,6 +439,12 @@ def main() -> None:
     )
     parser.add_argument("--database", type=Path, default=DATABASE_PATH)
     parser.add_argument(
+        "--current-season",
+        type=int,
+        default=datetime.now().year,
+        help="ano de início da temporada atual (padrão: ano corrente)",
+    )
+    parser.add_argument(
         "--limit",
         type=int,
         help="limita jogadores para teste; use primeiro para validar a temporada",
@@ -405,7 +453,12 @@ def main() -> None:
     try:
         client = ApiFootballClient()
         result = import_league_players(
-            client, args.league, args.season, args.database, args.limit
+            client,
+            args.league,
+            args.season,
+            args.database,
+            args.limit,
+            current_season=args.current_season,
         )
     except (ValueError, RuntimeError) as error:
         parser.error(str(error))

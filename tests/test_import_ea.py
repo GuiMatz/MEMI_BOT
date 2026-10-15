@@ -65,6 +65,9 @@ class EAImportTests(unittest.TestCase):
             self.assertEqual(player["game_position"], "CA")
             self.assertEqual(player["overall"], 87)
             self.assertEqual(player["overall_source"], "ea_fc25")
+            self.assertEqual(player["overall_edition"], "FC25")
+            self.assertEqual(player["activity_status"], "unknown")
+            self.assertIsNone(player["club_id"])
             self.assertEqual(source["source_club_name"], "Clube EA")
             self.assertEqual(source["source_position"], "ST, LW")
 
@@ -143,6 +146,46 @@ class EAImportTests(unittest.TestCase):
         self.assertEqual(POSITION_MAP["LWB"], "LE")
         self.assertEqual(POSITION_MAP["RWB"], "LD")
         self.assertEqual(POSITION_MAP["GK"], "GOL")
+
+    def test_fc27_schema_uses_primary_position_and_falls_back_to_full_name(self):
+        path = self.root / "players.csv"
+        pd.DataFrame(
+            [
+                {
+                    "player_id": 252371,
+                    "common_name": None,
+                    "first_name": "Jude",
+                    "last_name": "Bellingham",
+                    "position": "CAM",
+                    "alternate_positions": "CM ST",
+                    "overall_rating": 90,
+                    "edition": "fc27",
+                    "snapshot_date": "2026-09-12",
+                    "club_name": "Real Madrid",
+                }
+            ]
+        ).to_csv(path, index=False)
+        result = import_ea([path], self.database_path, show_positions=False)
+        self.assertEqual(result["players.csv"]["players"], 1)
+        with connect(self.database_path) as connection:
+            player = connection.execute("SELECT * FROM players").fetchone()
+            source = connection.execute("SELECT * FROM player_sources").fetchone()
+        self.assertEqual(player["name"], "Jude Bellingham")
+        self.assertEqual(player["game_position"], "MEI")
+        self.assertEqual(player["overall_source"], "ea_fc27")
+        self.assertEqual(player["overall_edition"], "FC27")
+        self.assertIsNone(player["club_id"])
+        self.assertEqual(source["source_club_name"], "Real Madrid")
+
+    def test_fc26_edition_is_detected_from_file_name(self):
+        path = self.root / "FC26_20250921.csv"
+        frame = pd.read_csv(self.fc25_path)
+        frame.to_csv(path, index=False)
+        import_ea([path], self.database_path, limit=1, show_positions=False)
+        with connect(self.database_path) as connection:
+            player = connection.execute("SELECT * FROM players").fetchone()
+        self.assertEqual(player["overall_edition"], "FC26")
+        self.assertEqual(player["overall_source"], "ea_fc26")
 
 
 if __name__ == "__main__":

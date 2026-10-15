@@ -46,12 +46,22 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(report["pending_match_candidates"], 0)
         self.assertEqual(report["positions"], {"(não mapeada)": 1, "CA": 1, "GOL": 1})
         self.assertEqual(report["players_without_position"], 1)
-        self.assertEqual(report["overall_bands"]["80-87"], 1)
-        self.assertEqual(report["overall_bands"]["88-99"], 1)
+        self.assertEqual(report["overall_bands"]["80-86"], 0)
+        self.assertEqual(report["overall_bands"]["87-89"], 2)
+        self.assertEqual(report["overall_bands"]["90-94"], 0)
+        self.assertEqual(report["overall_bands"]["98-99"], 0)
         self.assertEqual(report["overall_bands"]["sem overall"], 1)
         self.assertEqual(report["overall_87_plus"], 2)
+        self.assertEqual(report["position_review"], 0)
+        self.assertEqual(report["inactive_players"], 0)
+        self.assertEqual(report["unknown_activity"], 3)
+        self.assertEqual(report["phase2_candidates"], 3)
+        self.assertEqual(report["roleta_eligible"], 0)
         self.assertEqual(report["players_without_photo"], 2)
         self.assertEqual(report["clubs_without_players"], 0)
+        self.assertEqual(len(report["top_overall"]), 2)
+        self.assertEqual(len(report["top_market_value"]), 0)
+        self.assertEqual(report["clubs_without_players_list"], [])
 
     def test_empty_database_reports_zero_counts(self):
         report = build_report(self.database_path)
@@ -61,18 +71,28 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(report["pending_match_candidates"], 0)
         self.assertEqual(report["positions"], {})
         self.assertEqual(report["players_without_position"], 0)
+        self.assertEqual(report["position_review"], 0)
         self.assertEqual(report["overall_87_plus"], 0)
+        self.assertEqual(report["inactive_players"], 0)
+        self.assertEqual(report["unknown_activity"], 0)
+        self.assertEqual(report["phase2_candidates"], 0)
+        self.assertEqual(report["roleta_eligible"], 0)
         self.assertEqual(report["players_without_photo"], 0)
         self.assertEqual(report["clubs_without_players"], 0)
+        self.assertEqual(report["clubs_without_players_list"], [])
+        self.assertEqual(report["top_overall"], [])
+        self.assertEqual(report["top_market_value"], [])
         self.assertEqual(
             report["overall_bands"],
             {
-                "<50": 0,
-                "50-59": 0,
+                "1-59": 0,
                 "60-69": 0,
                 "70-79": 0,
-                "80-87": 0,
-                "88-99": 0,
+                "80-86": 0,
+                "87-89": 0,
+                "90-94": 0,
+                "95-97": 0,
+                "98-99": 0,
                 "sem overall": 0,
             },
         )

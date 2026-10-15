@@ -37,6 +37,7 @@ class TransfermarktImportTests(unittest.TestCase):
                     "position": "Midfield",
                     "market_value_in_eur": 5000000,
                     "image_url": "https://example.test/ana.jpg",
+                    "last_season": 2025,
                 },
                 {
                     "player_id": "p-2",
@@ -50,6 +51,7 @@ class TransfermarktImportTests(unittest.TestCase):
                     "position": "Missing",
                     "market_value_in_eur": None,
                     "image_url": None,
+                    "last_season": 2025,
                 },
             ]
         )
@@ -85,13 +87,25 @@ class TransfermarktImportTests(unittest.TestCase):
             )
 
         self.assertIn("Attacking Midfield", output.getvalue())
-        self.assertEqual(first, {"clubs": 1, "players": 1, "missing_sub_position": 0})
+        self.assertEqual(
+            first,
+            {
+                "clubs": 1,
+                "players": 1,
+                "missing_sub_position": 0,
+                "position_fallback": 0,
+            },
+        )
         self.assertEqual(second["players"], 1)
         with connect(self.database_path) as connection:
             player = connection.execute("SELECT * FROM players").fetchone()
             self.assertEqual(player["name"], "Ana Silva")
             self.assertEqual(player["game_position"], "MEI")
             self.assertEqual(player["market_value_eur"], 5000000)
+            self.assertEqual(player["season_last_active"], 2025)
+            self.assertEqual(player["activity_status"], "unknown")
+            self.assertEqual(player["phase2_candidate"], 1)
+            self.assertEqual(player["needs_position_review"], 0)
             self.assertEqual(
                 connection.execute("SELECT COUNT(*) FROM players").fetchone()[0], 1
             )
@@ -112,12 +126,43 @@ class TransfermarktImportTests(unittest.TestCase):
             show_positions=False,
         )
         self.assertEqual(result["missing_sub_position"], 1)
+        self.assertEqual(result["position_fallback"], 0)
         with connect(self.database_path) as connection:
             player = connection.execute(
                 "SELECT * FROM players WHERE name = ?", ("Bia Souza",)
             ).fetchone()
             self.assertEqual(player["original_position"], "Missing")
             self.assertIsNone(player["game_position"])
+            self.assertEqual(player["needs_position_review"], 1)
+
+    def test_general_position_fallback_is_marked_for_review(self):
+        from src.db import initialize_database
+
+        initialize_database(self.database_path)
+        with connect(self.database_path) as connection:
+            connection.execute(
+                """
+                INSERT INTO clubs (name, transfermarkt_id)
+                VALUES (?, ?)
+                """,
+                ("Clube Teste", "c-1"),
+            )
+        frame = pd.read_csv(self.players_path, compression="gzip")
+        frame.loc[0, "sub_position"] = None
+        frame.loc[0, "position"] = "Defender"
+        frame.to_csv(self.players_path, index=False, compression="gzip")
+        result = import_transfermarkt(
+            self.players_path,
+            self.clubs_path,
+            self.database_path,
+            limit=1,
+            show_positions=False,
+        )
+        self.assertEqual(result["position_fallback"], 1)
+        with connect(self.database_path) as connection:
+            player = connection.execute("SELECT * FROM players").fetchone()
+        self.assertEqual(player["game_position"], "ZAG")
+        self.assertEqual(player["needs_position_review"], 1)
 
     def test_unknown_sub_position_stops_before_import(self):
         frame = pd.read_csv(self.players_path, compression="gzip")

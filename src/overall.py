@@ -68,6 +68,7 @@ def recalculate_overalls(
                 connection.execute(
                     """
                     UPDATE players SET overall = ?, overall_source = 'manual',
+                        overall_edition = NULL,
                         updated_at = CURRENT_TIMESTAMP WHERE id = ?
                     """,
                     (row["manual_overall"], player_id),
@@ -86,6 +87,7 @@ def recalculate_overalls(
                 connection.execute(
                     """
                     UPDATE players SET overall = ?, overall_source = 'market_log',
+                        overall_edition = NULL,
                         updated_at = CURRENT_TIMESTAMP WHERE id = ?
                     """,
                     (overall, player_id),

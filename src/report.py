@@ -9,12 +9,14 @@ from typing import Any
 from src.db import DATABASE_PATH, connect, initialize_database
 
 OVERALL_BANDS = (
-    ("<50", 1, 49),
-    ("50-59", 50, 59),
+    ("1-59", 1, 59),
     ("60-69", 60, 69),
     ("70-79", 70, 79),
-    ("80-87", 80, 87),
-    ("88-99", 88, 99),
+    ("80-86", 80, 86),
+    ("87-89", 87, 89),
+    ("90-94", 90, 94),
+    ("95-97", 95, 97),
+    ("98-99", 98, 99),
 )
 
 
@@ -61,15 +63,53 @@ def build_report(database_path: str | Path = DATABASE_PATH) -> dict[str, Any]:
         players_without_position = connection.execute(
             "SELECT COUNT(*) FROM players WHERE game_position IS NULL"
         ).fetchone()[0]
+        position_review = connection.execute(
+            "SELECT COUNT(*) FROM players WHERE needs_position_review = 1"
+        ).fetchone()[0]
         missing_photo = connection.execute(
             "SELECT COUNT(*) FROM players WHERE photo_path IS NULL"
         ).fetchone()[0]
-        clubs_without_players = connection.execute("""
-            SELECT COUNT(*) FROM clubs AS c
-            WHERE NOT EXISTS (
-                SELECT 1 FROM players AS p WHERE p.club_id = c.id
-            )
+        inactive_players = connection.execute(
+            "SELECT COUNT(*) FROM players WHERE activity_status = 'inactive'"
+        ).fetchone()[0]
+        unknown_activity = connection.execute(
+            "SELECT COUNT(*) FROM players WHERE activity_status = 'unknown'"
+        ).fetchone()[0]
+        phase2_candidates = connection.execute(
+            "SELECT COUNT(*) FROM players WHERE phase2_candidate = 1"
+        ).fetchone()[0]
+        roleta_eligible = connection.execute("""
+            SELECT COUNT(*) FROM players
+            WHERE activity_status = 'active'
+              AND phase2_candidate = 0
+              AND overall IS NOT NULL
             """).fetchone()[0]
+        clubs_without_players_list = [dict(row) for row in connection.execute("""
+                SELECT c.id, c.name, c.transfermarkt_id
+                FROM clubs AS c
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM players AS p WHERE p.club_id = c.id
+                )
+                ORDER BY c.name, c.id
+                """)]
+        top_overall = [dict(row) for row in connection.execute("""
+                SELECT p.id, p.name, p.overall, p.overall_source,
+                       p.overall_edition, c.name AS club_name
+                FROM players AS p
+                LEFT JOIN clubs AS c ON c.id = p.club_id
+                WHERE p.overall IS NOT NULL
+                ORDER BY p.overall DESC, p.name COLLATE NOCASE, p.id
+                LIMIT 30
+                """)]
+        top_market_value = [dict(row) for row in connection.execute("""
+                SELECT p.id, p.name, p.market_value_eur, p.overall,
+                       p.overall_source, p.overall_edition, c.name AS club_name
+                FROM players AS p
+                LEFT JOIN clubs AS c ON c.id = p.club_id
+                WHERE p.market_value_eur IS NOT NULL
+                ORDER BY p.market_value_eur DESC, p.name COLLATE NOCASE, p.id
+                LIMIT 30
+                """)]
     return {
         "players_total": total,
         "source_counts": source_counts,
@@ -77,10 +117,18 @@ def build_report(database_path: str | Path = DATABASE_PATH) -> dict[str, Any]:
         "pending_match_candidates": pending_match_candidates,
         "positions": positions,
         "players_without_position": players_without_position,
+        "position_review": position_review,
         "overall_bands": overall_bands,
         "overall_87_plus": overall_87_plus,
         "players_without_photo": missing_photo,
-        "clubs_without_players": clubs_without_players,
+        "clubs_without_players": len(clubs_without_players_list),
+        "clubs_without_players_list": clubs_without_players_list,
+        "inactive_players": inactive_players,
+        "unknown_activity": unknown_activity,
+        "phase2_candidates": phase2_candidates,
+        "roleta_eligible": roleta_eligible,
+        "top_overall": top_overall,
+        "top_market_value": top_market_value,
     }
 
 
@@ -104,12 +152,44 @@ def print_report(report: dict[str, Any]) -> None:
     for position, count in report["positions"].items():
         print(f"  {position}: {count:,}")
     print(f"Sem posição de jogo: {report['players_without_position']:,}")
+    print(
+        "Jogadores marcados para revisão de posição: " f"{report['position_review']:,}"
+    )
     print("Jogadores por faixa de overall:")
     for band, count in report["overall_bands"].items():
         print(f"  {band}: {count:,}")
     print(f"Overall 87 ou maior: {report['overall_87_plus']:,}")
+    print(
+        f"Atividade: {report['inactive_players']:,} inativos, "
+        f"{report['unknown_activity']:,} desconhecidos, "
+        f"{report['phase2_candidates']:,} candidatos à fase 2"
+    )
+    print(f"Elegíveis para roleta: {report['roleta_eligible']:,}")
     print(f"Sem foto: {report['players_without_photo']:,}")
     print(f"Clubes sem jogador: {report['clubs_without_players']:,}")
+    print("Top 30 por overall:")
+    for player in report["top_overall"]:
+        club = player["club_name"] or "sem clube"
+        edition = f" [{player['overall_edition']}]" if player["overall_edition"] else ""
+        print(
+            f"  {player['overall']:>2} | {player['name']} | {club}"
+            f"{edition} (ID {player['id']})"
+        )
+    print("Top 30 por valor de mercado:")
+    for player in report["top_market_value"]:
+        club = player["club_name"] or "sem clube"
+        value = player["market_value_eur"]
+        print(
+            f"  €{value:,} | {player['name']} | {club} "
+            f"(overall {player['overall'] if player['overall'] is not None else '—'}, "
+            f"ID {player['id']})"
+        )
+    print("Clubes sem jogador associado:")
+    for club in report["clubs_without_players_list"]:
+        print(
+            f"  {club['name']} (ID {club['id']}, "
+            f"Transfermarkt {club['transfermarkt_id'] or 'sem ID'})"
+        )
 
 
 def main() -> None:

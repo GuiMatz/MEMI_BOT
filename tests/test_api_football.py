@@ -142,7 +142,11 @@ class ApiFootballImportTests(unittest.TestCase):
             self.assertEqual(checkpoint, {"page": 1, "offset": 1})
             self.assertEqual(player["game_position"], None)
             self.assertEqual(player["original_position"], "Attacker")
+            self.assertEqual(player["season_last_active"], 2024)
+            self.assertEqual(player["activity_status"], "unknown")
+            self.assertEqual(player["phase2_candidate"], 1)
             self.assertEqual(source["source_club_name"], "Time API")
+            self.assertEqual(source["source_season"], 2024)
 
         second = import_league_players(client, 39, 2024, self.database_path, limit=1)
         self.assertEqual(second["players"], 1)
@@ -190,6 +194,31 @@ class ApiFootballImportTests(unittest.TestCase):
             )
         with self.assertRaisesRegex(RuntimeError, "esgotada"):
             import_league_players(FakeClient(), 39, 2024, self.database_path)
+
+    def test_current_api_season_marks_player_active(self):
+        class FakeClient:
+            remaining_requests = 10
+            quota_date = None
+
+            def players_page(self, league_id, season, page):
+                return [
+                    {
+                        "player": {"id": 77, "name": "Ativo na temporada"},
+                        "statistics": [],
+                    }
+                ], 1
+
+        import_league_players(
+            FakeClient(),
+            39,
+            2026,
+            self.database_path,
+            current_season=2026,
+        )
+        with connect(self.database_path) as connection:
+            player = connection.execute("SELECT * FROM players").fetchone()
+        self.assertEqual(player["activity_status"], "active")
+        self.assertEqual(player["phase2_candidate"], 0)
 
 
 if __name__ == "__main__":
