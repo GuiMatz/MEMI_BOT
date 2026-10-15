@@ -313,6 +313,86 @@ class EAImportTests(unittest.TestCase):
                 connection.execute("SELECT COUNT(*) FROM players").fetchone()[0], 0
             )
 
+    def test_women_are_excluded_by_default_and_can_be_included(self):
+        path = self.root / "FC27_gender.csv"
+        pd.DataFrame(
+            [
+                {
+                    "player_id": "ea-man",
+                    "long_name": "Male Player",
+                    "player_positions": "ST",
+                    "overall": 80,
+                    "dob": "2000-01-01",
+                    "club_name": "Manchester City",
+                    "league_name": "Premier League",
+                    "gender": "Men's Football",
+                },
+                {
+                    "player_id": "ea-woman",
+                    "long_name": "Female Player",
+                    "player_positions": "ST",
+                    "overall": 90,
+                    "dob": "2000-01-02",
+                    "club_name": "Manchester City",
+                    "league_name": "Barclays WSL",
+                    "gender": "Women's Football",
+                },
+            ]
+        ).to_csv(path, index=False)
+        result = import_ea(
+            [path],
+            self.database_path,
+            show_positions=False,
+            review_path=self.root / "review.csv",
+        )
+        self.assertEqual(result[path.name]["players"], 1)
+        self.assertEqual(result[path.name]["women_excluded"], 1)
+        with connect(self.database_path) as connection:
+            names = [
+                row["name"] for row in connection.execute("SELECT name FROM players")
+            ]
+        self.assertEqual(names, ["Male Player"])
+
+        include_database = self.root / "include-women.sqlite"
+        included = import_ea(
+            [path],
+            include_database,
+            show_positions=False,
+            review_path=self.root / "review-included.csv",
+            include_women=True,
+        )
+        self.assertEqual(included[path.name]["players"], 2)
+        self.assertEqual(included[path.name]["women_excluded"], 0)
+        with connect(include_database) as connection:
+            self.assertEqual(
+                connection.execute("SELECT COUNT(*) FROM players").fetchone()[0], 2
+            )
+
+    def test_male_gender_overrides_female_club_name(self):
+        path = self.root / "FC27_male_gender.csv"
+        pd.DataFrame(
+            [
+                {
+                    "player_id": "ea-man",
+                    "long_name": "Male Player",
+                    "player_positions": "ST",
+                    "overall": 80,
+                    "dob": "2000-01-01",
+                    "club_name": "Manchester City Women",
+                    "league_name": "Premier League",
+                    "gender": "Men's Football",
+                }
+            ]
+        ).to_csv(path, index=False)
+        result = import_ea(
+            [path],
+            self.database_path,
+            show_positions=False,
+            review_path=self.root / "review.csv",
+        )
+        self.assertEqual(result[path.name]["players"], 1)
+        self.assertEqual(result[path.name]["women_excluded"], 0)
+
     def test_dry_run_does_not_modify_database_and_reports_matches(self):
         initialize_database(self.database_path)
         with connect(self.database_path) as connection:
@@ -434,6 +514,196 @@ class EAImportTests(unittest.TestCase):
                 ).fetchone()[0],
                 0,
             )
+
+    def test_dry_run_matches_name_alias_but_regular_import_does_not(self):
+        initialize_database(self.database_path)
+        with connect(self.database_path) as connection:
+            player_id = connection.execute("""
+                INSERT INTO players (
+                    name, birth_date, nationality, tm_player_id, club_name,
+                    market_value_eur, overall, overall_source, activity_status
+                ) VALUES (
+                    'Vinicius Junior', '2000-07-12', 'Brazil', '371998',
+                    'Real Madrid', 140000000, 88, 'market_log', 'active'
+                )
+                """).lastrowid
+            connection.execute(
+                """
+                INSERT INTO player_sources (source, source_id, player_id)
+                VALUES ('transfermarkt', '371998', ?)
+                """,
+                (player_id,),
+            )
+        path = self.root / "FC27_alias_20260912.csv"
+        pd.DataFrame(
+            [
+                {
+                    "player_id": "ea-vini",
+                    "common_name": "Vini Jr.",
+                    "first_name": "Vinícius José",
+                    "last_name": "de Oliveira Júnior",
+                    "position": "LW",
+                    "overall_rating": 89,
+                    "birthdate": "2000-07-12",
+                    "nationality": "Brazil",
+                    "club": "Real Madrid",
+                    "league": "LALIGA EA SPORTS",
+                    "gender": "Men's Football",
+                    "edition": "fc27",
+                    "snapshot_date": "2026-09-12",
+                }
+            ]
+        ).to_csv(path, index=False)
+
+        dry_run = simulate_ea_import(
+            [path],
+            database_path=self.database_path,
+            review_path=self.root / "dry-run-review.csv",
+        )
+        counts = dry_run["imports"][path.name]
+        self.assertEqual(counts["matched_exact"], 0)
+        self.assertEqual(counts["matched_alias"], 1)
+        self.assertEqual(counts["ambiguous"], 0)
+        self.assertEqual(counts["new_players"], 0)
+        self.assertEqual(len(dry_run["alias_matches"]), 1)
+        alias = dry_run["alias_matches"][0]
+        self.assertEqual(alias["ea_name"], "Vini Jr.")
+        self.assertEqual(alias["transfermarkt_name"], "Vinicius Junior")
+        self.assertEqual(alias["transfermarkt_id"], "371998")
+        self.assertGreaterEqual(alias["score"], 90)
+        self.assertEqual(dry_run["top_players"][0]["status"].split()[0], "casado")
+
+        regular = import_ea(
+            [path],
+            self.database_path,
+            show_positions=False,
+            review_path=self.root / "regular-review.csv",
+        )
+        self.assertEqual(regular[path.name]["matched_alias"], 0)
+        self.assertEqual(regular[path.name]["new_players"], 1)
+
+    def test_dry_run_never_alias_matches_without_equal_birth_date(self):
+        initialize_database(self.database_path)
+        with connect(self.database_path) as connection:
+            connection.execute("""
+                INSERT INTO players (
+                    name, birth_date, nationality, tm_player_id
+                ) VALUES ('Vinicius Junior', NULL, 'Brazil', '371998')
+                """)
+        path = self.root / "FC27_alias_no_birth.csv"
+        pd.DataFrame(
+            [
+                {
+                    "player_id": "ea-vini",
+                    "common_name": "Vini Jr.",
+                    "position": "LW",
+                    "overall_rating": 89,
+                    "birthdate": "2000-07-12",
+                    "nationality": "Brazil",
+                    "club": "Real Madrid",
+                    "league": "LALIGA EA SPORTS",
+                    "gender": "Men's Football",
+                    "edition": "fc27",
+                    "snapshot_date": "2026-09-12",
+                }
+            ]
+        ).to_csv(path, index=False)
+        dry_run = simulate_ea_import(
+            [path],
+            database_path=self.database_path,
+            review_path=self.root / "no-birth-review.csv",
+        )
+        counts = dry_run["imports"][path.name]
+        self.assertEqual(counts["matched_alias"], 0)
+        self.assertEqual(counts["new_players"], 1)
+
+    def test_dry_run_sends_multiple_strong_aliases_to_review(self):
+        initialize_database(self.database_path)
+        with connect(self.database_path) as connection:
+            for tm_id, player_name in (
+                ("371998", "Vinicius Junior"),
+                ("999001", "Vinicius da Silva Junior"),
+            ):
+                connection.execute(
+                    """
+                    INSERT INTO players (
+                        name, birth_date, nationality, tm_player_id
+                    ) VALUES (?, '2000-07-12', 'Brazil', ?)
+                    """,
+                    (player_name, tm_id),
+                )
+        path = self.root / "FC27_alias_ambiguous.csv"
+        pd.DataFrame(
+            [
+                {
+                    "player_id": "ea-vini",
+                    "common_name": "Vini Jr.",
+                    "position": "LW",
+                    "overall_rating": 89,
+                    "birthdate": "2000-07-12",
+                    "nationality": "Brazil",
+                    "club": "Real Madrid",
+                    "league": "LALIGA EA SPORTS",
+                    "gender": "Men's Football",
+                    "edition": "fc27",
+                    "snapshot_date": "2026-09-12",
+                }
+            ]
+        ).to_csv(path, index=False)
+        review_path = self.root / "ambiguous-alias-review.csv"
+        dry_run = simulate_ea_import(
+            [path],
+            database_path=self.database_path,
+            review_path=review_path,
+        )
+        counts = dry_run["imports"][path.name]
+        self.assertEqual(counts["matched_alias"], 0)
+        self.assertEqual(counts["ambiguous"], 1)
+        self.assertEqual(counts["new_players"], 0)
+        review = review_path.read_text(encoding="utf-8-sig")
+        self.assertIn("multiple_strong_alias_candidates", review)
+        self.assertIn("Vinicius Junior:98.0", review)
+        self.assertIn("Vinicius da Silva Junior:98.0", review)
+
+    def test_dry_run_sends_weak_alias_candidate_to_review(self):
+        initialize_database(self.database_path)
+        with connect(self.database_path) as connection:
+            connection.execute("""
+                INSERT INTO players (
+                    name, birth_date, nationality, tm_player_id
+                ) VALUES ('Rafael da Silva Santos', '1995-05-10', 'Brazil', '123456')
+                """)
+        path = self.root / "FC27_alias_weak.csv"
+        pd.DataFrame(
+            [
+                {
+                    "player_id": "ea-rafael",
+                    "common_name": "Rafael Santos",
+                    "position": "CB",
+                    "overall_rating": 75,
+                    "birthdate": "1995-05-10",
+                    "nationality": "Portugal",
+                    "club": "European Club",
+                    "league": "European League",
+                    "gender": "Men's Football",
+                    "edition": "fc27",
+                    "snapshot_date": "2026-09-12",
+                }
+            ]
+        ).to_csv(path, index=False)
+        review_path = self.root / "weak-alias-review.csv"
+        dry_run = simulate_ea_import(
+            [path],
+            database_path=self.database_path,
+            review_path=review_path,
+        )
+        counts = dry_run["imports"][path.name]
+        self.assertEqual(counts["matched_alias"], 0)
+        self.assertEqual(counts["ambiguous"], 1)
+        self.assertEqual(counts["new_players"], 0)
+        review = review_path.read_text(encoding="utf-8-sig")
+        self.assertIn("weak_alias_candidate", review)
+        self.assertIn("Rafael da Silva Santos:85.5", review)
 
 
 if __name__ == "__main__":

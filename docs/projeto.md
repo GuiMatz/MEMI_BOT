@@ -54,6 +54,12 @@ completas.
 - Para EA sem data de nascimento, tentar nome normalizado, nacionalidade e idade
   na data do snapshot (margem de um ano). Casos ambíguos ou sem dados suficientes
   vão para revisão e não são inseridos como novos.
+- Na simulação EA (`--dry-run`), aliases de nome só podem casar quando a data de
+  nascimento é igual. Um candidato forte e único pode casar; candidatos fracos
+  ou múltiplos vão para revisão, sem fusão nem inserção como novo. A importação
+  normal não usa casamento por alias.
+- Futebol feminino é excluído do importador EA por padrão; `--include-women`
+  permite sua inclusão explicitamente.
 - Jogadores que só existam no EA podem entrar como novos, exceto quando o clube
   ou a liga do registro EA for brasileira. Brasileiros que atuam fora do Brasil
   não são excluídos por cidadania.
@@ -129,11 +135,13 @@ Antes da carga, valide o cruzamento sem alterar o banco:
 python -m src.import_ea --input data/raw/players.csv --dry-run
 ```
 
-O ensaio opera sobre uma cópia SQLite temporária e relata o cruzamento,
-ambiguidades, novos registros, exclusões por clubes/ligas brasileiros, relação
-entre overall EA e estimativa de mercado, e os 30 maiores overalls. O arquivo de
+O ensaio opera sobre uma cópia SQLite temporária e relata cruzamentos exatos e
+por alias, ambiguidades, novos registros, exclusões por clubes/ligas brasileiros
+e futebol feminino, relação entre overall EA e estimativa de mercado, os 30
+maiores overalls e os 30 maiores que permaneceriam como novos. O arquivo de
 revisão é salvo em `data/review/ea_matches_dry_run.csv`; o banco original não é
-modificado.
+modificado. O casamento por alias exige data de nascimento igual e só vale para
+o `--dry-run`; candidatos fracos ou múltiplos vão para revisão, sem virar novos.
 
 O importador aceita cabeçalhos comuns EA/Sofifa e o formato FC27, valida
 overall entre 1 e 99 e interrompe antes de gravar se encontrar posição principal

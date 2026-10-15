@@ -77,11 +77,17 @@ o clube Transfermarkt não é sobrescrito. O importador cruza por nome e data de
 nascimento; sem data, usa nome, nacionalidade e idade do snapshot. Ambíguos e
 casos sem dados suficientes vão para `data/review/ea_matches.csv`, sem inserção
 como novos. Jogadores só do EA podem entrar como novos, exceto os de clubes ou
-ligas brasileiras. A edição mais recente prevalece.
+ligas brasileiras. Futebol feminino é excluído por padrão; use `--include-women`
+somente se quiser incluí-lo. A edição mais recente prevalece.
 `--dry-run` executa numa cópia temporária do banco, informa cruzamentos,
 ambiguidade, novos jogadores, exclusões brasileiras e correlação entre o
 overall EA e a estimativa de mercado. O banco original permanece somente leitura;
-o CSV de revisão da simulação vai para `data/review/ea_matches_dry_run.csv`.
+no ensaio, aliases de nome só são considerados com data de nascimento igual.
+Aliases únicos fortes podem casar; candidatos fracos ou múltiplos são enviados
+para revisão e não entram como novos. O relatório mostra os casamentos por alias,
+os 30 maiores overalls que permaneceriam como novos e o CSV de revisão da
+simulação em `data/review/ea_matches_dry_run.csv`. A importação normal não usa
+casamento por alias.
 
 ## Cruzamento e overall
 
