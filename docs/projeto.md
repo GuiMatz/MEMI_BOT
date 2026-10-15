@@ -35,19 +35,31 @@ completas.
 - Cada jogador possui uma única posição de jogo: GOL, ZAG, LD, LE, MC, MEI, PE,
   PD ou CA. Normalizações: VOL→MC, SA→CA, ALA→LD/LE (requer revisão, pois a ala
   pode corresponder a mais de um lado).
-- Overall inteiro de 1 a 99. Priorizar a nota do EA FC; estimar os demais a
-  partir de valor de mercado e peso da liga, com ajustes manuais auditáveis.
+- Overall inteiro de 1 a 99. Priorizar a nota do EA FC; estimar os demais
+  somente a partir do valor de mercado, com ajustes manuais auditáveis.
 - Valor de mercado é armazenado em euros; para exibição, limitar a faixa entre
   €5 mil e €100 milhões.
 - Nunca unir automaticamente jogadores ambíguos. Exportar candidatos para
   revisão manual.
-- O clube atual vem do Transfermarkt; o clube EA é apenas metadado da fonte.
-- Cruzar fontes por nome normalizado e data de nascimento; usar clube somente
-  para desempatar homônimos.
+- O clube atual vem do Transfermarkt; o clube EA é apenas metadado da fonte e
+  nunca sobrescreve o clube Transfermarkt.
+- Usar o ID do Transfermarkt como chave única e importar por upsert. Cruzar
+  fontes por nome normalizado e data de nascimento, sem usar clube como critério
+  de atividade, cruzamento ou cálculo de overall.
+- Exibir homônimos com nome, clube e ano de nascimento; se ainda houver colisão,
+  acrescentar o ID interno.
+- Para EA sem data de nascimento, tentar nome normalizado, nacionalidade e idade
+  na data do snapshot (margem de um ano). Casos ambíguos ou sem dados suficientes
+  vão para revisão e não são inseridos como novos.
+- Jogadores que só existam no EA podem entrar como novos, exceto quando o clube
+  ou a liga do registro EA for brasileira. Brasileiros que atuam fora do Brasil
+  não são excluídos por cidadania.
+- Se houver múltiplas edições EA, a edição mais recente prevalece. Notas EA são
+  registradas com `overall_source=EA` e a edição correspondente.
 - Guardar edição do overall e temporada de cada fonte. Na temporada 2026/27,
-  considerar ativo pelo critério Transfermarkt quando `last_season >= 2025` e
-  `current_club_id` estiver preenchido; correspondência com a tabela `clubs`
-  não é obrigatória. É uma heurística, não prova de atividade em campo: o
+  considerar ativo pelo critério Transfermarkt quando `last_season >= 2025`.
+  Clube não participa da regra de atividade. É uma heurística, não prova de
+  atividade em campo: o
   dataset publicado informa dados até 6 de julho de 2026, sem elencos 2026/27.
   A API-Football pode confirmar atividade adicionalmente.
 - Jogadores com atividade desconhecida ou sem overall não entram no pool da
@@ -93,12 +105,10 @@ O dataset testado contém 50.149 jogadores e 796 clubes. Sua coluna `position`
 contém Attack, Defender, Goalkeeper, Midfield e Missing; `sub_position` contém
 as categorias acima e está vazia para parte dos jogadores. Linhas com posição
 geral conhecida usam o fallback indicado; Missing permanece sem inferência.
-Para a temporada 2026/27, jogadores com `last_season >= 2025` e
-`current_club_id` preenchido são considerados ativos. O ID de clube não precisa
-estar em `clubs.csv.gz`; nesses casos `players.club_id` permanece nulo, embora
-o jogador possa entrar no pool se tiver overall. O dataset publicado está
-defasado em relação à temporada 2026/27; esse campo é um critério operacional,
-não confirmação de que o atleta está jogando atualmente.
+Para a temporada 2026/27, jogadores com `last_season >= 2025` são considerados
+ativos, mesmo sem clube atual informado. Clube não é critério de atividade. O
+dataset publicado está defasado em relação à temporada 2026/27; esse campo é um
+critério operacional, não confirmação de que o atleta está jogando atualmente.
 
 ## EA FC
 
@@ -114,8 +124,12 @@ O importador aceita cabeçalhos comuns EA/Sofifa e o formato FC27, valida
 overall entre 1 e 99 e interrompe antes de gravar se encontrar posição principal
 ou alternativa sem mapeamento. Para dados com mais de uma posição, a primeira
 posição listada é considerada a principal. O clube EA é guardado apenas como
-metadado da fonte; não preenche nem sobrescreve `players.club_id`. Cada edição
-EA é uma fonte separada até a etapa de revisão de correspondências.
+metadado da fonte; não preenche nem sobrescreve `players.club_name`. O
+importador cruza por nome e data de nascimento; na ausência da data, usa nome,
+nacionalidade e idade no snapshot. Ambiguidades e identidades insuficientes vão
+para `data/review/ea_matches.csv`, sem inserção como novo. Jogadores EA-only de
+clubes ou ligas brasileiras são excluídos; brasileiros em clubes estrangeiros
+não são excluídos por cidadania. Entre edições, a mais recente prevalece.
 
 | EA FC | Posição do jogo |
 | --- | --- |
@@ -138,8 +152,8 @@ python -m src.match
 ```
 
 O processo exige data de nascimento igual e compara nomes usando RapidFuzz.
-Clube serve como critério de desempate, nunca como bloqueio, pois pode estar
-desatualizado nos dados EA. Exporta candidatos acima de 75/100 para
+Clube não é critério de correspondência, pois pode estar desatualizado nos dados
+EA. Exporta candidatos acima de 75/100 para
 `data/review/player_matches.csv`. Datas conhecidas conflitantes descartam o
 candidato. Todos os pares ficam pendentes para revisão; o processo não faz merge
 automático.
@@ -149,12 +163,8 @@ automático.
 Execute `python -m src.overall --limit 100` para recalcular um lote de teste, ou
 sem `--limit` para atualizar todos. Um ajuste manual em `overall_adjustments`
 tem prioridade; em seguida é preservada a nota EA FC. Para os demais, usa-se
-uma escala logarítmica entre €5 mil/overall 30 e €100 milhões/overall 88,
-multiplicada pelo peso da liga (padrão 1,0; permitido entre 0,5 e 1,5). O
-resultado fica limitado a 1-99.
-
-Os pesos podem ser configurados na tabela `league_overall_weights`; a fórmula é
-transparente para permitir calibrar a distribuição após importar os CSVs.
+uma escala logarítmica entre €5 mil/overall 30 e €100 milhões/overall 88. O
+resultado fica limitado a 1-99; clube e liga não participam da fórmula.
 
 ## API-Football
 

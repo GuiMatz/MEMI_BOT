@@ -18,17 +18,11 @@ class PlayerMatchingTests(unittest.TestCase):
     def tearDown(self):
         self.temporary_directory.cleanup()
 
-    def _insert_player(
-        self, source, source_id, name, birth_date, club_name, club_id=None
-    ):
+    def _insert_player(self, source, source_id, name, birth_date, club_name):
         with connect(self.database_path) as connection:
-            if club_id is None and club_name:
-                club_id = connection.execute(
-                    "INSERT INTO clubs (name) VALUES (?)", (club_name,)
-                ).lastrowid
             player_id = connection.execute(
-                "INSERT INTO players (name, birth_date, club_id) VALUES (?, ?, ?)",
-                (name, birth_date, club_id),
+                "INSERT INTO players (name, birth_date, club_name) VALUES (?, ?, ?)",
+                (name, birth_date, club_name),
             ).lastrowid
             connection.execute(
                 """
@@ -95,7 +89,7 @@ class PlayerMatchingTests(unittest.TestCase):
             find_matches(self.database_path, self.review_path, threshold=50), 0
         )
 
-    def test_club_is_only_a_tie_breaker_after_name_and_birth_date(self):
+    def test_club_does_not_affect_match_candidates_or_order(self):
         self._insert_player(
             "transfermarkt", "tm-4", "Alex Silva", "2000-01-02", "Clube A"
         )
@@ -106,8 +100,8 @@ class PlayerMatchingTests(unittest.TestCase):
         )
         with self.review_path.open(encoding="utf-8-sig", newline="") as file:
             rows = list(csv.DictReader(file))
-        self.assertEqual(rows[0]["club_match"], "1")
-        self.assertEqual(rows[1]["club_match"], "0")
+        self.assertEqual([row["player_b_id"] for row in rows], ["2", "3"])
+        self.assertEqual([row["club_match"] for row in rows], ["0", "1"])
 
     def test_invalid_threshold_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "entre 0 e 100"):

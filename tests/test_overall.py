@@ -21,31 +21,12 @@ class OverallTests(unittest.TestCase):
         self.assertEqual(estimate_overall(1), 30)
         self.assertEqual(estimate_overall(200_000_000), 88)
 
-    def test_league_weight_adjusts_market_estimate_and_clamps_to_99(self):
-        self.assertEqual(estimate_overall(100_000_000, 1.1), 97)
-        self.assertEqual(estimate_overall(100_000_000, 1.5), 99)
-
-    def test_rejects_negative_value_and_invalid_weight(self):
+    def test_rejects_negative_market_value(self):
         with self.assertRaisesRegex(ValueError, "não pode ser negativo"):
             estimate_overall(-1)
-        with self.assertRaisesRegex(ValueError, "peso da liga"):
-            estimate_overall(100_000, 1.6)
 
     def test_recalculation_preserves_ea_and_applies_manual_override(self):
         with connect(self.database_path) as connection:
-            club_id = connection.execute(
-                "INSERT INTO clubs (name) VALUES (?)", ("Clube Teste",)
-            ).lastrowid
-            league_id = connection.execute(
-                "INSERT INTO leagues (name) VALUES (?)", ("Liga Teste",)
-            ).lastrowid
-            connection.execute(
-                "UPDATE clubs SET league_id = ? WHERE id = ?", (league_id, club_id)
-            )
-            connection.execute(
-                "INSERT INTO league_overall_weights (league_id, weight) VALUES (?, ?)",
-                (league_id, 1.1),
-            )
             ea_id = connection.execute(
                 """
                 INSERT INTO players (name, overall, overall_source, market_value_eur)
@@ -59,10 +40,10 @@ class OverallTests(unittest.TestCase):
             ).lastrowid
             estimated_id = connection.execute(
                 """
-                INSERT INTO players (name, club_id, market_value_eur)
+                INSERT INTO players (name, club_name, market_value_eur)
                 VALUES (?, ?, ?)
                 """,
-                ("Estimado", club_id, 100_000_000),
+                ("Estimado", "Clube Teste", 100_000_000),
             ).lastrowid
             connection.execute(
                 """
@@ -85,7 +66,7 @@ class OverallTests(unittest.TestCase):
             }
         self.assertEqual(rows["EA"], (91, "manual"))
         self.assertEqual(rows["Ajustado"], (88, "market_log"))
-        self.assertEqual(rows["Estimado"], (97, "market_log"))
+        self.assertEqual(rows["Estimado"], (88, "market_log"))
 
     def test_preserves_ea_overall_without_manual_adjustment(self):
         with connect(self.database_path) as connection:

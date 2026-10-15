@@ -65,10 +65,9 @@ def _player_sources(connection) -> list[PlayerSource]:
         SELECT ps.player_id, ps.source, ps.source_id,
                COALESCE(ps.source_name, p.name) AS name,
                p.birth_date,
-               COALESCE(ps.source_club_name, c.name) AS club
+               COALESCE(ps.source_club_name, p.club_name) AS club
         FROM player_sources AS ps
         JOIN players AS p ON p.id = ps.player_id
-        LEFT JOIN clubs AS c ON c.id = p.club_id
         ORDER BY ps.source, ps.player_id
         """)
     result = []
@@ -121,8 +120,6 @@ def _candidate_pairs(
                         and player_b.normalized_club
                         and player_a.normalized_club == player_b.normalized_club
                     )
-                    if not (birth_match or club_match):
-                        continue
                     similarity = float(
                         fuzz.WRatio(player_a.normalized_name, player_b.normalized_name)
                     )
@@ -155,7 +152,6 @@ def _candidate_pairs(
     return sorted(
         candidates.values(),
         key=lambda candidate: (
-            not bool(candidate["club_match"]),
             -float(candidate["name_similarity"]),
             int(candidate["player_a_id"]),
             int(candidate["player_b_id"]),

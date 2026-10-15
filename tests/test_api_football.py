@@ -142,6 +142,7 @@ class ApiFootballImportTests(unittest.TestCase):
             self.assertEqual(checkpoint, {"page": 1, "offset": 1})
             self.assertEqual(player["game_position"], None)
             self.assertEqual(player["original_position"], "Attacker")
+            self.assertEqual(player["club_name"], "Time API")
             self.assertEqual(player["season_last_active"], 2024)
             self.assertEqual(player["activity_status"], "unknown")
             self.assertEqual(player["phase2_candidate"], 1)

@@ -106,6 +106,8 @@ class TransfermarktImportTests(unittest.TestCase):
             self.assertEqual(player["season_last_active"], 2025)
             self.assertEqual(player["activity_status"], "active")
             self.assertEqual(player["phase2_candidate"], 0)
+            self.assertEqual(player["tm_player_id"], "p-1")
+            self.assertEqual(player["club_name"], "Clube Teste")
             self.assertEqual(player["needs_position_review"], 0)
             self.assertEqual(
                 connection.execute("SELECT COUNT(*) FROM players").fetchone()[0], 1
@@ -165,9 +167,9 @@ class TransfermarktImportTests(unittest.TestCase):
         self.assertEqual(player["game_position"], "ZAG")
         self.assertEqual(player["needs_position_review"], 1)
 
-    def test_recent_player_is_active_when_club_id_is_not_in_clubs_file(self):
+    def test_recent_player_is_active_without_current_club(self):
         frame = pd.read_csv(self.players_path, compression="gzip")
-        frame.loc[0, "current_club_id"] = "club-not-listed"
+        frame.loc[0, "current_club_id"] = None
         frame.to_csv(self.players_path, index=False, compression="gzip")
 
         import_transfermarkt(
@@ -182,7 +184,8 @@ class TransfermarktImportTests(unittest.TestCase):
             player = connection.execute("SELECT * FROM players").fetchone()
         self.assertEqual(player["activity_status"], "active")
         self.assertEqual(player["phase2_candidate"], 0)
-        self.assertIsNone(player["club_id"])
+        self.assertIsNone(player["club_name"])
+        self.assertEqual(player["tm_player_id"], "p-1")
 
     def test_player_below_activity_cutoff_remains_unknown(self):
         frame = pd.read_csv(self.players_path, compression="gzip")

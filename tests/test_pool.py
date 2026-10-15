@@ -19,8 +19,8 @@ class RoletaPoolTests(unittest.TestCase):
         with connect(self.database_path) as connection:
             connection.execute("""
                 INSERT INTO players (
-                    name, overall, activity_status, phase2_candidate
-                ) VALUES ('Ativo', 75, 'active', 0)
+                    name, game_position, overall, activity_status, phase2_candidate
+                ) VALUES ('Ativo', 'CA', 75, 'active', 0)
                 """)
             connection.execute("""
                 INSERT INTO players (name, overall, activity_status)

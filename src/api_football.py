@@ -221,7 +221,8 @@ def _upsert_api_player(
     statistics = entry.get("statistics") or []
     stat = statistics[0] if statistics else {}
     team = stat.get("team") or {}
-    club_id = _upsert_team(connection, team, league_id)
+    _upsert_team(connection, team, league_id)
+    club_name = team.get("name")
     game_info = stat.get("games") or {}
     original_position = game_info.get("position")
     birth = player.get("birth") or {}
@@ -238,11 +239,8 @@ def _upsert_api_player(
             """
             UPDATE players SET
                 name = ?, birth_date = ?, nationality = ?,
-                club_id = CASE WHEN EXISTS (
-                    SELECT 1 FROM player_sources
-                    WHERE player_sources.player_id = players.id
-                      AND player_sources.source = 'transfermarkt'
-                ) THEN club_id ELSE ? END,
+                club_name = CASE WHEN tm_player_id IS NOT NULL
+                    THEN club_name ELSE ? END,
                 original_position = ?, photo_url = ?,
                 season_last_active = MAX(COALESCE(season_last_active, ?), ?),
                 activity_status = CASE WHEN ? = 1
@@ -256,7 +254,7 @@ def _upsert_api_player(
                 str(name),
                 birth_date,
                 nationality,
-                club_id,
+                club_name,
                 original_position,
                 photo,
                 season,
@@ -286,7 +284,7 @@ def _upsert_api_player(
     player_id = connection.execute(
         """
         INSERT INTO players (
-            name, birth_date, nationality, club_id, original_position, photo_url,
+            name, birth_date, nationality, club_name, original_position, photo_url,
             season_last_active, activity_status, phase2_candidate
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
@@ -294,7 +292,7 @@ def _upsert_api_player(
             str(name),
             birth_date,
             nationality,
-            club_id,
+            club_name,
             original_position,
             photo,
             season,

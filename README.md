@@ -69,8 +69,11 @@ importador entende os formatos EA/Sofifa, inclusive o formato FC27, e valida
 posições principais e alternativas antes de gravar. Posições desconhecidas
 impedem a importação até serem revisadas. Em posições múltiplas ordenadas, usa a
 primeira como posição principal. O EA FC fornece apenas overall e posição:
-clube, valor de mercado e atividade não são inferidos do elenco EA. Cada edição
-é uma fonte distinta e os jogadores não são unidos automaticamente.
+o clube Transfermarkt não é sobrescrito. O importador cruza por nome e data de
+nascimento; sem data, usa nome, nacionalidade e idade do snapshot. Ambíguos e
+casos sem dados suficientes vão para `data/review/ea_matches.csv`, sem inserção
+como novos. Jogadores só do EA podem entrar como novos, exceto os de clubes ou
+ligas brasileiras. A edição mais recente prevalece.
 
 ## Cruzamento e overall
 
@@ -79,17 +82,16 @@ python -m src.match
 python -m src.overall --limit 100
 ```
 
-O cruzamento exige nome compatível e data de nascimento igual; o clube é apenas
-um critério de desempate, pois os elencos EA podem estar desatualizados.
+O cruzamento exige nome compatível e data de nascimento igual; clube não é
+critério de correspondência, pois os elencos EA podem estar desatualizados.
 Candidatos acima de 75/100 são gravados como `pending` em
 `player_match_candidates` e exportados para `data/review/player_matches.csv`;
 nenhum merge é aplicado automaticamente.
 
 O overall preserva as notas EA FC, salvo ajuste manual explícito. Os demais
 jogadores recebem estimativa logarítmica pelo valor de mercado (€5 mil → 30;
-€100 milhões → 88) multiplicada pelo peso da liga. Pesos não configurados usam
-1,0; a tabela `league_overall_weights` aceita valores de 0,5 a 1,5. Ajustes
-manuais ficam em `overall_adjustments`.
+€100 milhões → 88). Clube e liga não alteram a estimativa. Ajustes manuais ficam
+em `overall_adjustments`.
 
 ## API-Football
 
@@ -106,11 +108,10 @@ Importa páginas de 20 jogadores e salva página/offset para retomar. Repita o
 mesmo comando no dia seguinte para continuar do ponto salvo; a carga pode ser
 limitada com `--limit` durante testes.
 
-Na temporada 2026/27, o Transfermarkt confirma atividade quando `last_season`
-é 2025 ou posterior e `current_club_id` está preenchido. O ID não precisa estar
-presente em `clubs.csv.gz`: nesses casos o jogador é considerado ativo, mas
-fica sem clube vinculado até haver um registro correspondente. Registros sem
-esses critérios ficam com atividade `unknown`; não são automaticamente
+Na temporada 2026/27, o Transfermarkt considera ativo quem tem `last_season`
+2025 ou posterior; clube não participa da regra. O clube continua opcional para
+exibição e pode ficar vazio se não houver correspondência em `clubs.csv.gz`.
+Registros sem o corte de temporada ficam com atividade `unknown`; não são automaticamente
 marcados como inativos. A API-Football pode continuar fornecendo confirmação
 adicional, mas não é necessária para popular o pool. Jogadores sem overall
 continuam fora do pool. Esse status é uma heurística: o aviso do dataset

@@ -64,16 +64,29 @@ class EAImportTests(unittest.TestCase):
             source = connection.execute("SELECT * FROM player_sources").fetchone()
             self.assertEqual(player["game_position"], "CA")
             self.assertEqual(player["overall"], 87)
-            self.assertEqual(player["overall_source"], "ea_fc25")
+            self.assertEqual(player["overall_source"], "EA")
             self.assertEqual(player["overall_edition"], "FC25")
             self.assertEqual(player["activity_status"], "unknown")
-            self.assertIsNone(player["club_id"])
+            self.assertEqual(player["club_name"], "Clube EA")
             self.assertEqual(source["source_club_name"], "Clube EA")
             self.assertEqual(source["source_position"], "ST, LW")
 
     def test_import_is_idempotent_for_same_source_and_id(self):
-        import_ea([self.fc25_path], self.database_path, limit=1, show_positions=False)
-        import_ea([self.fc25_path], self.database_path, limit=1, show_positions=False)
+        review_path = self.root / "review.csv"
+        import_ea(
+            [self.fc25_path],
+            self.database_path,
+            limit=1,
+            show_positions=False,
+            review_path=review_path,
+        )
+        import_ea(
+            [self.fc25_path],
+            self.database_path,
+            limit=1,
+            show_positions=False,
+            review_path=review_path,
+        )
         with connect(self.database_path) as connection:
             self.assertEqual(
                 connection.execute("SELECT COUNT(*) FROM players").fetchone()[0], 1
@@ -83,14 +96,14 @@ class EAImportTests(unittest.TestCase):
                 1,
             )
 
-    def test_different_ea_sources_are_not_merged(self):
+    def test_same_player_from_different_editions_is_merged(self):
         fc24_path = self.root / "ea_fc24.csv"
         frame = pd.read_csv(self.fc25_path)
         frame.to_csv(fc24_path, index=False)
         import_ea([self.fc25_path, fc24_path], self.database_path, limit=1)
         with connect(self.database_path) as connection:
             self.assertEqual(
-                connection.execute("SELECT COUNT(*) FROM players").fetchone()[0], 2
+                connection.execute("SELECT COUNT(*) FROM players").fetchone()[0], 1
             )
             self.assertEqual(
                 connection.execute(
@@ -161,6 +174,8 @@ class EAImportTests(unittest.TestCase):
                     "overall_rating": 90,
                     "edition": "fc27",
                     "snapshot_date": "2026-09-12",
+                    "age": 23,
+                    "nationality": "England",
                     "club_name": "Real Madrid",
                 }
             ]
@@ -172,9 +187,9 @@ class EAImportTests(unittest.TestCase):
             source = connection.execute("SELECT * FROM player_sources").fetchone()
         self.assertEqual(player["name"], "Jude Bellingham")
         self.assertEqual(player["game_position"], "MEI")
-        self.assertEqual(player["overall_source"], "ea_fc27")
+        self.assertEqual(player["overall_source"], "EA")
         self.assertEqual(player["overall_edition"], "FC27")
-        self.assertIsNone(player["club_id"])
+        self.assertEqual(player["club_name"], "Real Madrid")
         self.assertEqual(source["source_club_name"], "Real Madrid")
 
     def test_fc26_edition_is_detected_from_file_name(self):
@@ -185,7 +200,118 @@ class EAImportTests(unittest.TestCase):
         with connect(self.database_path) as connection:
             player = connection.execute("SELECT * FROM players").fetchone()
         self.assertEqual(player["overall_edition"], "FC26")
-        self.assertEqual(player["overall_source"], "ea_fc26")
+        self.assertEqual(player["overall_source"], "EA")
+
+    def test_latest_edition_wins_regardless_of_input_order(self):
+        fc27_path = self.root / "FC27_20260912.csv"
+        frame = pd.read_csv(self.fc25_path).iloc[:1].copy()
+        frame["overall"] = 91
+        frame.to_csv(fc27_path, index=False)
+        import_ea(
+            [fc27_path, self.fc25_path],
+            self.database_path,
+            limit=1,
+            show_positions=False,
+            review_path=self.root / "review.csv",
+        )
+        with connect(self.database_path) as connection:
+            player = connection.execute("SELECT * FROM players").fetchone()
+        self.assertEqual(player["overall"], 91)
+        self.assertEqual(player["overall_edition"], "FC27")
+
+    def test_age_nationality_match_uses_snapshot_date(self):
+        from src.db import initialize_database
+
+        initialize_database(self.database_path)
+        with connect(self.database_path) as connection:
+            connection.execute("""
+                INSERT INTO players (
+                    name, birth_date, nationality, tm_player_id, activity_status
+                ) VALUES ('Atacante Teste', '2001-03-04', 'Brazil', 'tm-1', 'active')
+                """)
+        path = self.root / "FC27_20260912.csv"
+        pd.DataFrame(
+            [
+                {
+                    "player_id": "ea-age",
+                    "long_name": "Atacante Teste",
+                    "player_positions": "ST",
+                    "overall": 88,
+                    "age": 25,
+                    "nationality_name": "Brazil",
+                    "club_name": "Clube Europeu",
+                }
+            ]
+        ).to_csv(path, index=False)
+        result = import_ea(
+            [path],
+            self.database_path,
+            show_positions=False,
+            review_path=self.root / "review.csv",
+        )
+        self.assertEqual(result[path.name]["matched"], 1)
+        self.assertEqual(result[path.name]["new_players"], 0)
+        with connect(self.database_path) as connection:
+            self.assertEqual(
+                connection.execute("SELECT COUNT(*) FROM players").fetchone()[0], 1
+            )
+
+    def test_ambiguous_match_is_written_to_review_and_not_inserted(self):
+        from src.db import initialize_database
+
+        initialize_database(self.database_path)
+        with connect(self.database_path) as connection:
+            for tm_id in ("tm-1", "tm-2"):
+                connection.execute(
+                    """
+                    INSERT INTO players (name, birth_date, nationality, tm_player_id)
+                    VALUES ('Atacante Teste', '2001-03-04', 'Brazil', ?)
+                    """,
+                    (tm_id,),
+                )
+        review_path = self.root / "review.csv"
+        result = import_ea(
+            [self.fc25_path],
+            self.database_path,
+            limit=1,
+            show_positions=False,
+            review_path=review_path,
+        )
+        self.assertEqual(result[self.fc25_path.name]["ambiguous"], 1)
+        with connect(self.database_path) as connection:
+            self.assertEqual(
+                connection.execute("SELECT COUNT(*) FROM players").fetchone()[0], 2
+            )
+        self.assertIn(
+            "multiple_identity_matches", review_path.read_text(encoding="utf-8-sig")
+        )
+
+    def test_brazilian_ea_only_player_is_excluded(self):
+        path = self.root / "FC27_brazil.csv"
+        pd.DataFrame(
+            [
+                {
+                    "player_id": "ea-br",
+                    "long_name": "Jogador Brasil",
+                    "player_positions": "ST",
+                    "overall": 80,
+                    "dob": "2000-01-01",
+                    "club_name": "Time X",
+                    "league_name": "Campeonato Brasileiro Série A",
+                }
+            ]
+        ).to_csv(path, index=False)
+        result = import_ea(
+            [path],
+            self.database_path,
+            show_positions=False,
+            review_path=self.root / "review.csv",
+        )
+        self.assertEqual(result[path.name]["brazil_excluded"], 1)
+        with connect(self.database_path) as connection:
+            self.assertEqual(
+                connection.execute("SELECT COUNT(*) FROM players").fetchone()[0], 0
+            )
 
 
 if __name__ == "__main__":

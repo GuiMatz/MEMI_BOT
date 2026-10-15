@@ -12,19 +12,12 @@ MIN_MARKET_VALUE_EUR = 5_000
 MAX_MARKET_VALUE_EUR = 100_000_000
 MIN_MARKET_OVERALL = 30
 MAX_MARKET_OVERALL = 88
-MIN_LEAGUE_WEIGHT = 0.5
-MAX_LEAGUE_WEIGHT = 1.5
 
 
-def estimate_overall(market_value_eur: int, league_weight: float = 1.0) -> int:
-    """Estima overall por log do valor e multiplicador editável da liga."""
+def estimate_overall(market_value_eur: int) -> int:
+    """Estima overall somente pelo valor de mercado."""
     if market_value_eur < 0:
         raise ValueError("O valor de mercado não pode ser negativo.")
-    if not MIN_LEAGUE_WEIGHT <= league_weight <= MAX_LEAGUE_WEIGHT:
-        raise ValueError(
-            f"O peso da liga deve estar entre {MIN_LEAGUE_WEIGHT} e "
-            f"{MAX_LEAGUE_WEIGHT}."
-        )
     bounded_value = min(
         max(market_value_eur, MIN_MARKET_VALUE_EUR), MAX_MARKET_VALUE_EUR
     )
@@ -33,7 +26,7 @@ def estimate_overall(market_value_eur: int, league_weight: float = 1.0) -> int:
         * math.log(bounded_value / MIN_MARKET_VALUE_EUR)
         / math.log(MAX_MARKET_VALUE_EUR / MIN_MARKET_VALUE_EUR)
     )
-    return max(1, min(99, round(market_score * league_weight)))
+    return max(1, min(99, round(market_score)))
 
 
 def recalculate_overalls(
@@ -47,11 +40,8 @@ def recalculate_overalls(
     updated = {"manual": 0, "ea_preserved": 0, "estimated": 0, "skipped": 0}
     query = """
         SELECT p.id, p.overall, p.overall_source, p.market_value_eur,
-               COALESCE(lw.weight, 1.0) AS league_weight,
                oa.overall AS manual_overall
         FROM players AS p
-        LEFT JOIN clubs AS c ON c.id = p.club_id
-        LEFT JOIN league_overall_weights AS lw ON lw.league_id = c.league_id
         LEFT JOIN overall_adjustments AS oa ON oa.player_id = p.id
         ORDER BY p.id
     """
@@ -77,13 +67,14 @@ def recalculate_overalls(
             elif (
                 row["overall"] is not None
                 and row["overall_source"]
-                and row["overall_source"].startswith("ea_")
+                and (
+                    row["overall_source"].casefold() == "ea"
+                    or row["overall_source"].casefold().startswith("ea_")
+                )
             ):
                 updated["ea_preserved"] += 1
             elif row["market_value_eur"] is not None:
-                overall = estimate_overall(
-                    row["market_value_eur"], row["league_weight"]
-                )
+                overall = estimate_overall(row["market_value_eur"])
                 connection.execute(
                     """
                     UPDATE players SET overall = ?, overall_source = 'market_log',

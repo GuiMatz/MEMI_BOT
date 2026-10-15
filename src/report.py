@@ -3,10 +3,16 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from src.db import DATABASE_PATH, connect, initialize_database
+from src.db import (
+    DATABASE_PATH,
+    connect,
+    initialize_database,
+    normalize_player_name,
+)
 
 OVERALL_BANDS = (
     ("1-59", 1, 59),
@@ -47,6 +53,14 @@ def build_report(database_path: str | Path = DATABASE_PATH) -> dict[str, Any]:
                 SELECT COUNT(*) FROM player_match_candidates
                 WHERE status = 'pending'
                 """).fetchone()[0]
+        ea_match_stats = connection.execute("""
+                SELECT
+                    COALESCE(SUM(matched), 0) AS matched,
+                    COALESCE(SUM(ambiguous), 0) AS ambiguous,
+                    COALESCE(SUM(new_players), 0) AS new_players,
+                    COALESCE(SUM(brazil_excluded), 0) AS brazil_excluded
+                FROM ea_import_stats
+                """).fetchone()
         overall_bands = {
             label: connection.execute(
                 "SELECT COUNT(*) FROM players WHERE overall BETWEEN ? AND ?",
@@ -83,38 +97,71 @@ def build_report(database_path: str | Path = DATABASE_PATH) -> dict[str, Any]:
             WHERE activity_status = 'active'
               AND phase2_candidate = 0
               AND overall IS NOT NULL
+              AND game_position IS NOT NULL
             """).fetchone()[0]
         clubs_without_players_list = [dict(row) for row in connection.execute("""
                 SELECT c.id, c.name, c.transfermarkt_id
                 FROM clubs AS c
                 WHERE NOT EXISTS (
-                    SELECT 1 FROM players AS p WHERE p.club_id = c.id
+                    SELECT 1 FROM players AS p
+                    WHERE p.club_name = c.name
                 )
                 ORDER BY c.name, c.id
                 """)]
         top_overall = [dict(row) for row in connection.execute("""
-                SELECT p.id, p.name, p.overall, p.overall_source,
-                       p.overall_edition, c.name AS club_name
+                SELECT p.id, p.name, p.display_name, p.overall, p.overall_source,
+                       p.overall_edition, p.club_name
                 FROM players AS p
-                LEFT JOIN clubs AS c ON c.id = p.club_id
                 WHERE p.overall IS NOT NULL
-                ORDER BY p.overall DESC, p.name COLLATE NOCASE, p.id
+                ORDER BY p.overall DESC, p.display_name COLLATE NOCASE, p.id
                 LIMIT 30
                 """)]
         top_market_value = [dict(row) for row in connection.execute("""
-                SELECT p.id, p.name, p.market_value_eur, p.overall,
-                       p.overall_source, p.overall_edition, c.name AS club_name
+                SELECT p.id, p.name, p.display_name, p.market_value_eur, p.overall,
+                       p.overall_source, p.overall_edition, p.club_name
                 FROM players AS p
-                LEFT JOIN clubs AS c ON c.id = p.club_id
                 WHERE p.market_value_eur IS NOT NULL
-                ORDER BY p.market_value_eur DESC, p.name COLLATE NOCASE, p.id
+                ORDER BY p.market_value_eur DESC, p.display_name COLLATE NOCASE, p.id
                 LIMIT 30
                 """)]
+        duplicate_tm_ids = connection.execute("""
+                SELECT COALESCE(SUM(duplicate_count - 1), 0)
+                FROM (
+                    SELECT COUNT(*) AS duplicate_count
+                    FROM players
+                    WHERE tm_player_id IS NOT NULL
+                    GROUP BY tm_player_id
+                    HAVING COUNT(*) > 1
+                )
+                """).fetchone()[0]
+        name_birth_rows = connection.execute("""
+                SELECT name, birth_date FROM players
+                WHERE birth_date IS NOT NULL
+                """).fetchall()
+    duplicate_name_births: dict[tuple[str, str], int] = Counter()
+    for row in name_birth_rows:
+        normalized_name = normalize_player_name(row["name"])
+        birth_date = str(row["birth_date"])[:10]
+        if normalized_name and birth_date:
+            duplicate_name_births[(normalized_name, birth_date)] += 1
+    duplicate_name_birth_groups = sum(
+        count > 1 for count in duplicate_name_births.values()
+    )
+    duplicate_name_birth_players = sum(
+        count - 1 for count in duplicate_name_births.values() if count > 1
+    )
     return {
         "players_total": total,
         "source_counts": source_counts,
         "cross_source_players": cross_source_players,
         "pending_match_candidates": pending_match_candidates,
+        "ea_matched": ea_match_stats["matched"],
+        "ea_ambiguous": ea_match_stats["ambiguous"],
+        "ea_new_players": ea_match_stats["new_players"],
+        "ea_brazil_excluded": ea_match_stats["brazil_excluded"],
+        "duplicate_transfermarkt_ids": duplicate_tm_ids,
+        "duplicate_name_birth_groups": duplicate_name_birth_groups,
+        "duplicate_name_birth_players": duplicate_name_birth_players,
         "positions": positions,
         "players_without_position": players_without_position,
         "position_review": position_review,
@@ -148,6 +195,19 @@ def print_report(report: dict[str, Any]) -> None:
         "Candidatos de cruzamento pendentes de revisão: "
         f"{report['pending_match_candidates']:,}"
     )
+    print(
+        "Importação EA: "
+        f"{report['ea_matched']:,} casados, "
+        f"{report['ea_ambiguous']:,} ambíguos, "
+        f"{report['ea_new_players']:,} novos, "
+        f"{report['ea_brazil_excluded']:,} novos do Brasil ignorados"
+    )
+    print("IDs Transfermarkt duplicados: " f"{report['duplicate_transfermarkt_ids']:,}")
+    print(
+        "Duplicados por nome e data de nascimento: "
+        f"{report['duplicate_name_birth_players']:,} registros excedentes "
+        f"em {report['duplicate_name_birth_groups']:,} grupos"
+    )
     print("Jogadores por posição:")
     for position, count in report["positions"].items():
         print(f"  {position}: {count:,}")
@@ -172,7 +232,7 @@ def print_report(report: dict[str, Any]) -> None:
         club = player["club_name"] or "sem clube"
         edition = f" [{player['overall_edition']}]" if player["overall_edition"] else ""
         print(
-            f"  {player['overall']:>2} | {player['name']} | {club}"
+            f"  {player['overall']:>2} | {player['display_name']} | {club}"
             f"{edition} (ID {player['id']})"
         )
     print("Top 30 por valor de mercado:")
@@ -180,7 +240,7 @@ def print_report(report: dict[str, Any]) -> None:
         club = player["club_name"] or "sem clube"
         value = player["market_value_eur"]
         print(
-            f"  €{value:,} | {player['name']} | {club} "
+            f"€{value:,} | {player['display_name']} | {club} "
             f"(overall {player['overall'] if player['overall'] is not None else '—'}, "
             f"ID {player['id']})"
         )

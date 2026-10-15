@@ -18,13 +18,14 @@ def get_roleta_pool(
         raise ValueError("--limit deve ser um inteiro maior que zero.")
     initialize_database(database_path)
     query = """
-        SELECT p.id, p.name, p.club_id, p.game_position, p.overall,
+        SELECT p.id, p.name, p.display_name, p.club_name, p.game_position, p.overall,
                p.overall_source, p.overall_edition
         FROM players AS p
         WHERE p.activity_status = 'active'
           AND p.phase2_candidate = 0
           AND p.overall IS NOT NULL
-        ORDER BY p.overall DESC, p.name
+          AND p.game_position IS NOT NULL
+        ORDER BY p.overall DESC, p.display_name, p.id
     """
     if limit is not None:
         query += " LIMIT ?"

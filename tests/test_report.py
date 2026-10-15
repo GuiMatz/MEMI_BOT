@@ -44,6 +44,13 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(report["source_counts"], {"ea_fc25": 1})
         self.assertEqual(report["cross_source_players"], 0)
         self.assertEqual(report["pending_match_candidates"], 0)
+        self.assertEqual(report["duplicate_transfermarkt_ids"], 0)
+        self.assertEqual(report["duplicate_name_birth_groups"], 0)
+        self.assertEqual(report["duplicate_name_birth_players"], 0)
+        self.assertEqual(report["ea_matched"], 0)
+        self.assertEqual(report["ea_ambiguous"], 0)
+        self.assertEqual(report["ea_new_players"], 0)
+        self.assertEqual(report["ea_brazil_excluded"], 0)
         self.assertEqual(report["positions"], {"(não mapeada)": 1, "CA": 1, "GOL": 1})
         self.assertEqual(report["players_without_position"], 1)
         self.assertEqual(report["overall_bands"]["80-86"], 0)
@@ -69,6 +76,13 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(report["source_counts"], {})
         self.assertEqual(report["cross_source_players"], 0)
         self.assertEqual(report["pending_match_candidates"], 0)
+        self.assertEqual(report["duplicate_transfermarkt_ids"], 0)
+        self.assertEqual(report["duplicate_name_birth_groups"], 0)
+        self.assertEqual(report["duplicate_name_birth_players"], 0)
+        self.assertEqual(report["ea_matched"], 0)
+        self.assertEqual(report["ea_ambiguous"], 0)
+        self.assertEqual(report["ea_new_players"], 0)
+        self.assertEqual(report["ea_brazil_excluded"], 0)
         self.assertEqual(report["positions"], {})
         self.assertEqual(report["players_without_position"], 0)
         self.assertEqual(report["position_review"], 0)
@@ -96,6 +110,27 @@ class ReportTests(unittest.TestCase):
                 "sem overall": 0,
             },
         )
+
+    def test_roleta_count_excludes_players_without_game_position(self):
+        with connect(self.database_path) as connection:
+            connection.execute("""
+                INSERT INTO players (
+                    name, overall, activity_status, phase2_candidate
+                ) VALUES ('Sem posição', 70, 'active', 0)
+                """)
+            connection.execute("""
+                INSERT INTO ea_import_stats (
+                    source, matched, ambiguous, new_players, brazil_excluded
+                ) VALUES ('ea_fc27', 3, 2, 4, 1)
+                """)
+
+        report = build_report(self.database_path)
+
+        self.assertEqual(report["roleta_eligible"], 0)
+        self.assertEqual(report["ea_matched"], 3)
+        self.assertEqual(report["ea_ambiguous"], 2)
+        self.assertEqual(report["ea_new_players"], 4)
+        self.assertEqual(report["ea_brazil_excluded"], 1)
 
 
 if __name__ == "__main__":

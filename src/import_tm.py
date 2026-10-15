@@ -185,11 +185,11 @@ def _import_clubs(connection, clubs_path: str | Path) -> int:
 
 def _find_or_create_player(
     connection,
-    source_id: str,
+    tm_player_id: str,
     name: str,
     birth_date: str | None,
     nationality: str | None,
-    club_id: int | None,
+    club_name: str | None,
     original_position: str | None,
     game_position: str | None,
     market_value: Any,
@@ -201,18 +201,19 @@ def _find_or_create_player(
     needs_position_review: bool,
 ) -> None:
     source_row = connection.execute(
-        "SELECT player_id FROM player_sources WHERE source = ? AND source_id = ?",
-        (SOURCE, source_id),
+        "SELECT id FROM players WHERE tm_player_id = ?",
+        (tm_player_id,),
     ).fetchone()
     value = _clean(market_value)
     if value is not None:
         value = int(value)
     if source_row:
-        player_id = source_row["player_id"]
+        player_id = source_row["id"]
         connection.execute(
             """
             UPDATE players SET
-                name = ?, birth_date = ?, nationality = ?, club_id = ?,
+                name = ?, tm_player_id = ?, birth_date = ?, nationality = ?,
+                club_name = ?,
                 original_position = ?,
                 game_position = CASE WHEN EXISTS (
                     SELECT 1 FROM player_sources
@@ -231,9 +232,10 @@ def _find_or_create_player(
             """,
             (
                 name,
+                tm_player_id,
                 birth_date,
                 nationality,
-                club_id,
+                club_name,
                 original_position,
                 game_position,
                 int(needs_position_review),
@@ -251,24 +253,25 @@ def _find_or_create_player(
                 source_position = ?
             WHERE source = ? AND source_id = ?
             """,
-            (name, source_club_name, source_position, SOURCE, source_id),
+            (name, source_club_name, source_position, SOURCE, tm_player_id),
         )
         return
 
     player_id = connection.execute(
         """
         INSERT INTO players (
-            name, birth_date, nationality, club_id, original_position,
+            name, tm_player_id, birth_date, nationality, club_name, original_position,
             game_position, market_value_eur, season_last_active,
             activity_status, phase2_candidate, needs_position_review,
             photo_url
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             name,
+            tm_player_id,
             birth_date,
             nationality,
-            club_id,
+            club_name,
             original_position,
             game_position,
             value,
@@ -288,7 +291,7 @@ def _find_or_create_player(
         """,
         (
             SOURCE,
-            source_id,
+            tm_player_id,
             player_id,
             name,
             source_club_name,
@@ -297,11 +300,11 @@ def _find_or_create_player(
     )
 
 
-def _club_lookup(connection) -> dict[str, int]:
+def _club_lookup(connection) -> dict[str, str]:
     return {
-        row["transfermarkt_id"]: row["id"]
+        row["transfermarkt_id"]: row["name"]
         for row in connection.execute(
-            "SELECT id, transfermarkt_id FROM clubs WHERE transfermarkt_id IS NOT NULL"
+            "SELECT name, transfermarkt_id FROM clubs WHERE transfermarkt_id IS NOT NULL"
         )
     }
 
@@ -349,7 +352,7 @@ def import_transfermarkt(
     initialize_database(database_path)
     with connect(database_path) as connection:
         club_count = _import_clubs(connection, clubs_path)
-        club_ids = _club_lookup(connection)
+        club_names = _club_lookup(connection)
         player_count = 0
         active_player_count = 0
         missing_sub_position_count = 0
@@ -380,19 +383,17 @@ def import_transfermarkt(
             current_club_id = _identifier(row.get("current_club_id"))
             activity_status = (
                 "active"
-                if last_season is not None
-                and last_season >= ACTIVE_LAST_SEASON_CUTOFF
-                and current_club_id is not None
+                if last_season is not None and last_season >= ACTIVE_LAST_SEASON_CUTOFF
                 else "unknown"
             )
             source_club_name = _identifier(row.get("current_club_name"))
             _find_or_create_player(
                 connection=connection,
-                source_id=source_id,
+                tm_player_id=source_id,
                 name=name,
                 birth_date=_identifier(row.get("date_of_birth")),
                 nationality=_identifier(row.get("country_of_citizenship")),
-                club_id=club_ids.get(current_club_id),
+                club_name=club_names.get(current_club_id),
                 original_position=sub_position or broad_position,
                 game_position=game_position,
                 market_value=row.get("market_value_in_eur"),
@@ -405,6 +406,9 @@ def import_transfermarkt(
             )
             player_count += 1
             active_player_count += activity_status == "active"
+        from src.db import refresh_display_names
+
+        refresh_display_names(connection)
 
     return {
         "clubs": club_count,
