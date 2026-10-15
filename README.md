@@ -6,6 +6,9 @@ brutos, fotos e credenciais não devem ser versionados.
 
 ## Preparação
 
+Para a visão do jogo, ideias de mecânicas, comandos planejados e decisões
+pendentes, consulte o [guia de ideias do jogo](docs/guia-ideias-jogo.md).
+
 No Windows, a partir desta pasta:
 
 ```powershell
@@ -62,6 +65,7 @@ notas desatualizados. Primeiro inspecione as posições disponíveis:
 ```powershell
 python -m src.import_ea --show-positions
 python -m src.import_ea --limit 100
+python -m src.import_ea --input "C:\caminho\FC27_20260912.csv" --dry-run
 ```
 
 Ou informe arquivos explicitamente com um ou mais `--input caminho.csv`. O
@@ -74,6 +78,10 @@ nascimento; sem data, usa nome, nacionalidade e idade do snapshot. Ambíguos e
 casos sem dados suficientes vão para `data/review/ea_matches.csv`, sem inserção
 como novos. Jogadores só do EA podem entrar como novos, exceto os de clubes ou
 ligas brasileiras. A edição mais recente prevalece.
+`--dry-run` executa numa cópia temporária do banco, informa cruzamentos,
+ambiguidade, novos jogadores, exclusões brasileiras e correlação entre o
+overall EA e a estimativa de mercado. O banco original permanece somente leitura;
+o CSV de revisão da simulação vai para `data/review/ea_matches_dry_run.csv`.
 
 ## Cruzamento e overall
 

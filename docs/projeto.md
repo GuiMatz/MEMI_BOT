@@ -1,5 +1,8 @@
 # Bot Memi (Mudae de futebol) — fase 1: coleta de dados
 
+Para a visão do produto, mecânicas planejadas e roteiro do bot no Discord,
+consulte o [guia de ideias do jogo](./guia-ideias-jogo.md).
+
 ## Objetivo
 
 Montar uma base local, reproduzível e revisável para o futuro bot de futebol.
@@ -119,6 +122,18 @@ desatualizados. Antes de importar, confira as categorias reais com:
 ```bash
 python -m src.import_ea --show-positions
 ```
+
+Antes da carga, valide o cruzamento sem alterar o banco:
+
+```bash
+python -m src.import_ea --input data/raw/players.csv --dry-run
+```
+
+O ensaio opera sobre uma cópia SQLite temporária e relata o cruzamento,
+ambiguidades, novos registros, exclusões por clubes/ligas brasileiros, relação
+entre overall EA e estimativa de mercado, e os 30 maiores overalls. O arquivo de
+revisão é salvo em `data/review/ea_matches_dry_run.csv`; o banco original não é
+modificado.
 
 O importador aceita cabeçalhos comuns EA/Sofifa e o formato FC27, valida
 overall entre 1 e 99 e interrompe antes de gravar se encontrar posição principal

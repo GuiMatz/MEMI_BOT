@@ -8,6 +8,8 @@ import re
 from collections.abc import Iterator
 from datetime import date
 from pathlib import Path
+import sqlite3
+import tempfile
 from typing import Any
 
 import pandas as pd
@@ -82,6 +84,7 @@ COLUMN_ALIASES = {
         "league_country",
         "league_country_name",
         "competition_country",
+        "country",
     ),
     "age": ("age", "player_age"),
     "photo": ("player_face_url", "photo_url", "image_url", "photo"),
@@ -632,6 +635,280 @@ def _import_file(
     }
 
 
+def _copy_database_read_only(source_path: Path, target_path: Path) -> None:
+    if not source_path.is_file():
+        raise FileNotFoundError(f"Banco SQLite não encontrado: {source_path}")
+    source = sqlite3.connect(
+        f"file:{source_path.resolve().as_posix()}?mode=ro", uri=True
+    )
+    target = sqlite3.connect(target_path)
+    try:
+        source.backup(target)
+        target.commit()
+    finally:
+        target.close()
+        source.close()
+
+
+def _display_name_from_row(row: dict[str, Any], columns: dict[str, str]) -> str | None:
+    selected = columns["name"]
+    name = None if selected == "__name_from_parts__" else _text(row.get(selected))
+    if not name and "first_name" in columns and "last_name" in columns:
+        first = _text(row.get(columns["first_name"]))
+        last = _text(row.get(columns["last_name"]))
+        name = " ".join(part for part in (first, last) if part) or None
+    return name
+
+
+def _source_id(value: Any) -> str | None:
+    cleaned = _clean(value)
+    if cleaned is None:
+        return None
+    result = str(cleaned).strip()
+    if result.endswith(".0") and result[:-2].isdigit():
+        result = result[:-2]
+    return result or None
+
+
+def simulate_ea_import(
+    paths: list[Path],
+    database_path: str | Path = DATABASE_PATH,
+    limit: int | None = None,
+    review_path: str | Path | None = None,
+) -> dict[str, Any]:
+    """Simula importação em cópia isolada; o banco informado é somente leitura."""
+    if not paths:
+        raise ValueError("Nenhum CSV EA FC foi informado.")
+    if limit is not None and limit < 1:
+        raise ValueError("--limit deve ser um inteiro maior que zero.")
+
+    columns_by_path = {path: _columns(path) for path in paths}
+    for path, columns in columns_by_path.items():
+        missing = {"birth_date", "age"}.intersection(columns)
+        if not missing:
+            print(f"{path.name}: sem coluna de data de nascimento ou idade.")
+
+    if review_path is None:
+        review_path = ROOT / "data" / "review" / "ea_matches_dry_run.csv"
+    output_review = Path(review_path)
+
+    with tempfile.TemporaryDirectory(prefix="memi-ea-dry-run-") as temporary:
+        simulated_database = Path(temporary) / "memi-simulation.sqlite"
+        _copy_database_read_only(Path(database_path), simulated_database)
+
+        from src.overall import estimate_overall
+
+        with connect(simulated_database) as connection:
+            market_overalls = {
+                row["id"]: (
+                    estimate_overall(row["market_value_eur"])
+                    if row["market_value_eur"] is not None
+                    else None
+                )
+                for row in connection.execute(
+                    "SELECT id, market_value_eur FROM players"
+                )
+            }
+
+        import_results = import_ea(
+            paths,
+            database_path=simulated_database,
+            limit=limit,
+            show_positions=False,
+            review_path=output_review,
+        )
+
+        with connect(simulated_database) as connection:
+            imported_sources = {
+                (row["source"], row["source_id"]): dict(row)
+                for row in connection.execute("""
+                    SELECT ps.source, ps.source_id, p.id AS player_id,
+                           p.tm_player_id, p.display_name, p.name, p.overall
+                    FROM player_sources AS ps
+                    JOIN players AS p ON p.id = ps.player_id
+                    WHERE ps.source LIKE 'ea_fc%'
+                    """)
+            }
+
+        review_entries: dict[tuple[str, str], dict[str, str]] = {}
+        if output_review.is_file():
+            with output_review.open(encoding="utf-8-sig", newline="") as file:
+                for entry in csv.DictReader(file):
+                    review_entries[(entry["source"], entry["source_id"])] = entry
+
+        comparisons: list[tuple[int, int, int]] = []
+        top_players: list[dict[str, Any]] = []
+        file_summaries: list[dict[str, Any]] = []
+        for path in paths:
+            columns = columns_by_path[path]
+            frame = pd.read_csv(path)
+            birth_column = columns.get("birth_date")
+            age_column = columns.get("age")
+            birth_count = (
+                int(frame[birth_column].notna().sum())
+                if birth_column is not None
+                else 0
+            )
+            age_count = (
+                int(frame[age_column].notna().sum()) if age_column is not None else 0
+            )
+            editions = (
+                sorted(frame[columns["edition"]].dropna().astype(str).unique())
+                if columns.get("edition")
+                else []
+            )
+            snapshots = (
+                sorted(frame[columns["source_date"]].dropna().astype(str).unique())
+                if columns.get("source_date")
+                else []
+            )
+            file_summaries.append(
+                {
+                    "path": path,
+                    "columns": list(frame.columns),
+                    "birth_date_column": birth_column,
+                    "birth_date_count": birth_count,
+                    "age_column": age_column,
+                    "age_count": age_count,
+                    "editions": editions,
+                    "snapshots": snapshots,
+                    "rows": len(frame),
+                }
+            )
+
+            def record_identity(row: dict[str, Any]) -> tuple[str, str] | None:
+                source_id = _source_id(row.get(columns["player_id"]))
+                edition = _edition(row.get(columns.get("edition", "")), path)
+                source = (
+                    f"ea_fc{edition[2:].lower()}" if edition else _source_name(path)
+                )
+                if source_id is None:
+                    return None
+                return source, source_id
+
+            ordered = frame.sort_values(
+                by=columns["overall"], ascending=False, kind="stable"
+            ).head(30)
+            for source_row in ordered.to_dict(orient="records"):
+                identity = record_identity(source_row)
+                if identity is None:
+                    continue
+                imported = imported_sources.get(identity)
+                review = review_entries.get(identity)
+                club = _text(source_row.get(columns.get("club", "")))
+                league = _text(source_row.get(columns.get("league", "")))
+                league_country = _text(
+                    source_row.get(columns.get("league_country", ""))
+                )
+                if review:
+                    status = f"ambíguo: {review['candidate_names'] or review['reason']}"
+                elif imported and imported["tm_player_id"] is not None:
+                    status = f"casado TM {imported['tm_player_id']}"
+                elif imported:
+                    status = "entraria como novo"
+                elif _is_brazilian_team(club, league, league_country):
+                    status = "excluído: clube/liga brasileira"
+                else:
+                    status = "não importado (linha inválida ou fora do limite)"
+                top_players.append(
+                    {
+                        "name": _display_name_from_row(source_row, columns)
+                        or "(sem nome)",
+                        "overall": source_row.get(columns["overall"]),
+                        "club": club or "(sem clube)",
+                        "source_id": identity[1],
+                        "status": status,
+                    }
+                )
+
+        for (source, source_id), imported in imported_sources.items():
+            if imported["tm_player_id"] is None:
+                continue
+            market_overall = market_overalls.get(imported["player_id"])
+            ea_overall = imported["overall"]
+            if market_overall is not None and ea_overall is not None:
+                comparisons.append(
+                    (market_overall, ea_overall, ea_overall - market_overall)
+                )
+
+        correlation = (
+            float(
+                pd.Series([entry[0] for entry in comparisons]).corr(
+                    pd.Series([entry[1] for entry in comparisons])
+                )
+            )
+            if len(comparisons) >= 2
+            else None
+        )
+        average_difference = (
+            sum(entry[2] for entry in comparisons) / len(comparisons)
+            if comparisons
+            else None
+        )
+        matched_total = sum(counts["matched"] for counts in import_results.values())
+        matched_without_market_value = matched_total - len(comparisons)
+
+    for summary in file_summaries:
+        print(f"Arquivo: {summary['path']}")
+        print(f"Colunas ({len(summary['columns'])}): {', '.join(summary['columns'])}")
+        if summary["birth_date_column"]:
+            print(
+                f"Data de nascimento: {summary['birth_date_column']} "
+                f"({summary['birth_date_count']:,} preenchidos); "
+                f"idade: {summary['age_column'] or 'sem coluna'} "
+                f"({summary['age_count']:,} preenchidos)"
+            )
+        else:
+            print(
+                f"Sem data de nascimento; idade: {summary['age_column'] or 'sem coluna'} "
+                f"({summary['age_count']:,} preenchidos)"
+            )
+        print(f"Edições: {', '.join(summary['editions']) or '(sem coluna)'}")
+        print(f"Snapshots: {', '.join(summary['snapshots']) or '(sem coluna)'}")
+        print(f"Linhas no arquivo: {summary['rows']:,}")
+
+    print("Resultado simulado (o banco original não foi alterado):")
+    for filename, counts in import_results.items():
+        print(
+            f"{filename}: {counts['matched']:,} casados com TM; "
+            f"{counts['ambiguous']:,} ambíguos; "
+            f"{counts['new_players']:,} novos; "
+            f"{counts['brazil_excluded']:,} excluídos por clube/liga brasileira."
+        )
+    print(
+        f"Correlação de Pearson EA vs. estimativa de mercado: " f"{correlation:.4f}"
+        if correlation is not None
+        else "Correlação de Pearson EA vs. estimativa de mercado: indefinida."
+    )
+    print(
+        f"Jogadores comparados: {len(comparisons):,}; diferença média "
+        f"(EA - mercado): {average_difference:+.2f} pontos."
+        if average_difference is not None
+        else "Jogadores comparados: 0; diferença média indisponível."
+    )
+    print(
+        f"Casados sem valor de mercado para comparar: "
+        f"{matched_without_market_value:,}."
+    )
+    print(f"CSV de revisão (simulação): {output_review}")
+    print("Top 30 overalls do EA e resultado do cruzamento:")
+    for player in top_players[:30]:
+        print(
+            f"  {player['overall']:>2} | {player['name']} | {player['club']} "
+            f"| EA ID {player['source_id']} | {player['status']}"
+        )
+    return {
+        "imports": import_results,
+        "file_summaries": file_summaries,
+        "comparisons": len(comparisons),
+        "matched_without_market_value": matched_without_market_value,
+        "correlation": correlation,
+        "average_difference": average_difference,
+        "review_path": output_review,
+        "top_players": top_players[:30],
+    }
+
+
 def import_ea(
     paths: list[Path],
     database_path: str | Path = DATABASE_PATH,
@@ -734,6 +1011,16 @@ def main() -> None:
         action="store_true",
         help="lista colunas e posições distintas sem importar",
     )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="simula a importação em cópia temporária, sem alterar o banco",
+    )
+    parser.add_argument(
+        "--review-output",
+        type=Path,
+        help="caminho do CSV de revisão (padrão: data/review/ea_matches_dry_run.csv)",
+    )
     args = parser.parse_args()
     paths = args.inputs or sorted(RAW_DIRECTORY.glob("*.csv"))
 
@@ -745,10 +1032,19 @@ def main() -> None:
                 )
             _show_positions(inspect_positions(paths))
             return
+        if args.dry_run:
+            simulate_ea_import(
+                paths,
+                database_path=args.database,
+                limit=args.limit,
+                review_path=args.review_output,
+            )
+            return
         result = import_ea(
             paths,
             database_path=args.database,
             limit=args.limit,
+            review_path=args.review_output,
         )
     except (OSError, ValueError, KeyError, pd.errors.ParserError) as error:
         parser.error(str(error))

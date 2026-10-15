@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from src.db import connect
-from src.import_ea import POSITION_MAP, import_ea
+from src.db import connect, initialize_database
+from src.import_ea import POSITION_MAP, import_ea, simulate_ea_import
 
 
 class EAImportTests(unittest.TestCase):
@@ -311,6 +311,128 @@ class EAImportTests(unittest.TestCase):
         with connect(self.database_path) as connection:
             self.assertEqual(
                 connection.execute("SELECT COUNT(*) FROM players").fetchone()[0], 0
+            )
+
+    def test_dry_run_does_not_modify_database_and_reports_matches(self):
+        initialize_database(self.database_path)
+        with connect(self.database_path) as connection:
+            for name, birth_date, tm_id, value in (
+                ("Matched One", "2000-01-01", "tm-1", 5_000_000),
+                ("Matched Two", "1999-01-01", "tm-2", 50_000_000),
+                ("Twin Name", "2001-01-01", "tm-3", 1_000_000),
+                ("Twin Name", "2001-01-01", "tm-4", 2_000_000),
+            ):
+                player_id = connection.execute(
+                    """
+                    INSERT INTO players (
+                        name, birth_date, nationality, tm_player_id,
+                        market_value_eur, overall_source, activity_status
+                    ) VALUES (?, ?, 'Brazil', ?, ?, 'market_log', 'active')
+                    """,
+                    (name, birth_date, tm_id, value),
+                ).lastrowid
+                connection.execute(
+                    """
+                    INSERT INTO player_sources (source, source_id, player_id)
+                    VALUES ('transfermarkt', ?, ?)
+                    """,
+                    (tm_id, player_id),
+                )
+
+        path = self.root / "FC27_20260912.csv"
+        pd.DataFrame(
+            [
+                {
+                    "player_id": "ea-1",
+                    "common_name": "Matched One",
+                    "position": "ST",
+                    "overall_rating": 90,
+                    "birthdate": "2000-01-01",
+                    "nationality": "Brazil",
+                    "club": "Overseas Club",
+                    "league": "Premier League",
+                    "edition": "fc27",
+                    "snapshot_date": "2026-09-12",
+                },
+                {
+                    "player_id": "ea-2",
+                    "common_name": "Matched Two",
+                    "position": "CM",
+                    "overall_rating": 80,
+                    "birthdate": "1999-01-01",
+                    "nationality": "Brazil",
+                    "club": "Overseas Club",
+                    "league": "Premier League",
+                    "edition": "fc27",
+                    "snapshot_date": "2026-09-12",
+                },
+                {
+                    "player_id": "ea-3",
+                    "common_name": "New Player",
+                    "position": "CB",
+                    "overall_rating": 70,
+                    "birthdate": "2002-01-01",
+                    "nationality": "Portugal",
+                    "club": "European Club",
+                    "league": "Primeira Liga",
+                    "edition": "fc27",
+                    "snapshot_date": "2026-09-12",
+                },
+                {
+                    "player_id": "ea-4",
+                    "common_name": "Brazil Player",
+                    "position": "ST",
+                    "overall_rating": 75,
+                    "birthdate": "2002-02-02",
+                    "nationality": "Portugal",
+                    "club": "Brazilian Club",
+                    "league": "Brasileirão Série A",
+                    "edition": "fc27",
+                    "snapshot_date": "2026-09-12",
+                },
+                {
+                    "player_id": "ea-5",
+                    "common_name": "Twin Name",
+                    "position": "LW",
+                    "overall_rating": 72,
+                    "birthdate": "2001-01-01",
+                    "nationality": "Brazil",
+                    "club": "Overseas Club",
+                    "league": "Premier League",
+                    "edition": "fc27",
+                    "snapshot_date": "2026-09-12",
+                },
+            ]
+        ).to_csv(path, index=False)
+        review_path = self.root / "ea-review.csv"
+
+        result = simulate_ea_import(
+            [path],
+            database_path=self.database_path,
+            review_path=review_path,
+        )
+
+        counts = result["imports"][path.name]
+        self.assertEqual(counts["matched"], 2)
+        self.assertEqual(counts["ambiguous"], 1)
+        self.assertEqual(counts["new_players"], 1)
+        self.assertEqual(counts["brazil_excluded"], 1)
+        self.assertEqual(result["comparisons"], 2)
+        self.assertIsNotNone(result["correlation"])
+        self.assertTrue(review_path.is_file())
+        with connect(self.database_path) as connection:
+            self.assertEqual(
+                connection.execute("SELECT COUNT(*) FROM players").fetchone()[0], 4
+            )
+            self.assertEqual(
+                connection.execute("SELECT COUNT(*) FROM player_sources").fetchone()[0],
+                4,
+            )
+            self.assertEqual(
+                connection.execute(
+                    "SELECT COUNT(*) FROM player_sources WHERE source LIKE 'ea_%'"
+                ).fetchone()[0],
+                0,
             )
 
 
