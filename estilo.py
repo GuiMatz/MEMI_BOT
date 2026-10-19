@@ -169,7 +169,7 @@ def embed_ranking(
     return embed
 
 
-def embed_ajuda(secoes):
+def embed_ajuda(secoes, pagina=None, total_paginas=None):
     """Ajuda agrupada: cada seção é (título, [(comando, descrição), ...])."""
     blocos = [
         f"**{nome}**\n" + "\n".join(f"`{comando}` — {descricao}" for comando, descricao in comandos)
@@ -180,7 +180,10 @@ def embed_ajuda(secoes):
         description=cortar("\n\n".join(blocos), LIMITE_DESCRICAO),
         color=COR_PADRAO,
     )
-    embed.set_footer(text=rodape("mês e ano atuais", "horário de Brasília"))
+    partes_rodape = ["mês e ano atuais", "horário de Brasília"]
+    if pagina is not None and total_paginas is not None:
+        partes_rodape.insert(0, f"página {pagina + 1}/{total_paginas}")
+    embed.set_footer(text=rodape(*partes_rodape))
     return embed
 
 

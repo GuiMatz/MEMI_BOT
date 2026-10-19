@@ -11,6 +11,7 @@ import logging
 import os
 import shutil
 import socket
+import sys
 import typing
 import unicodedata
 from logging.handlers import RotatingFileHandler
@@ -59,6 +60,12 @@ from estilo import (
     texto_progresso,
 )
 from estilo import rodape as rodape_do_bot
+
+GAME_PROJECT_ROOT = Path(__file__).resolve().parent / "bot-memi"
+if str(GAME_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(GAME_PROJECT_ROOT))
+
+from src.db import DATABASE_PATH as GAME_DATABASE_PATH, initialize_database
 
 # --- CONFIGURAÇÃO ---------------------------------------------------------
 # O token fica no arquivo "token.txt" na mesma pasta do bot (só o token, nada mais).
@@ -3674,6 +3681,38 @@ AJUDA = [
     ),
 ]
 
+AJUDA_JOGO = [
+    (
+        "🎲 Rolls e derivados",
+        [
+            ("mm!roll", "rola um jogador; use o botão para reivindicar ou resgatar moedas"),
+            ("mm!daily", "resgata Memilets uma vez por dia"),
+            ("mm!upgrade", "consulta ou compra upgrades de rolls, wishes, daily e exclusividade"),
+            ("mm!crates", "abre uma crate por 500 Memilets"),
+            ("mm!wish <jogador>", "adiciona/remove wish; sem jogador, lista suas wishes"),
+            ("mm!starwish <jogador>", "adiciona/remove Star Wish; sem jogador, lista"),
+            ("mm!im <nome>", "procura um jogador pelo nome"),
+            ("mm!top [quantidade]", "mostra os maiores overalls elegíveis"),
+            ("mm!elenco [@pessoa] [filtro]", "consulta elenco; filtros: posição, overall, clube ou liga"),
+            ("mm!carteira", "consulta seu saldo de Memilets"),
+            ("mm!demitir <id>", "libera jogador e recebe reembolso"),
+            ("mm!troca @pessoa <seu_id> <id_dela> [moedas]", "propõe troca de jogadores e Memilets"),
+            ("mm!time [campo valor]", "consulta ou personaliza seu time"),
+            ("mm!escalar <id>", "escala ou remove jogador da formação"),
+            ("mm!tatica <operação> <valor>", "configura formação, estilo e cobradores"),
+            ("mm!amistoso @pessoa", "simula partida entre dois times completos"),
+            ("mm!campeonato inscrever", "inscreve seu time no campeonato diário"),
+            ("mm!campeonato", "consulta classificação e resultados"),
+            ("mm!campeonato iniciar", "inicia o campeonato (requer Gerenciar servidor)"),
+            ("mm!campeonato canal [#canal]", "configura o canal dos avisos do campeonato"),
+            ("mm!campeonato ativar", "ativa o agendamento diário (requer configuração)"),
+            ("mm!left", "mostra jogadores, uniformes e logos ainda disponíveis"),
+            ("mm!ima <time ou série>", "lista jogadores do time ou série por overall"),
+            ("mm!ajudajogo", "mostra a ajuda do jogo"),
+        ],
+    ),
+]
+
 
 class ChangelogView(discord.ui.View):
     """Uma versão do histórico com um menu para trocar de versão (também as passadas)."""
@@ -3720,10 +3759,60 @@ class ChangelogView(discord.ui.View):
                 pass
 
 
+class AjudaView(discord.ui.View):
+    """Navegação entre páginas da lista de comandos."""
+
+    def __init__(self, secoes_por_pagina):
+        super().__init__(timeout=180)
+        self.paginas = [
+            embed_ajuda(
+                secoes,
+                pagina=pagina,
+                total_paginas=len(secoes_por_pagina),
+            )
+            for pagina, secoes in enumerate(secoes_por_pagina)
+        ]
+        self.pagina = 0
+        self.message = None
+        self._atualizar_botoes()
+
+    def _atualizar_botoes(self):
+        self.anterior.disabled = self.pagina == 0
+        self.proxima.disabled = self.pagina == len(self.paginas) - 1
+
+    @discord.ui.button(label="◀", style=discord.ButtonStyle.secondary)
+    async def anterior(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.pagina = max(0, self.pagina - 1)
+        self._atualizar_botoes()
+        await interaction.response.edit_message(
+            embed=self.paginas[self.pagina],
+            view=self,
+        )
+
+    @discord.ui.button(label="▶", style=discord.ButtonStyle.secondary)
+    async def proxima(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.pagina = min(len(self.paginas) - 1, self.pagina + 1)
+        self._atualizar_botoes()
+        await interaction.response.edit_message(
+            embed=self.paginas[self.pagina],
+            view=self,
+        )
+
+    async def on_timeout(self):
+        for button in self.children:
+            button.disabled = True
+        if self.message:
+            try:
+                await self.message.edit(view=self)
+            except discord.HTTPException:
+                pass
+
+
 class Ajuda(commands.Cog):
     @commands.command(name="help", aliases=["ajuda", "comandos"])
     async def ajuda(self, ctx):
-        embed = embed_ajuda(AJUDA)
+        view = AjudaView([AJUDA, AJUDA_JOGO])
+        embed = view.paginas[0]
         musicas = self.bot.get_cog("Musicas") if self.bot else None
         arquivo = None
         if musicas:
@@ -3731,10 +3820,10 @@ class Ajuda(commands.Cog):
                 imagens.gerar_ajuda, "ajuda.png", canal=getattr(ctx, "channel", None)
             )
         if arquivo is None:
-            await ctx.send(embed=embed)
+            view.message = await ctx.send(embed=embed, view=view)
             return
         embed.set_image(url="attachment://ajuda.png")
-        await ctx.send(embed=embed, file=arquivo)
+        view.message = await ctx.send(embed=embed, file=arquivo, view=view)
 
     @commands.command(name="changelog", aliases=["novidades", "versao", "versão", "cl"])
     async def changelog(self, ctx, versao: str = ""):
@@ -3762,6 +3851,16 @@ COGS = [Musicas, Atividade, Ajuda]  # Atividade usa o banco do Musicas: vem depo
 class MeMiBot(commands.Bot):
     async def setup_hook(self):
         for cog in COGS:
+            await self.add_cog(cog(self))
+        from src.cogs.economy import EconomyCog
+        from src.cogs.game import GameCog
+        from src.cogs.matches import MatchesCog
+        from src.cogs.rolls import RollsCog
+        from src.cogs.team import TeamCog
+        from src.cogs.trades import TradesCog
+        initialize_database(GAME_DATABASE_PATH)
+        self.database_path = GAME_DATABASE_PATH
+        for cog in (GameCog, EconomyCog, RollsCog, TradesCog, TeamCog, MatchesCog):
             await self.add_cog(cog(self))
 
     async def on_ready(self):

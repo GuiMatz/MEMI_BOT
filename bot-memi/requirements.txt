@@ -1,0 +1,6 @@
+pandas
+requests
+python-dotenv
+rapidfuzz
+discord.py>=2.4,<3.0
+Pillow>=10,<13

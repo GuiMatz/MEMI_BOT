@@ -1,0 +1,493 @@
+"""Gerenciamento de elencos, formações e imagem local do time."""
+
+from __future__ import annotations
+
+import json
+import re
+from collections import Counter
+from pathlib import Path
+from typing import Any
+
+from src.db import DATABASE_PATH, ROOT, connect
+from src.game import register_user
+
+FORMATIONS: dict[str, tuple[str, ...]] = {
+    "4-4-2": ("GOL", "ZAG", "ZAG", "LD", "LE", "MC", "MC", "MEI", "MEI", "CA", "CA"),
+    "4-3-3": ("GOL", "ZAG", "ZAG", "LD", "LE", "MC", "MC", "MEI", "PE", "PD", "CA"),
+    "3-5-2": ("GOL", "ZAG", "ZAG", "ZAG", "LD", "LE", "MC", "MC", "MEI", "CA", "CA"),
+    "4-2-3-1": ("GOL", "ZAG", "ZAG", "LD", "LE", "MC", "MC", "MEI", "PE", "PD", "CA"),
+    "5-3-2": ("GOL", "ZAG", "ZAG", "ZAG", "LD", "LE", "MC", "MC", "MEI", "CA", "CA"),
+    "4-1-4-1": ("GOL", "ZAG", "ZAG", "LD", "LE", "MC", "MC", "MEI", "MEI", "PE", "CA"),
+    "3-4-3": ("GOL", "ZAG", "ZAG", "ZAG", "LD", "LE", "MC", "MEI", "PE", "PD", "CA"),
+    "4-5-1": ("GOL", "ZAG", "ZAG", "LD", "LE", "MC", "MC", "MEI", "MEI", "PE", "CA"),
+    "5-4-1": ("GOL", "ZAG", "ZAG", "ZAG", "LD", "LE", "MC", "MC", "MEI", "PE", "CA"),
+    "4-3-2-1": ("GOL", "ZAG", "ZAG", "LD", "LE", "MC", "MC", "MEI", "PE", "PD", "CA"),
+}
+
+STYLE_LABELS = {
+    "balanced": "equilibrado",
+    "attack": "ataque total",
+    "counter": "contra-ataque",
+}
+
+POSITION_GROUPS = {
+    "GOL": "G",
+    "ZAG": "D",
+    "LD": "D",
+    "LE": "D",
+    "MC": "M",
+    "MEI": "M",
+    "PE": "A",
+    "PD": "A",
+    "CA": "A",
+}
+
+
+class TeamError(Exception):
+    """Erro de validação da escalação ou perfil do time."""
+
+
+def ensure_team(
+    discord_user_id: int | str,
+    display_name: str,
+    database_path: str | Path = DATABASE_PATH,
+) -> None:
+    user_id = str(discord_user_id)
+    register_user(user_id, display_name, database_path)
+    with connect(database_path) as connection:
+        connection.execute(
+            """
+            INSERT INTO game_teams (discord_user_id, team_name)
+            VALUES (?, ?)
+            ON CONFLICT(discord_user_id) DO NOTHING
+            """,
+            (user_id, f"{display_name} FC"[:50]),
+        )
+        connection.execute(
+            """
+            INSERT INTO team_tactics (discord_user_id)
+            VALUES (?)
+            ON CONFLICT(discord_user_id) DO NOTHING
+            """,
+            (user_id,),
+        )
+
+
+def get_team(
+    discord_user_id: int | str,
+    database_path: str | Path = DATABASE_PATH,
+) -> dict[str, Any] | None:
+    with connect(database_path) as connection:
+        row = connection.execute(
+            """
+            SELECT t.*, x.formation, x.style, x.captain_player_id,
+                   x.free_kick_player_id, x.penalty_player_id
+            FROM game_teams AS t
+            LEFT JOIN team_tactics AS x
+              ON x.discord_user_id = t.discord_user_id
+            WHERE t.discord_user_id = ?
+            """,
+            (str(discord_user_id),),
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def set_team_field(
+    discord_user_id: int | str,
+    field: str,
+    value: str,
+    database_path: str | Path = DATABASE_PATH,
+) -> None:
+    allowed = {
+        "team_name",
+        "color",
+        "mascot",
+        "coach_name",
+        "stadium_name",
+        "logo_path",
+        "kit_path",
+    }
+    if field not in allowed:
+        raise ValueError("Campo de time inválido.")
+    if field == "team_name" and not 1 <= len(value.strip()) <= 50:
+        raise TeamError("O nome do time deve ter entre 1 e 50 caracteres.")
+    if field == "color":
+        if not re.fullmatch(r"#[0-9a-fA-F]{6}", value):
+            raise TeamError("Use uma cor hexadecimal, por exemplo `#2E8B57`.")
+        value = value.upper()
+    if field in {"mascot", "coach_name", "stadium_name"} and len(value.strip()) > 80:
+        raise TeamError("Esse campo pode ter até 80 caracteres.")
+    if field in {"logo_path", "kit_path"}:
+        value = resolve_local_asset(value).relative_to(ROOT).as_posix()
+    with connect(database_path) as connection:
+        cursor = connection.execute(
+            f"""
+            UPDATE game_teams
+            SET {field} = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE discord_user_id = ?
+            """,
+            (value.strip(), str(discord_user_id)),
+        )
+        if cursor.rowcount == 0:
+            raise TeamError("Seu time ainda não foi criado.")
+
+
+def resolve_local_asset(path: str | Path) -> Path:
+    base = (ROOT / "data" / "assets" / "brasfoot").resolve()
+    candidate = Path(path)
+    if not candidate.is_absolute():
+        candidate = base / candidate
+    resolved = candidate.resolve()
+    if base not in resolved.parents or not resolved.is_file():
+        raise TeamError(
+            "A imagem precisa existir dentro de `data/assets/brasfoot/`."
+        )
+    if resolved.suffix.casefold() not in {".png", ".jpg", ".jpeg", ".webp"}:
+        raise TeamError("A imagem precisa ser PNG, JPG ou WEBP.")
+    return resolved
+
+
+def set_formation(
+    discord_user_id: int | str,
+    formation: str,
+    database_path: str | Path = DATABASE_PATH,
+) -> None:
+    normalized = formation.strip()
+    if normalized not in FORMATIONS:
+        raise TeamError(
+            "Formação inválida. Escolha uma: " + ", ".join(FORMATIONS) + "."
+        )
+    user_id = str(discord_user_id)
+    with connect(database_path) as connection:
+        team = connection.execute(
+            "SELECT 1 FROM game_teams WHERE discord_user_id = ?",
+            (user_id,),
+        ).fetchone()
+        if team is None:
+            raise TeamError("Configure seu time primeiro com `mm!time`.")
+        lineup = connection.execute(
+            """
+            SELECT position, COUNT(*) AS amount FROM team_lineups
+            WHERE discord_user_id = ? GROUP BY position
+            """,
+            (user_id,),
+        ).fetchall()
+        current_counts = Counter(
+            {row["position"]: int(row["amount"]) for row in lineup}
+        )
+        allowed_counts = Counter(FORMATIONS[normalized])
+        if any(current_counts[position] > allowed_counts[position] for position in current_counts):
+            raise TeamError(
+                "A formação nova não comporta sua escalação atual. "
+                "Remova os jogadores incompatíveis e tente novamente."
+            )
+        connection.execute(
+            "UPDATE team_tactics SET formation = ? WHERE discord_user_id = ?",
+            (normalized, user_id),
+        )
+        available_slots: dict[str, list[int]] = {}
+        for slot, position in enumerate(FORMATIONS[normalized], start=1):
+            available_slots.setdefault(position, []).append(slot)
+        players = connection.execute(
+            """
+            SELECT slot_order, player_id, position FROM team_lineups
+            WHERE discord_user_id = ? ORDER BY slot_order
+            """,
+            (user_id,),
+        ).fetchall()
+        connection.execute(
+            "DELETE FROM team_lineups WHERE discord_user_id = ?",
+            (user_id,),
+        )
+        for player in players:
+            slot = available_slots[player["position"]].pop(0)
+            connection.execute(
+                """
+                INSERT INTO team_lineups
+                    (discord_user_id, slot_order, player_id, position)
+                VALUES (?, ?, ?, ?)
+                """,
+                (user_id, slot, player["player_id"], player["position"]),
+            )
+
+
+def set_team_style(
+    discord_user_id: int | str,
+    style: str,
+    database_path: str | Path = DATABASE_PATH,
+) -> None:
+    aliases = {
+        "equilibrado": "balanced",
+        "balanced": "balanced",
+        "ataque": "attack",
+        "ataque total": "attack",
+        "attack": "attack",
+        "contra": "counter",
+        "contra-ataque": "counter",
+        "counter": "counter",
+    }
+    normalized = aliases.get(style.casefold().strip())
+    if normalized is None:
+        raise TeamError("Estilo inválido: equilibrado, ataque ou contra-ataque.")
+    with connect(database_path) as connection:
+        cursor = connection.execute(
+            "UPDATE team_tactics SET style = ? WHERE discord_user_id = ?",
+            (normalized, str(discord_user_id)),
+        )
+        if cursor.rowcount == 0:
+            raise TeamError("Configure seu time primeiro com `mm!time`.")
+
+
+def scale_player(
+    discord_user_id: int | str,
+    player_id: int,
+    database_path: str | Path = DATABASE_PATH,
+) -> int:
+    user_id = str(discord_user_id)
+    with connect(database_path) as connection:
+        ownership = connection.execute(
+            """
+            SELECT p.game_position
+            FROM player_ownership AS o
+            JOIN players AS p ON p.id = o.player_id
+            WHERE o.discord_user_id = ? AND p.id = ?
+            """,
+            (user_id, player_id),
+        ).fetchone()
+        if ownership is None:
+            raise TeamError("Esse jogador não pertence ao seu elenco.")
+        position = ownership["game_position"]
+        if position not in POSITION_GROUPS:
+            raise TeamError("Esse jogador não tem uma posição válida para escalar.")
+        team = connection.execute(
+            """
+            SELECT t.discord_user_id, x.formation
+            FROM game_teams AS t
+            JOIN team_tactics AS x ON x.discord_user_id = t.discord_user_id
+            WHERE t.discord_user_id = ?
+            """,
+            (user_id,),
+        ).fetchone()
+        if team is None:
+            raise TeamError("Configure seu time primeiro com `mm!time`.")
+        if connection.execute(
+            """
+            SELECT 1 FROM team_lineups
+            WHERE discord_user_id = ? AND player_id = ?
+            """,
+            (user_id, player_id),
+        ).fetchone():
+            raise TeamError("Esse jogador já está escalado.")
+        positions = FORMATIONS[team["formation"]]
+        occupied = {
+            int(row["slot_order"])
+            for row in connection.execute(
+                "SELECT slot_order FROM team_lineups WHERE discord_user_id = ?",
+                (user_id,),
+            )
+        }
+        slot_order = next(
+            (
+                index
+                for index, required in enumerate(positions, start=1)
+                if required == position and index not in occupied
+            ),
+            None,
+        )
+        if slot_order is None:
+            raise TeamError(
+                f"A formação {team['formation']} não tem vaga para mais um {position}."
+            )
+        connection.execute(
+            """
+            INSERT INTO team_lineups (discord_user_id, slot_order, player_id, position)
+            VALUES (?, ?, ?, ?)
+            """,
+            (user_id, slot_order, player_id, position),
+        )
+        return slot_order
+
+
+def remove_player_from_lineup(
+    discord_user_id: int | str,
+    player_id: int,
+    database_path: str | Path = DATABASE_PATH,
+) -> bool:
+    with connect(database_path) as connection:
+        cursor = connection.execute(
+            """
+            DELETE FROM team_lineups
+            WHERE discord_user_id = ? AND player_id = ?
+            """,
+            (str(discord_user_id), player_id),
+        )
+    return cursor.rowcount > 0
+
+
+def set_team_role(
+    discord_user_id: int | str,
+    role: str,
+    player_id: int,
+    database_path: str | Path = DATABASE_PATH,
+) -> None:
+    columns = {
+        "capitao": "captain_player_id",
+        "falta": "free_kick_player_id",
+        "penalti": "penalty_player_id",
+    }
+    column = columns.get(role)
+    if column is None:
+        raise ValueError("Função tática inválida.")
+    with connect(database_path) as connection:
+        row = connection.execute(
+            """
+            SELECT 1 FROM team_lineups
+            WHERE discord_user_id = ? AND player_id = ?
+            """,
+            (str(discord_user_id), player_id),
+        ).fetchone()
+        if row is None:
+            raise TeamError("O jogador precisa estar na escalação para essa função.")
+        connection.execute(
+            f"UPDATE team_tactics SET {column} = ? WHERE discord_user_id = ?",
+            (player_id, str(discord_user_id)),
+        )
+
+
+def get_lineup(
+    discord_user_id: int | str,
+    database_path: str | Path = DATABASE_PATH,
+) -> list[dict[str, Any]]:
+    with connect(database_path) as connection:
+        rows = connection.execute(
+            """
+            SELECT l.slot_order, l.position, p.id, p.name, p.display_name,
+                   p.overall, p.club_name,
+                   MIN(99, p.overall + COALESCE(b.balls, 0)) AS effective_overall
+            FROM team_lineups AS l
+            JOIN players AS p ON p.id = l.player_id
+            LEFT JOIN player_balls AS b ON b.player_id = p.id
+            WHERE l.discord_user_id = ?
+            ORDER BY l.slot_order
+            """,
+            (str(discord_user_id),),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def get_team_statistics(
+    discord_user_id: int | str,
+    database_path: str | Path = DATABASE_PATH,
+) -> dict[str, Any]:
+    user_id = str(discord_user_id)
+    with connect(database_path) as connection:
+        fixtures = [
+            dict(row)
+            for row in connection.execute(
+                """
+                SELECT f.*, c.status AS championship_status
+                FROM championship_fixtures AS f
+                JOIN championships AS c ON c.id = f.championship_id
+                WHERE c.status = 'completed'
+                  AND (f.home_user_id = ? OR f.away_user_id = ?)
+                  AND f.home_goals IS NOT NULL
+                ORDER BY f.played_at DESC
+                """,
+                (user_id, user_id),
+            )
+        ]
+        trophies = int(
+            connection.execute(
+                """
+                SELECT COUNT(*) FROM championship_fixtures AS f
+                JOIN championships AS c ON c.id = f.championship_id
+                WHERE c.status = 'completed' AND f.is_final = 1
+                  AND f.winner_user_id = ?
+                """,
+                (user_id,),
+            ).fetchone()[0]
+        )
+    player_goals: Counter[int] = Counter()
+    player_appearances: Counter[int] = Counter()
+    player_names: dict[int, str] = {}
+    form: list[str] = []
+    for fixture in fixtures:
+        is_home = fixture["home_user_id"] == user_id
+        own_goals = int(fixture["home_goals"] if is_home else fixture["away_goals"])
+        opponent_goals = int(fixture["away_goals"] if is_home else fixture["home_goals"])
+        if fixture["is_final"] and fixture["winner_user_id"]:
+            outcome = "V" if fixture["winner_user_id"] == user_id else "D"
+        else:
+            outcome = "V" if own_goals > opponent_goals else (
+                "D" if own_goals < opponent_goals else "E"
+            )
+        form.append(outcome)
+        events = json.loads(fixture["events_json"] or "{}")
+        player_names.update(
+            {int(player_id): name for player_id, name in events.get("player_names", {}).items()}
+        )
+        lineup_key = "home_lineup" if is_home else "away_lineup"
+        player_appearances.update(int(player_id) for player_id in events.get(lineup_key, []))
+        for goal in events.get("goals", []):
+            if goal["side"] == ("home" if is_home else "away"):
+                player_id = int(goal["scorer_id"])
+                player_goals[player_id] += 1
+                player_names[player_id] = goal["scorer_name"]
+    top_scorer_id = min(
+        player_goals,
+        key=lambda player_id: (-player_goals[player_id], player_names[player_id].casefold()),
+        default=None,
+    )
+    most_used_id = min(
+        player_appearances,
+        key=lambda player_id: (
+            -player_appearances[player_id],
+            player_names.get(player_id, "").casefold(),
+        ),
+        default=None,
+    )
+    return {
+        "matches": len(fixtures),
+        "form": form[:5],
+        "trophies": trophies,
+        "top_scorer": (
+            (player_names[top_scorer_id], player_goals[top_scorer_id])
+            if top_scorer_id is not None
+            else None
+        ),
+        "most_appearances": (
+            (
+                player_names.get(most_used_id, f"Jogador {most_used_id}"),
+                player_appearances[most_used_id],
+            )
+            if most_used_id is not None
+            else None
+        ),
+    }
+
+
+def get_valid_lineup(
+    discord_user_id: int | str,
+    database_path: str | Path = DATABASE_PATH,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    team = get_team(discord_user_id, database_path)
+    if team is None:
+        raise TeamError("Esse time ainda não foi criado.")
+    players = get_lineup(discord_user_id, database_path)
+    expected = Counter(FORMATIONS[team["formation"]])
+    actual = Counter(player["position"] for player in players)
+    if len(players) != 11 or actual != expected:
+        raise TeamError(
+            f"A escalação de {team['team_name']} está incompleta para "
+            f"{team['formation']}: faltam titulares ou posições corretas."
+        )
+    if any(player["overall"] is None for player in players):
+        raise TeamError("Todos os titulares precisam ter overall definido.")
+    return team, players
+
+
+def formation_slots(formation: str) -> tuple[str, ...]:
+    try:
+        return FORMATIONS[formation]
+    except KeyError as error:
+        raise TeamError(f"Formação desconhecida: {formation}") from error

@@ -9,6 +9,35 @@ SECOES = ("novidades", "melhorias", "correcoes", "admin")
 
 VERSOES = [
     {
+        "versao": "3.0.0",
+        "data": "19/10/2026",
+        "titulo": "FUT.AE — coleção e simulação de futebol",
+        "novidades": [
+            "Novo módulo FUT.AE para coleção de jogadores, rolagens, wishes, Star Wishes, "
+            "economia, times, amistosos e campeonatos.",
+            "Catálogo com `mm!top` e categorias de jogadores, técnicos, uniformes, mascotes, "
+            "estádios, ligas, Cartola e emblemas, com paginação.",
+            "`mm!scout` identifica jogadores por nome, overall, posição, série e ID quando "
+            "existem homônimos.",
+            "`mm!wishlist`/`mm!wl` mostra todas as wishes em embed; Star Wishes aparecem com "
+            "estrela. `mm!starwish` também aceita `mm!sw`.",
+            "Comandos administrativos de teste para amistosos e campeonatos fictícios, "
+            "restritos ao proprietário do bot.",
+        ],
+        "melhorias": [
+            "`mm!daily` usa cooldown de 24 horas e mostra o valor recebido e o máximo possível.",
+            "Trocas exigem confirmação dos dois lados e demissões exigem confirmação por botão.",
+            "Upgrades incluem bônus progressivo para recompensas de duplicatas.",
+            "A carta especial Maria Sofia usa overall 100; Messi e Cristiano Ronaldo estão "
+            "com overall 99.",
+        ],
+        "admin": [
+            "O banco modular usa schema v11 e migra automaticamente sem apagar os dados.",
+            "Fotos e assets locais ficam fora do Git; o repositório contém apenas código, "
+            "testes e documentação.",
+        ],
+    },
+    {
         "versao": "2.2.0",
         "data": "30/09/2026",
         "titulo": "Patentes, tags, Mudae tracker e imagens maiores",

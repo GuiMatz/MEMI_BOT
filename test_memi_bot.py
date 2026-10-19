@@ -841,7 +841,9 @@ class IntegracaoTests(CogBase):
         )
         ctx = NS(send=AsyncMock())
         await m.Ajuda.ajuda.callback(m.Ajuda(None), ctx)
-        texto = ctx.send.call_args.kwargs["embed"].description
+        texto = "\n".join(
+            pagina.description for pagina in ctx.send.call_args.kwargs["view"].paginas
+        )
         for reservado in ("give", "scan", "read", "exportar"):
             self.assertNotIn("mm!" + reservado, texto)
         for publico in ("mudae", "levels", "frase", "titulo", "favorita", "ec"):
@@ -895,7 +897,10 @@ class IntegracaoTests(CogBase):
         candidato = m.MeMiBot(
             command_prefix="mm!", help_command=None, intents=discord.Intents.default()
         )
-        with patch.object(m, "ARQUIVO_BANCO", Path(self.temp.name) / "setup.db"):
+        with (
+            patch.object(m, "ARQUIVO_BANCO", Path(self.temp.name) / "setup.db"),
+            patch.object(m, "GAME_DATABASE_PATH", Path(self.temp.name) / "game.sqlite"),
+        ):
             async with candidato:
                 await candidato.setup_hook()
                 self.assertTrue(
@@ -907,6 +912,25 @@ class IntegracaoTests(CogBase):
                 self.assertEqual(candidato.get_command("csv"), candidato.get_command("exportar"))
                 self.assertEqual(candidato.get_command("ajuda"), candidato.get_command("help"))
                 self.assertIsNotNone(candidato.get_command("ec"))
+                for nome in (
+                    "roll",
+                    "daily",
+                    "upgrade",
+                    "crates",
+                    "wish",
+                    "starwish",
+                    "elenco",
+                    "carteira",
+                    "demitir",
+                    "troca",
+                    "time",
+                    "escalar",
+                    "tatica",
+                    "amistoso",
+                    "campeonato",
+                    "ajudajogo",
+                ):
+                    self.assertIsNotNone(candidato.get_command(nome), nome)
 
     async def test_32_genero_mostra_so_o_ranking_de_generos(self):
         self.b.inserir([(sid(), 1, "Faixa", "Artista", "jockie")])
@@ -1253,7 +1277,8 @@ class RankingsPerfilTests(CogBase):
     async def test_58_ajuda_sem_semana_e_com_genero_como_flag(self):
         ctx = NS(send=AsyncMock())
         await m.Ajuda.ajuda.callback(m.Ajuda(None), ctx)
-        texto = embed_enviado(ctx).description
+        view = ctx.send.call_args.kwargs["view"]
+        texto = "\n".join(pagina.description for pagina in view.paginas)
         self.assertNotIn("semana", texto)
         self.assertNotIn("mm!musicas genero", texto)
         linha = next(x for x in texto.splitlines() if x.startswith("`mm!musicas`"))
@@ -1570,7 +1595,16 @@ class VisualTests(CogBase):
     async def test_73_ajuda_agrupada_em_categorias(self):
         ctx = NS(send=AsyncMock())
         await m.Ajuda.ajuda.callback(m.Ajuda(None), ctx)
-        texto = embed_enviado(ctx).description
+        view = ctx.send.call_args.kwargs["view"]
+        texto = "\n".join(pagina.description for pagina in view.paginas)
+        self.assertIn("**🏆 Rankings**", view.paginas[0].description)
+        self.assertIn("**ℹ️ Sobre o bot**", view.paginas[0].description)
+        self.assertNotIn("mm!roll", view.paginas[0].description)
+        self.assertEqual(view.paginas[1].description.count("**"), 2)
+        self.assertIn("**🎲 Rolls e derivados**", view.paginas[1].description)
+        self.assertIn("`mm!roll`", view.paginas[1].description)
+        self.assertNotIn("mm!mudae", view.paginas[1].description)
+        self.assertNotIn("mm!perfil", view.paginas[1].description)
         secoes = ("🏆 Rankings", "🎵 Música", "🎎 Mudae", "👤 Perfil e tags", "🎨 Personalização")
         posicoes = [texto.index(f"**{s}**") for s in secoes]
         self.assertEqual(posicoes, sorted(posicoes))
@@ -1584,7 +1618,21 @@ class VisualTests(CogBase):
             self.assertIn(f"`{comando}`", texto)
         for oculto in ("mm!give", "mm!scan", "mm!read", "mm!exportar"):
             self.assertNotIn(oculto, texto)
-        self.assertLessEqual(len(embed_enviado(ctx)), 6000)
+        self.assertEqual(len(view.paginas), 2)
+        self.assertIn("página 1/2", view.paginas[0].footer.text)
+        self.assertIn("página 2/2", view.paginas[1].footer.text)
+        self.assertTrue(view.anterior.disabled)
+        self.assertFalse(view.proxima.disabled)
+        self.assertLessEqual(max(map(len, view.paginas)), 6000)
+        interaction = NS(response=NS(edit_message=AsyncMock()))
+        await view.proxima.callback(interaction)
+        self.assertEqual(view.pagina, 1)
+        self.assertTrue(view.proxima.disabled)
+        self.assertFalse(view.anterior.disabled)
+        interaction.response.edit_message.assert_awaited_once_with(
+            embed=view.paginas[1],
+            view=view,
+        )
 
     async def test_76_frase_com_varias_linhas_continua_em_italico(self):
         self.b.salvar_perfil(10, frase="linha 1\nlinha   2\n\nlinha 3")
@@ -2013,7 +2061,8 @@ class VisualTests(CogBase):
         self.assertIn("cartão", comando.aliases)
         ctx = NS(send=AsyncMock())
         await m.Ajuda.ajuda.callback(m.Ajuda(None), ctx)
-        self.assertIn("`mm!cartao [@pessoa]`", embed_enviado(ctx).description)
+        paginas = ctx.send.call_args.kwargs["view"].paginas
+        self.assertIn("`mm!cartao [@pessoa]`", paginas[0].description)
 
     def _ajuda(self):
         return m.Ajuda(NS(get_cog=lambda _: self.cog))
@@ -2340,7 +2389,9 @@ class AtalhosTests(CogBase):
             await bot.remove_cog("Ajuda")
         ctx = NS(send=AsyncMock())
         await m.Ajuda.ajuda.callback(m.Ajuda(None), ctx)
-        texto = embed_enviado(ctx).description
+        texto = "\n".join(
+            pagina.description for pagina in ctx.send.call_args.kwargs["view"].paginas
+        )
         for atalho in ("mm!tg", "mm!lvl", "mm!msc", "mm!fm", "mm!embedcolor", "mm!cl"):
             self.assertNotIn(f"`{atalho}", texto)
 
@@ -2640,7 +2691,8 @@ class ChangelogComandoTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("novidades", m.Ajuda.changelog.aliases)
         ctx = NS(send=AsyncMock())
         await m.Ajuda.ajuda.callback(m.Ajuda(None), ctx)
-        self.assertIn("`mm!changelog`", embed_enviado(ctx).description)
+        paginas = ctx.send.call_args.kwargs["view"].paginas
+        self.assertIn("`mm!changelog`", paginas[0].description)
 
 
 class ExecutarTests(unittest.TestCase):

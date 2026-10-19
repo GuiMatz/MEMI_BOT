@@ -219,6 +219,10 @@ As barras da tabela indicam alternativas; não são digitadas. Os atalhos entre 
 aparecem na ajuda. Exemplos: `mm!tagarelas bots mes`, `mm!musicas artista ano`,
 `mm!mudae personagens`.
 
+`mm!help` e `mm!ajuda` mantêm essa lista antiga na primeira página. Use o botão ▶ para abrir
+a segunda página, dedicada aos comandos de rolagem e jogo de futebol: rolls, daily, upgrades,
+crates, wishes, elenco, time, trocas, amistosos e campeonato.
+
 Somente o ID definido em `owner_id` em `config.json` pode usar:
 
 ```text
