@@ -16,6 +16,7 @@ class DiscordBotSetupTests(unittest.IsolatedAsyncioTestCase):
                     {command.name for command in bot.commands},
                     {
                         "futae",
+                        "help",
                         "scout",
                         "wishlist",
                         "left",

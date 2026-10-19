@@ -103,6 +103,63 @@ Os comandos `mm!admin testeamistoso` e `mm!admin testecampeonato <quantidade>`
 são exclusivos do proprietário configurado em `MEMI_OWNER_ID` e servem para
 testar a simulação sem alterar times reais.
 
+## Changelog completo do FUT.AE
+
+O FUT.AE é um módulo do MeMi BOT, não um bot separado. O menu geral continua em
+`mm!ajuda`; `mm!fut.ae` e `mm!futae` mostram apenas os comandos do jogo.
+
+### Coleção e rolagens
+
+- Banco local com jogadores, ligas, clubes, técnicos, estádios e fontes de dados.
+- `mm!roll` com ciclos de 30 minutos, raridades, claims, exclusividade temporária,
+  duplicatas, bolas e recompensas.
+- Jogadores sem clube aparecem como `Passes Livres`.
+- Fotos locais são opcionais, têm fallback visual e são coletadas pelo worker do
+  TheSportsDB sem enviar os arquivos ao Discord.
+- Maria Sofia é a carta especial de overall 100; Messi e Cristiano Ronaldo ficam
+  com overall 99.
+
+### Pesquisa e catálogo
+
+- `mm!scout <nome>` substitui `mm!im` e mostra apenas nome, overall e posição.
+- Em nomes repetidos, o resultado informa série, overall, posição e ID para seleção
+  inequívoca.
+- IDs continuam disponíveis para wishes, elenco e trocas, mas não são a única forma
+  de localizar um jogador.
+- `mm!top` possui páginas e categorias de jogadores, técnicos, uniformes, mascotes,
+  estádios, ligas, Cartola e emblemas.
+- Jogadores são ordenados por overall; os demais itens são ordenados alfabeticamente.
+- `TOP CARTOLA` reúne jogadores Cartola e os demais itens da série.
+
+### Economia e coleção pessoal
+
+- `mm!daily` libera uma nova recompensa 24 horas após o último resgate.
+- `mm!wishlist` e `mm!wl` mostram a lista completa de wishes em embed.
+- `mm!starwish` e `mm!sw` identificam Star Wishes com o emoji `⭐`.
+- `mm!upgrade` inclui rolls, wishes, daily, exclusividade, Star Wishes e bônus
+  progressivo para recompensas de duplicatas.
+- `mm!demitir` exige confirmação antes de liberar um jogador.
+- `mm!troca` exige confirmação do ofertante e do destinatário antes da conclusão.
+
+### Times e partidas
+
+- `mm!time`, `mm!escalar` e `mm!tatica` gerenciam time, escalação, formação e estilo.
+- `mm!amistoso` simula partidas de 90 minutos com força por setores, xG, gols,
+  artilheiros e estilos táticos.
+- `mm!campeonato` permite inscrição, início, configuração de canal e agendamento,
+  com liga, classificação e final.
+- `mm!admin testeamistoso` e `mm!admin testecampeonato <quantidade>` executam testes
+  com times fictícios e são restritos ao proprietário do bot.
+
+### Operação e segurança
+
+- Schema v11 com migrações idempotentes e preservação dos dados existentes.
+- O SQLite aguarda locks temporários para permitir o bot e o worker de fotos operarem
+  juntos sem falha imediata.
+- Fotos, bancos, credenciais e assets locais ficam fora do Git.
+- A suíte automatizada cobre banco, importadores, rolagens, economia, transações,
+  partidas, campeonatos e registro dos comandos.
+
 Execute os testes do projeto com:
 
 ```powershell

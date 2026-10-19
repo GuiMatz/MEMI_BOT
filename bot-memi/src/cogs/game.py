@@ -127,10 +127,68 @@ class GameCog(commands.Cog):
             self.database_path,
         )
 
-    @commands.command(name="futae", aliases=["fut.ae"])
-    async def help_command(self, context: commands.Context) -> None:
+    @commands.command(name="help", aliases=["ajuda", "comandos"])
+    async def general_help(self, context: commands.Context) -> None:
         embed = discord.Embed(
-            title="Bot Memi — comandos",
+            title="MeMi BOT — todos os comandos",
+            description="Use o prefixo `mm!`. O comando `mm!fut.ae` abre os comandos exclusivos do FUT.AE.",
+            color=discord.Color.blurple(),
+        )
+        embed.add_field(
+            name="Geral",
+            value=(
+                "`mm!ajuda` / `mm!comandos` — mostra este menu\n"
+                "`mm!changelog` — mostra as mudanças do bot\n"
+                "`mm!perfil [@pessoa]` — mostra um perfil\n"
+                "`mm!levels` / `mm!lvl` — consulta níveis e XP\n"
+                "`mm!musicas` — rankings de músicas\n"
+                "`mm!tagarelas` — ranking de mensagens\n"
+                "`mm!hall` — histórico de vencedores\n"
+                "`mm!wrapped` — resumo do período\n"
+                "`mm!aleatoria` — escolhe uma música aleatória\n"
+                "`mm!mudae` — estatísticas do Mudae"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="Personalização",
+            value=(
+                "`mm!tags` — consulta suas tags\n"
+                "`mm!favorita` / `mm!fm` — define música favorita\n"
+                "`mm!frase` — define sua frase\n"
+                "`mm!ec` / `mm!embedcolor` — define a cor dos embeds\n"
+                "`mm!cartao` — gera cartão de perfil"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="FUT.AE",
+            value=(
+                "`mm!fut.ae` / `mm!futae` — menu do jogo\n"
+                "`mm!roll`, `mm!daily`, `mm!upgrade`, `mm!crates`\n"
+                "`mm!wish`, `mm!wishlist`/`mm!wl`, `mm!starwish`/`mm!sw`\n"
+                "`mm!top`, `mm!scout`, `mm!left`, `mm!elenco`, `mm!carteira`\n"
+                "`mm!time`, `mm!escalar`, `mm!tatica`, `mm!troca`, `mm!demitir`\n"
+                "`mm!amistoso`, `mm!campeonato`"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="Administração",
+            value=(
+                "`mm!admin` — comandos administrativos do FUT.AE\n"
+                "`mm!admin testeamistoso` — testa a simulação\n"
+                "`mm!admin testecampeonato <número>` — testa campeonatos"
+            ),
+            inline=False,
+        )
+        embed.set_footer(text="Use mm!fut.ae para ver somente os comandos do FUT.AE.")
+        await context.reply(embed=embed, mention_author=False)
+
+    @commands.command(name="futae", aliases=["fut.ae"])
+    async def futae_help(self, context: commands.Context) -> None:
+        embed = discord.Embed(
+            title="FUT.AE — comandos do jogo",
             description="Use o prefixo `mm!`.",
             color=discord.Color.blurple(),
         )

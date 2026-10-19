@@ -30,6 +30,10 @@ VERSOES = [
             "Upgrades incluem bônus progressivo para recompensas de duplicatas.",
             "A carta especial Maria Sofia usa overall 100; Messi e Cristiano Ronaldo estão "
             "com overall 99.",
+            "`mm!ajuda` continua sendo o menu geral do MeMi BOT; `mm!fut.ae` e `mm!futae` "
+            "ficam reservados ao menu do módulo FUT.AE.",
+            "O bot aguarda locks temporários do SQLite para funcionar junto com o coletor "
+            "de fotos sem falhar imediatamente.",
         ],
         "admin": [
             "O banco modular usa schema v11 e migra automaticamente sem apagar os dados.",

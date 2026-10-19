@@ -64,3 +64,22 @@ request.
 Leia [CONTRIBUTING.md](./CONTRIBUTING.md) antes de abrir uma issue ou pull request.
 Este projeto segue o [Código de Conduta](./CODE_OF_CONDUCT.md) e está sob a licença
 [MIT](./LICENSE).
+
+## FUT.AE
+
+O MeMi BOT inclui o módulo de futebol **FUT.AE**, documentado em
+[`bot-memi/README.md`](./bot-memi/README.md). O bot continua sendo o MeMi BOT:
+
+- `mm!ajuda` mostra o menu geral com todos os módulos;
+- `mm!fut.ae` e `mm!futae` mostram apenas os comandos do FUT.AE;
+- o módulo oferece coleção, rolagens, wishes, economia, catálogo, times,
+  amistosos e campeonatos;
+- `mm!scout` pesquisa jogadores e resolve nomes duplicados por série, overall,
+  posição e ID;
+- `mm!top` lista jogadores e categorias do catálogo com paginação;
+- `mm!wishlist`/`mm!wl` mostra wishes e `mm!starwish`/`mm!sw` destaca Star Wishes;
+- trocas e demissões exigem confirmação;
+- fotos, bancos e assets locais não fazem parte do repositório.
+
+O changelog detalhado da implementação do FUT.AE está na seção
+[Changelog completo do FUT.AE](./bot-memi/README.md#changelog-completo-do-futae).

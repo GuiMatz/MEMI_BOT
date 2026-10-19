@@ -27,6 +27,15 @@ class MemiBot(commands.Bot):
         )
         self.database_path = Path(database_path)
 
+    async def on_ready(self) -> None:
+        LOGGER.info(
+            "Bot pronto: %s (%s); message_content=%s; comandos=%s",
+            self.user,
+            self.user.id if self.user else "desconhecido",
+            self.intents.message_content,
+            len(self.commands),
+        )
+
     async def setup_hook(self) -> None:
         initialize_database(self.database_path)
         await self.load_extension("src.cogs.game")
