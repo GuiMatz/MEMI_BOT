@@ -12,23 +12,30 @@ from PIL import Image, ImageDraw
 from src.db import ROOT
 
 PLACEHOLDER_FILENAME = "silhueta.png"
+PLACEHOLDER_PATH = ROOT / "data" / "placeholder.jpg"
 
 
 def _safe_photo_path(photo_path: object) -> Path | None:
     if not isinstance(photo_path, str) or not photo_path.strip():
         return None
     candidate = Path(photo_path)
-    if not candidate.is_absolute():
-        candidate = ROOT / candidate
-    try:
-        candidate = candidate.resolve(strict=True)
-        candidate.relative_to(ROOT.resolve())
-    except (OSError, RuntimeError, ValueError):
-        return None
-    return candidate if candidate.is_file() else None
+    candidates = (
+        (candidate,) if candidate.is_absolute() else (ROOT / candidate, ROOT / "data" / "photos" / candidate)
+    )
+    for candidate in candidates:
+        try:
+            resolved = candidate.resolve(strict=True)
+            resolved.relative_to(ROOT.resolve())
+        except (OSError, RuntimeError, ValueError):
+            continue
+        if resolved.is_file():
+            return resolved
+    return None
 
 
 def _placeholder_file() -> discord.File:
+    if PLACEHOLDER_PATH.is_file():
+        return discord.File(PLACEHOLDER_PATH, filename="silhueta.jpg")
     image = Image.new("RGBA", (360, 360), (35, 40, 55, 255))
     draw = ImageDraw.Draw(image)
     draw.ellipse((115, 48, 245, 178), fill=(180, 188, 205, 255))

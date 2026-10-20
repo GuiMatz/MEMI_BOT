@@ -25,10 +25,12 @@ class RollOfferView(discord.ui.View):
         database_path: str | Path,
         *,
         duplicate_reward: bool,
+        player_name: str,
     ):
         super().__init__(timeout=300)
         self.offer_id = offer_id
         self.database_path = database_path
+        self.player_name = player_name
         button = discord.ui.Button(
             label="Resgatar Memilets" if duplicate_reward else "Reivindicar",
             style=(
@@ -53,10 +55,8 @@ class RollOfferView(discord.ui.View):
             self.database_path,
         )
         if result.status == "player_claimed":
-            await interaction.response.edit_message(
-                content=f"✅ {interaction.user.mention} reivindicou o jogador.",
-                embed=None,
-                view=None,
+            await interaction.response.send_message(
+                f"✅ {interaction.user.mention} contratou **{self.player_name}**.",
             )
             self.stop()
             return
@@ -141,6 +141,7 @@ class RollsCog(commands.Cog):
                 result.offer_id,
                 self.database_path,
                 duplicate_reward=False,
+                player_name=player["display_name"] or player["name"],
             )
         elif result.kind == "own_duplicate_ball":
             embed.description += f"\nVocê ganhou 1 bola ({result.balls}/10) e 100 Memilets."
@@ -154,6 +155,7 @@ class RollsCog(commands.Cog):
                 result.offer_id,
                 self.database_path,
                 duplicate_reward=True,
+                player_name=player["display_name"] or player["name"],
             )
 
         image = roll_image_file(player)
