@@ -442,10 +442,16 @@ def claim_roll_offer(
         ).fetchone()
         if account is None:
             raise LookupError("A conta de jogo ainda não foi cadastrada.")
+        cycle_start = _cycle_start(current_time)
+        reset_at = cycle_start + CYCLE_LENGTH
         if account["last_claim_at"]:
-            retry_at = datetime.fromisoformat(account["last_claim_at"]) + CLAIM_COOLDOWN
-            if current_time < retry_at:
-                return ClaimOutcome("cooldown", retry_at=retry_at)
+            last_claim = datetime.fromisoformat(account["last_claim_at"])
+            if last_claim.tzinfo is None:
+                last_claim = last_claim.replace(tzinfo=timezone.utc)
+            else:
+                last_claim = last_claim.astimezone(timezone.utc)
+            if last_claim >= cycle_start:
+                return ClaimOutcome("cooldown", retry_at=reset_at)
 
         owner = connection.execute(
             "SELECT discord_user_id FROM player_ownership WHERE player_id = ?",

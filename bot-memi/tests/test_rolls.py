@@ -79,6 +79,45 @@ class RollTests(unittest.TestCase):
             (NOW + timedelta(seconds=5)).isoformat(timespec="seconds"),
         )
 
+    def test_claim_cooldown_resets_with_roll_cycle(self):
+        p1 = self.add_player("Jogador Base", overall=50)
+        p2 = self.add_player("Jogador Comum", overall=65)
+        p3 = self.add_player("Jogador Incomum", overall=75)
+        register_user(100, "Roller", self.database_path)
+        register_user(200, "Claimer", self.database_path)
+
+        # Oferta 1 às 12:10 (ciclo das 12:00)
+        with connect(self.database_path) as conn:
+            from src.rolls import _create_offer
+
+            o1 = _create_offer(conn, p1, "100", "player_claim", None, NOW)
+            o2 = _create_offer(conn, p2, "100", "player_claim", None, NOW + timedelta(minutes=10))
+            o3 = _create_offer(
+                conn,
+                p3,
+                "100",
+                "player_claim",
+                None,
+                datetime(2026, 10, 18, 13, 5, tzinfo=timezone.utc),
+            )
+
+        # Primeiro claim no ciclo das 12:00
+        c1 = claim_roll_offer(o1, 200, self.database_path, now=NOW + timedelta(seconds=10))
+        self.assertEqual(c1.status, "player_claimed")
+
+        # Segundo claim no mesmo ciclo (12:20) deve dar cooldown até o próximo ciclo (13:00)
+        c2 = claim_roll_offer(
+            o2, 200, self.database_path, now=NOW + timedelta(minutes=10, seconds=10)
+        )
+        self.assertEqual(c2.status, "cooldown")
+        self.assertEqual(c2.retry_at, datetime(2026, 10, 18, 13, 0, tzinfo=timezone.utc))
+
+        # No ciclo seguinte (13:05, quando os rolls renovam), o claim volta a ficar livre
+        c3 = claim_roll_offer(
+            o3, 200, self.database_path, now=datetime(2026, 10, 18, 13, 5, 10, tzinfo=timezone.utc)
+        )
+        self.assertEqual(c3.status, "player_claimed")
+
     def test_rerolling_own_player_adds_ball_overall_and_memilets(self):
         player_id = self.add_player(overall=80)
         register_user(100, "Pessoa", self.database_path)

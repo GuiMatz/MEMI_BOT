@@ -12,6 +12,7 @@ from src.economy import (
     add_wish,
     buy_upgrade,
     claim_daily,
+    get_account_status,
     get_upgrade_cost,
     open_crate,
 )
@@ -149,6 +150,34 @@ class EconomyTests(unittest.TestCase):
     def test_crates_reject_insufficient_funds(self):
         with self.assertRaises(InsufficientFunds):
             open_crate(100, "Jogadora", self.database_path, rng=random.Random(1))
+
+    def test_account_status_claim_resets_with_roll_cycle(self):
+        register_user(100, "Jogadora", self.database_path)
+        status = get_account_status(100, "Jogadora", self.database_path, now=NOW)
+        self.assertIsNone(status.claim_available_at)
+
+        # Registra claim dentro do ciclo das 16:00 (16:35)
+        with connect(self.database_path) as conn:
+            conn.execute(
+                "UPDATE game_users SET last_claim_at = ? WHERE discord_user_id = '100'",
+                ((NOW + timedelta(minutes=5)).isoformat(timespec="seconds"),),
+            )
+        # Consulta no mesmo ciclo (16:40): claim_available_at aponta para o próximo ciclo (17:00)
+        status = get_account_status(
+            100, "Jogadora", self.database_path, now=NOW + timedelta(minutes=10)
+        )
+        self.assertEqual(
+            status.claim_available_at, datetime(2026, 10, 18, 17, 0, tzinfo=timezone.utc)
+        )
+
+        # Consulta no ciclo seguinte (17:01 em diante): claim_available_at volta a ser None
+        status = get_account_status(
+            100,
+            "Jogadora",
+            self.database_path,
+            now=datetime(2026, 10, 18, 17, 1, tzinfo=timezone.utc),
+        )
+        self.assertIsNone(status.claim_available_at)
 
 
 if __name__ == "__main__":

@@ -407,9 +407,16 @@ def open_crate(
                 "SELECT last_claim_at FROM game_users WHERE discord_user_id = ?",
                 (user_id,),
             ).fetchone()
-            on_cooldown = bool(account["last_claim_at"]) and (
-                datetime.fromisoformat(account["last_claim_at"]) + CLAIM_COOLDOWN > _utc_now(None)
-            )
+            current_time = _utc_now(None)
+            cycle_start = cycle_start_for(current_time)
+            on_cooldown = False
+            if account["last_claim_at"]:
+                last_claim = datetime.fromisoformat(account["last_claim_at"])
+                if last_claim.tzinfo is None:
+                    last_claim = last_claim.replace(tzinfo=timezone.utc)
+                else:
+                    last_claim = last_claim.astimezone(timezone.utc)
+                on_cooldown = last_claim >= cycle_start
             if on_cooldown:
                 connection.execute(
                     "UPDATE game_users SET last_claim_at = NULL WHERE discord_user_id = ?",
@@ -547,9 +554,13 @@ def get_account_status(
     used = int(usage["rolls_used"]) if usage else 0
     claim_at = None
     if row["last_claim_at"]:
-        claim_at = datetime.fromisoformat(row["last_claim_at"]) + CLAIM_COOLDOWN
-        if claim_at <= current_time:
-            claim_at = None
+        last_claim = datetime.fromisoformat(row["last_claim_at"])
+        if last_claim.tzinfo is None:
+            last_claim = last_claim.replace(tzinfo=timezone.utc)
+        else:
+            last_claim = last_claim.astimezone(timezone.utc)
+        if last_claim >= cycle_start:
+            claim_at = cycle_start + CYCLE_LENGTH
     daily_at = None
     if row["last_daily_at"]:
         daily_at = datetime.fromisoformat(row["last_daily_at"]).astimezone(
