@@ -9,6 +9,37 @@ SECOES = ("novidades", "melhorias", "correcoes", "admin")
 
 VERSOES = [
     {
+        "versao": "3.2.0",
+        "data": "21/10/2026",
+        "titulo": "FUT.AE — enciclopédia, cartas estilo Mudae e roleta maior",
+        "novidades": [
+            "Enciclopédia do Futebol: 500 lendas com overall de 90 a 99, além de 100 técnicos, "
+            "100 estádios, 100 ligas e 100 mascotes no catálogo e no `mm!scout`.",
+            "`mm!elenco` mostra uma carta por página, com foto grande, overall e posição, como "
+            "o `$mm` do Mudae. O botão **Lista** mostra o elenco inteiro.",
+            "`mm!scout` e `mm!roll` usam a mesma carta e mostram quem já contratou o jogador.",
+            "`mm!time liga <nome>` escolhe a liga favorita do time.",
+        ],
+        "melhorias": [
+            "Cerca de 31 mil jogadores que estavam fora da roleta agora podem sair no roll.",
+            "Rolls renovam a cada 1 hora, na hora cheia. Todos os horários usam Brasília.",
+            "Comandos usam o nome do jogador: `mm!wish kvara`, `mm!tatica capitao kvara`, "
+            "`mm!troca @pessoa kvara por vini`. O ID só aparece quando há homônimos.",
+            "`mm!wish` com o nome exato escolhe direto; com vários resultados, abre um menu.",
+            "A wishlist mostra no topo os slots usados de wish e de Star Wish.",
+            "Nomes de times do Cartola corrigidos (acentos, espaços) e logos da pasta viram "
+            "clubes no banco.",
+        ],
+        "correcoes": [
+            "`mm!tatica capitao/falta/penalti` não funcionava sem ID.",
+            "`mm!wish` dava erro quando os slots de wish estavam cheios.",
+        ],
+        "admin": [
+            "A CI agora roda os testes do FUT.AE e confere a formatação dele.",
+            "Dependências travadas num único `requirements.txt`.",
+        ],
+    },
+    {
         "versao": "3.1.0",
         "data": "20/10/2026",
         "titulo": "FUT.AE — escalação clicável, jogos narrados e overall novo",

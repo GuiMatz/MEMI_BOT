@@ -189,21 +189,23 @@ FUTAE_SECTIONS = (
 
 GENERAL_HELP_PAGES = (
     (
-        "**MEMI BOT — comandos gerais**\n"
-        "`mm!ajuda` / `mm!help` / `mm!comandos` — este menu\n"
-        "`mm!changelog` — novidades e alterações do bot\n"
-        "`mm!perfil` — seu perfil e progresso\n"
-        "`mm!nivel` — nível, XP e patente\n"
-        "`mm!rank` — ranking da comunidade\n"
-        "`mm!resumo` — resumo da sua conta\n"
-        "`mm!config` — configurações pessoais\n"
-        "`mm!ec` / `mm!embedcolor` — define a cor dos embeds\n\n"
-        "**Mudae e comunidade**\n"
-        "`mm!mudae` — funções do rastreador Mudae\n"
-        "`mm!tags` — suas tags e patentes\n"
-        "`mm!give` — concede itens permitidos\n"
-        "`mm!insignias` — suas insígnias\n"
-        "`mm!sobre` — informações sobre o MeMi BOT"
+        # Mesmos comandos da página 1 do mm!ajuda do memi_bot.py (sem os de admin).
+        "**🏆 Rankings**\n"
+        "`mm!tagarelas` — ranking de mensagens\n"
+        "`mm!levels` / `mm!lvl` — níveis, patentes e XP\n"
+        "`mm!hall` — vencedores dos meses anteriores\n\n"
+        "**🎵 Música**\n"
+        "`mm!musicas` — rankings de músicas, artistas e gêneros\n"
+        "`mm!aleatoria` — sorteia uma música\n"
+        "`mm!wrapped` — seu resumo dos últimos 12 meses\n\n"
+        "**🎎 Mudae**\n"
+        "`mm!mudae` — panorama do servidor\n"
+        "`mm!mudae ios` · `personagens` · `series` — rankings do Mudae\n\n"
+        "**👤 Perfil e personalização**\n"
+        "`mm!perfil` · `mm!cartao` · `mm!tags` — perfil, cartão e tags\n"
+        "`mm!favorita` · `mm!titulo` · `mm!frase` · `mm!ec` — edita seu perfil\n\n"
+        "**ℹ️ Sobre o bot**\n"
+        "`mm!changelog` — o que mudou em cada versão"
     ),
     (
         "**FUT.AE — comandos do jogo**\n"

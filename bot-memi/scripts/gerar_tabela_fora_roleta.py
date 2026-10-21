@@ -9,6 +9,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from src.db import DATABASE_PATH, connect, initialize_database
+from src.ratings import POOL_SQL
 
 
 def default_desktop() -> Path:
@@ -24,13 +25,10 @@ def default_desktop() -> Path:
 
 
 def exclusion_reason(row: dict[str, object]) -> str:
+    """Motivo pela regra atual (`src.ratings.POOL_SQL`): inativo ou sem posição."""
     reasons: list[str] = []
-    if row["activity_status"] != "active":
-        reasons.append(f"atividade: {row['activity_status']}")
-    if row["phase2_candidate"] != 0:
-        reasons.append("candidato da fase 2")
-    if row["overall"] is None:
-        reasons.append("sem overall")
+    if row["activity_status"] == "inactive":
+        reasons.append("atividade: inactive")
     if row["game_position"] is None:
         reasons.append("sem posição")
     return "; ".join(reasons) or "fora do filtro da roleta"
@@ -42,15 +40,12 @@ def generate_table(database_path: Path, output_path: Path) -> int:
         rows = [
             dict(row)
             for row in connection.execute(
-                """
+                f"""
                 SELECT id, name, display_name, club_name, game_position, overall,
                        activity_status, phase2_candidate, needs_position_review,
                        photo_path
-                FROM players
-                WHERE activity_status != 'active'
-                   OR phase2_candidate != 0
-                   OR overall IS NULL
-                   OR game_position IS NULL
+                FROM players AS p
+                WHERE NOT ({POOL_SQL})
                 ORDER BY
                     CASE WHEN overall IS NULL THEN 1 ELSE 0 END,
                     overall DESC,
