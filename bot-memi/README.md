@@ -75,7 +75,16 @@ python -m src.photo_worker
 
 O progresso fica em `data/photo_worker_checkpoint.json`. Se o processo for
 interrompido, a próxima execução continua depois do último lote sem repetir os
-jogadores já processados. Para testar somente um lote:
+jogadores já processados. Falhas temporárias de rede, HTTP ou SQLite fazem o
+worker aguardar e tentar o mesmo lote novamente automaticamente, com espera
+progressiva de 15 segundos até no máximo 5 minutos. O processo só encerra para
+erros de configuração ou entrada inválida. Para alterar a espera inicial:
+
+```powershell
+python -m src.photo_worker --retry-delay 30
+```
+
+Para testar somente um lote:
 
 ```powershell
 python -m src.photo_worker --once

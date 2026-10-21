@@ -699,39 +699,17 @@ def normalize_player_name(name: str | None) -> str:
 
 
 def refresh_display_names(connection: sqlite3.Connection) -> None:
-    """Diferencia homônimos com clube, ano de nascimento e ID se necessário."""
+    """Mantém o nome exibido limpo; detalhes ficam disponíveis nos resultados."""
     players = [
         dict(row)
         for row in connection.execute(
-            "SELECT id, name, club_name, birth_date FROM players ORDER BY id"
+            "SELECT id, name FROM players ORDER BY id"
         )
     ]
-    by_name: dict[str, list[dict[str, object]]] = {}
-    for player in players:
-        normalized = normalize_player_name(str(player["name"]))
-        by_name.setdefault(normalized, []).append(player)
-
-    for group in by_name.values():
-        if len(group) == 1:
-            group[0]["display_name"] = group[0]["name"]
-            continue
-        labels: dict[str, int] = {}
-        for player in group:
-            club = str(player["club_name"] or "").strip()
-            birth_date = str(player["birth_date"] or "")
-            birth_year = birth_date[:4] if re.match(r"^\d{4}", birth_date) else ""
-            details = " · ".join(value for value in (club, birth_year) if value)
-            label = f"{player['name']} ({details})" if details else str(player["name"])
-            labels[label] = labels.get(label, 0) + 1
-            player["display_name"] = label
-        for player in group:
-            label = str(player["display_name"])
-            if labels[label] > 1:
-                player["display_name"] = f"{label} [ID {player['id']}]"
 
     connection.executemany(
         "UPDATE players SET display_name = ? WHERE id = ?",
-        [(player["display_name"], player["id"]) for player in players],
+        [(str(player["name"]), player["id"]) for player in players],
     )
 
 

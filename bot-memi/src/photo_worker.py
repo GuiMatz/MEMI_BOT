@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import sqlite3
 import time
 from pathlib import Path
 
@@ -13,6 +14,8 @@ from src.photos import PHOTO_ROOT, PhotoCollector
 
 DEFAULT_BATCH_SIZE = 30
 DEFAULT_INTERVAL_SECONDS = 60
+DEFAULT_RETRY_DELAY_SECONDS = 15
+MAX_RETRY_DELAY_SECONDS = 300
 DEFAULT_CHECKPOINT = Path("data/photo_worker_checkpoint.json")
 LOGGER = logging.getLogger("memi.photo_worker")
 
@@ -57,6 +60,10 @@ def _batch_end_id(
     return int(row["last_id"]) if row and row["last_id"] is not None else None
 
 
+def _retry_delay(attempt: int, base_delay: int = DEFAULT_RETRY_DELAY_SECONDS) -> int:
+    return min(MAX_RETRY_DELAY_SECONDS, base_delay * (2 ** max(0, attempt - 1)))
+
+
 def collect_forever(
     database_path: Path,
     photo_root: Path,
@@ -65,10 +72,11 @@ def collect_forever(
     api_key: str,
     batch_size: int = DEFAULT_BATCH_SIZE,
     interval_seconds: int = DEFAULT_INTERVAL_SECONDS,
+    retry_delay_seconds: int = DEFAULT_RETRY_DELAY_SECONDS,
     once: bool = False,
 ) -> None:
-    if batch_size < 1 or interval_seconds < 1:
-        raise ValueError("batch-size e interval devem ser maiores que zero.")
+    if batch_size < 1 or interval_seconds < 1 or retry_delay_seconds < 1:
+        raise ValueError("batch-size, interval e retry-delay devem ser maiores que zero.")
     if not api_key.strip():
         raise ValueError("Configure THESPORTSDB_API_KEY no .env ou use --api-key.")
 
@@ -77,20 +85,37 @@ def collect_forever(
     last_id = _read_checkpoint(checkpoint)
     LOGGER.info("Coleta iniciada após o jogador %s.", last_id)
 
+    retry_attempt = 0
     while True:
         started = time.monotonic()
-        batch_end_id = _batch_end_id(database_path, last_id, batch_size)
-        if batch_end_id is None:
-            LOGGER.info("Não há mais jogadores sem foto após o ID %s.", last_id)
-            return
-        with connect(database_path) as connection:
-            result = collector.collect_entity(
-                connection,
-                "players",
-                True,
-                batch_size,
-                after_id=last_id,
+        try:
+            batch_end_id = _batch_end_id(database_path, last_id, batch_size)
+            if batch_end_id is None:
+                LOGGER.info("Não há mais jogadores sem foto após o ID %s.", last_id)
+                return
+            with connect(database_path) as connection:
+                result = collector.collect_entity(
+                    connection,
+                    "players",
+                    True,
+                    batch_size,
+                    after_id=last_id,
+                )
+        except (OSError, RuntimeError, sqlite3.Error) as error:
+            retry_attempt += 1
+            delay = _retry_delay(retry_attempt, retry_delay_seconds)
+            LOGGER.warning(
+                "Lote após o ID %s travou (%s). Tentativa automática %s; "
+                "nova tentativa em %ss.",
+                last_id,
+                error,
+                retry_attempt,
+                delay,
             )
+            time.sleep(delay)
+            continue
+
+        retry_attempt = 0
         last_id = batch_end_id
         _write_checkpoint(checkpoint, last_id)
         LOGGER.info(
@@ -114,6 +139,12 @@ def main() -> None:
     )
     parser.add_argument("--batch-size", type=int, default=DEFAULT_BATCH_SIZE)
     parser.add_argument("--interval", type=int, default=DEFAULT_INTERVAL_SECONDS)
+    parser.add_argument(
+        "--retry-delay",
+        type=int,
+        default=DEFAULT_RETRY_DELAY_SECONDS,
+        help="segundos antes da primeira tentativa automática",
+    )
     parser.add_argument("--api-key", help="chave do TheSportsDB; prefira o arquivo .env")
     parser.add_argument("--once", action="store_true", help="processa um lote e encerra")
     args = parser.parse_args()
@@ -134,6 +165,7 @@ def main() -> None:
             api_key=args.api_key or os.getenv("THESPORTSDB_API_KEY", ""),
             batch_size=args.batch_size,
             interval_seconds=args.interval,
+            retry_delay_seconds=args.retry_delay,
             once=args.once,
         )
     except (OSError, RuntimeError, ValueError) as error:
