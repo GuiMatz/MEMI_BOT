@@ -252,6 +252,7 @@ CREATE TABLE IF NOT EXISTS game_teams (
     stadium_name TEXT,
     logo_path TEXT,
     kit_path TEXT,
+    favorite_league TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -343,6 +344,15 @@ CREATE TABLE IF NOT EXISTS championship_fixtures (
 CREATE INDEX IF NOT EXISTS idx_championship_fixtures_pending
     ON championship_fixtures(championship_id, is_final, match_order);
 
+CREATE TABLE IF NOT EXISTS mascots (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    owner TEXT,
+    country TEXT,
+    image_path TEXT,
+    UNIQUE (name, owner)
+);
+
 CREATE TABLE IF NOT EXISTS championship_settings (
     guild_id TEXT PRIMARY KEY,
     channel_id TEXT NOT NULL,
@@ -350,6 +360,17 @@ CREATE TABLE IF NOT EXISTS championship_settings (
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 """
+
+
+_IDENTIFIER = re.compile(r"[a-z_][a-z0-9_]*")
+
+
+def _identifier(name: str) -> str:
+    """Nomes de coluna montados nas migrações vêm de listas fixas; isto garante que
+    nada além de um identificador simples entre numa f-string de SQL."""
+    if not _IDENTIFIER.fullmatch(name):
+        raise ValueError(f"Identificador SQL inválido: {name!r}")
+    return name
 
 
 @contextmanager
@@ -391,7 +412,7 @@ def initialize_database(database_path: str | Path = DATABASE_PATH) -> None:
         for column, definition in source_migrations.items():
             if column not in source_columns:
                 connection.execute(
-                    f"ALTER TABLE player_sources ADD COLUMN {column} {definition}"
+                    f"ALTER TABLE player_sources ADD COLUMN {_identifier(column)} {definition}"
                 )
         player_columns = {
             row["name"] for row in connection.execute("PRAGMA table_info(players)")
@@ -413,7 +434,7 @@ def initialize_database(database_path: str | Path = DATABASE_PATH) -> None:
         for column, definition in player_migrations.items():
             if column not in player_columns:
                 connection.execute(
-                    f"ALTER TABLE players ADD COLUMN {column} {definition}"
+                    f"ALTER TABLE players ADD COLUMN {_identifier(column)} {definition}"
                 )
         game_user_columns = {
             row["name"] for row in connection.execute("PRAGMA table_info(game_users)")
@@ -433,7 +454,7 @@ def initialize_database(database_path: str | Path = DATABASE_PATH) -> None:
         for column in ("proposer_confirmed", "recipient_confirmed"):
             if column not in trade_columns:
                 connection.execute(
-                    f"ALTER TABLE trade_offers ADD COLUMN {column} INTEGER NOT NULL DEFAULT 0 "
+                    f"ALTER TABLE trade_offers ADD COLUMN {_identifier(column)} INTEGER NOT NULL DEFAULT 0 "
                     "CHECK (" + column + " IN (0, 1))"
                 )
 
@@ -441,9 +462,9 @@ def initialize_database(database_path: str | Path = DATABASE_PATH) -> None:
         team_columns = {
             row["name"] for row in connection.execute("PRAGMA table_info(game_teams)")
         }
-        for column in ("coach_name", "stadium_name", "kit_path"):
+        for column in ("coach_name", "stadium_name", "kit_path", "favorite_league"):
             if column not in team_columns:
-                connection.execute(f"ALTER TABLE game_teams ADD COLUMN {column} TEXT")
+                connection.execute(f"ALTER TABLE game_teams ADD COLUMN {_identifier(column)} TEXT")
         upgrade_sql = connection.execute(
             "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'user_upgrades'"
         ).fetchone()["sql"]
@@ -488,7 +509,7 @@ def initialize_database(database_path: str | Path = DATABASE_PATH) -> None:
             _migrate_players_without_club_foreign_key(connection, player_columns)
         _migrate_player_overall_100(connection)
 
-        for version in range(1, 12):
+        for version in range(1, 13):
             connection.execute(
                 "INSERT OR IGNORE INTO schema_version (version) VALUES (?)",
                 (version,),

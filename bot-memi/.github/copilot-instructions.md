@@ -1,22 +1,23 @@
 # Instruções do projeto
 
-- Projeto: Bot Memi (Mudae de futebol), fase 1: coleta de dados.
-- Banco SQLite em `data/memi.sqlite`; volume estimado de aproximadamente 150 mil
-  jogadores.
-- Fontes, em ordem: Transfermarkt Datasets, EA FC, API-Football e TheSportsDB.
-- API-Football tem cota gratuita: conferir `x-ratelimit-requests-remaining` e
-  nunca exceder a cota; implementar retomada persistente.
-- Para a temporada 2026/27, considerar ativo no Transfermarkt quem tem
-  `last_season >= 2025` e `current_club_id` preenchido; a API-Football não é
-  requisito de elegibilidade.
-- Posições únicas do jogo: GOL, ZAG, LD, LE, MC, MEI, PE, PD, CA. VOL=MC,
-  SA=CA; ALA precisa de revisão por ser ambígua.
-- Overall inteiro entre 1 e 99. Preferir EA FC; para os demais, estimar com o
-  log do valor de mercado e o peso da liga.
-- Nunca fazer merge automático de jogadores ambíguos; registrar candidatos para
-  revisão manual.
+- Projeto: FUT.AE, o módulo de futebol (estilo Mudae) do MeMi BOT. Roda dentro do
+  `memi_bot.py` da raiz, que importa `src.*` daqui; `python -m src.bot` sobe só o
+  módulo, para testes locais.
+- Banco SQLite em `data/memi.sqlite` (fora do Git), com migrações idempotentes em
+  `src/db.py`. A inicialização carrega a Enciclopédia (`src/seeds/enciclopedia.json`)
+  e liga escudos e fotos locais ao banco (`src.encyclopedia.prepare_game_data`).
+- Fontes: Transfermarkt Datasets, EA FC, API-Football, TheSportsDB e a Enciclopédia.
+- Posições do jogo: GOL, ZAG, LD, LE, MC, MEI, PE, PD, CA.
+- O banco guarda a nota bruta das fontes; o jogo usa `src/ratings.py`
+  (`game_overall`, séries de raridade, regra da roleta `POOL_SQL`). Lendas valem
+  90–99, Cartola 90, e Maria Sofia é a única carta 100.
+- Horários mostrados às pessoas usam Brasília (`src/clock.py`). Rolls renovam a
+  cada hora cheia.
+- Comandos aceitam o nome do jogador; o ID só é pedido quando há homônimos
+  (`src.game.resolve_player`).
+- Nunca fazer merge automático de jogadores ambíguos; `src/dedupe.py` só remove
+  duplicados sem conflito de dono.
 - Segredos só em `.env`; nunca imprimir, registrar ou versionar chaves.
-- Manter código simples, funções pequenas, tipos explícitos e comentários em
-  português quando ajudarem a explicar lógica não óbvia.
-- Usar lotes e `--limit 100` para validar antes de cargas completas.
-- Documentação funcional completa: `docs/projeto.md`.
+- Código simples, tipos explícitos e comentários em português quando explicam
+  lógica não óbvia. Formatação com black (linha de 100).
+- Testes: `python -m unittest discover -s tests` dentro de `bot-memi/`.

@@ -7,13 +7,13 @@ import random
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
+from src.clock import BRASILIA
 from src.db import DATABASE_PATH, connect
 from src.simulation import penalty_shootout_kicks, simulate_match
 from src.teams import TeamError, get_valid_lineup
 
-CHAMPIONSHIP_TIMEZONE = ZoneInfo("America/Sao_Paulo")
+CHAMPIONSHIP_TIMEZONE = BRASILIA
 
 
 class ChampionshipError(Exception):

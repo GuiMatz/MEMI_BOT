@@ -225,7 +225,10 @@ class CatalogTests(DatabaseCase):
     def test_asset_names_are_standardized(self):
         self.assertEqual(pretty_asset_name("flamengo_logo_2024-v2"), "Flamengo")
         self.assertEqual(pretty_asset_name("vasco-da-gama"), "Vasco da Gama")
-        self.assertEqual(pretty_asset_name("escudo_atletico-MG_60x60"), "Atletico MG")
+        self.assertEqual(pretty_asset_name("escudo_atletico-MG_60x60"), "Atlético-MG")
+        self.assertEqual(pretty_asset_name("SaoPaulo"), "São Paulo")
+        self.assertEqual(pretty_asset_name("shaktar_donetsk"), "Shakhtar Donetsk")
+        self.assertEqual(pretty_asset_name("Manchester-City"), "Manchester City")
 
     def test_cartola_top_uses_team_and_mascot_names(self):
         root = Path(self.tempdir.name)

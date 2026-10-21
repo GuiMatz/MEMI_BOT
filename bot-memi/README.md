@@ -43,7 +43,7 @@ python -m src.bot
 ```
 
 O bot carrega os comandos de jogo e gerenciamento em `src/cogs/`. `mm!roll`
-oferece 10 rolagens por ciclo de 30 minutos, renovadas às `:10` e `:40` UTC, e
+oferece 10 rolagens por ciclo de 1 hora, renovadas na hora cheia (horário de Brasília), e
 segue as faixas de raridade do [guia de implementação](docs/guia-ideias-jogo.md).
 Upgrades e tokens de crates podem aumentar os rolls. Duplicatas próprias dão
 uma bola (até 10), +1 overall efetivo e 100 Memilets; acima do limite dão 500
@@ -146,7 +146,7 @@ O FUT.AE é um módulo do MeMi BOT, não um bot separado. O menu geral continua 
 ### Coleção e rolagens
 
 - Banco local com jogadores, ligas, clubes, técnicos, estádios e fontes de dados.
-- `mm!roll` com ciclos de 30 minutos, raridades, claims, exclusividade temporária,
+- `mm!roll` com ciclos de 1 hora, raridades, claims, exclusividade temporária,
   duplicatas, bolas e recompensas.
 - Jogadores sem clube aparecem como `Passes Livres`.
 - Fotos locais são opcionais, têm fallback visual e são coletadas pelo worker do

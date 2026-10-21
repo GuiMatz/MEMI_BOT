@@ -10,10 +10,12 @@ from pathlib import Path
 from typing import Any
 
 from src.db import DATABASE_PATH, connect
-from src.ratings import GAME_OVERALL_SQL, RARITY_TIERS, effective_overall
+from src.ratings import GAME_OVERALL_SQL, POOL_SQL, RARITY_TIERS, effective_overall
 
 ROLLS_PER_CYCLE = 10
-CYCLE_LENGTH = timedelta(minutes=30)
+CYCLE_LENGTH = timedelta(hours=1)
+# Os ciclos começam na hora cheia (em Brasília também, já que o fuso é UTC-3).
+CYCLE_OFFSET_SECONDS = 0
 CLAIM_EXCLUSIVE_TIME = timedelta(seconds=5)
 CLAIM_OFFER_LIFETIME = timedelta(minutes=5)
 CLAIM_COOLDOWN = timedelta(hours=1)
@@ -70,9 +72,9 @@ def _utc_now(value: datetime | None) -> datetime:
 
 def _cycle_start(now: datetime) -> datetime:
     epoch_seconds = int(now.timestamp())
-    cycle_index = (epoch_seconds - 10 * 60) // int(CYCLE_LENGTH.total_seconds())
+    cycle_index = (epoch_seconds - CYCLE_OFFSET_SECONDS) // int(CYCLE_LENGTH.total_seconds())
     return datetime.fromtimestamp(
-        cycle_index * int(CYCLE_LENGTH.total_seconds()) + 10 * 60,
+        cycle_index * int(CYCLE_LENGTH.total_seconds()) + CYCLE_OFFSET_SECONDS,
         tz=timezone.utc,
     )
 
@@ -171,10 +173,7 @@ def roll_player(
         counts = connection.execute(f"""
             SELECT rarity_index({GAME_OVERALL_SQL}) AS band, COUNT(*) AS player_count
             FROM players AS p
-            WHERE p.activity_status = 'active'
-              AND p.phase2_candidate = 0
-              AND p.overall IS NOT NULL
-              AND p.game_position IS NOT NULL
+            WHERE {POOL_SQL}
             GROUP BY band
             """).fetchall()
         available_counts = {
@@ -198,10 +197,8 @@ def roll_player(
               ON w.player_id = p.id
              AND w.discord_user_id = ?
              AND w.wish_type = 'star'
-            WHERE p.activity_status = 'active'
-              AND p.phase2_candidate = 0
+            WHERE {POOL_SQL}
               AND {GAME_OVERALL_SQL} BETWEEN ? AND ?
-              AND p.game_position IS NOT NULL
             """,
             (user_id, lower_bound, upper_bound),
         ).fetchall()
@@ -253,10 +250,8 @@ def roll_player(
             LEFT JOIN player_ownership AS o ON o.player_id = p.id
             LEFT JOIN game_users AS owner ON owner.discord_user_id = o.discord_user_id
             LEFT JOIN player_balls AS b ON b.player_id = p.id
-            WHERE p.activity_status = 'active'
-              AND p.phase2_candidate = 0
+            WHERE {POOL_SQL}
               AND {GAME_OVERALL_SQL} BETWEEN ? AND ?
-              AND p.game_position IS NOT NULL
               {star_exclusion}
             ORDER BY p.id
             LIMIT 1 OFFSET ?

@@ -1426,7 +1426,10 @@ class Deezer:
         """Igual ao info, mas nunca trava nem dá erro: no pior caso volta ('', '') e o embed sai sem capa."""
         try:
             return await asyncio.wait_for(self.info(texto, titulo, artista), DEEZER_ESPERA)
+        except asyncio.TimeoutError:
+            return "", ""
         except Exception:  # noqa: BLE001 - capa é enfeite, não pode derrubar o comando
+            logging.warning("Falha ao buscar a capa de %r.", texto, exc_info=True)
             return "", ""
 
 
@@ -1568,7 +1571,10 @@ class Links:
         """Igual ao titulo, mas nunca trava nem dá erro: no pior caso volta None e o link aparece cru."""
         try:
             return await asyncio.wait_for(self.titulo(texto), LINK_ESPERA)
+        except asyncio.TimeoutError:
+            return None
         except Exception:  # noqa: BLE001 - título é enfeite, não pode derrubar o comando
+            logging.warning("Falha ao buscar o título do link %r.", texto, exc_info=True)
             return None
 
 
@@ -1639,6 +1645,7 @@ def imagem_da_tag(ident):
         try:
             return imagens.gerar_emblema(patente)
         except Exception:  # noqa: BLE001 - enfeite
+            logging.warning("Falha ao gerar o emblema da patente %s.", ident, exc_info=True)
             return None
     return None
 
@@ -3685,17 +3692,14 @@ AJUDA_JOGO = [
     (
         "🎲 FUT.AE · Coleção",
         [
-            ("mm!roll", "rola um jogador; o botão reivindica ou resgata Memilets"),
+            ("mm!roll", "rola um jogador (rolls renovam a cada hora cheia, horário de Brasília)"),
             ("mm!tu", "mostra rolls restantes, claim e daily com horário"),
             ("mm!scout <nome>", "ficha com foto de jogador, técnico, estádio, clube ou item"),
             ("mm!top [categoria]", "catálogo: jogadores, cartola, técnicos, uniformes, mascotes…"),
             ("mm!left", "quanto ainda está livre em cada série (livres/total)"),
-            (
-                "mm!elenco [@pessoa] [filtro]",
-                "elenco paginado; filtros: posição, overall, clube ou liga",
-            ),
+            ("mm!elenco [@pessoa] [filtro]", "uma carta por página; filtros: posição, overall, clube"),
             ("mm!wish / mm!starwish <jogador>", "adiciona/remove wish; sem jogador, lista"),
-            ("mm!wishlist / mm!wl", "mostra todas as suas wishes"),
+            ("mm!wishlist / mm!wl", "suas wishes, com slots usados/máximo no topo"),
         ],
     ),
     (
@@ -3705,16 +3709,16 @@ AJUDA_JOGO = [
             ("mm!carteira", "saldo, rolls, wishes, timers e garantia das crates"),
             ("mm!upgrade [tipo]", "rolls, wishes, daily, exclusividade e duplicata"),
             ("mm!crates", "abre uma crate por 500 Memilets (sempre volta pelo menos 350)"),
-            ("mm!demitir <jogador>", "libera jogador e recebe reembolso"),
-            ("mm!troca @pessoa <seu_id> <id_dela> [moedas]", "propõe troca de jogadores"),
+            ("mm!demitir <nome>", "libera jogador e recebe reembolso"),
+            ("mm!troca @pessoa <seu jogador> por <dela> [moedas]", "propõe troca de jogadores"),
         ],
     ),
     (
         "⚽ FUT.AE · Time e partidas",
         [
             ("mm!escalar", "monta o time clicando na posição e escolhendo o jogador"),
-            ("mm!time [campo valor]", "perfil do time com imagem da formação"),
-            ("mm!tatica <operação> <valor>", "formação, estilo e cobradores"),
+            ("mm!time [campo valor]", "perfil e imagem do time; `mm!time liga <nome>` define a liga favorita"),
+            ("mm!tatica capitao|falta|penalti <nome>", "cobradores e capitão pelo nome; também formação e estilo"),
             ("mm!amistoso @pessoa", "partida narrada minuto a minuto"),
             ("mm!campeonato inscrever", "inscreve seu time no campeonato diário"),
             ("mm!campeonato iniciar", "joga o campeonato; final empatada vai para os pênaltis"),
@@ -3869,19 +3873,18 @@ class MeMiBot(commands.Bot):
         from src.cogs.rolls import RollsCog
         from src.cogs.team import TeamCog
         from src.cogs.trades import TradesCog
-        from src.photos import sync_existing_photos
+        from src.encyclopedia import prepare_game_data
 
         initialize_database(GAME_DATABASE_PATH)
         self.database_path = GAME_DATABASE_PATH
         for cog in (GameCog, EconomyCog, RollsCog, TradesCog, TeamCog, MatchesCog, AdminCog):
             await self.add_cog(cog(self))
         try:
-            ligadas = await asyncio.to_thread(sync_existing_photos, GAME_DATABASE_PATH)
+            relatorio = await asyncio.to_thread(prepare_game_data, GAME_DATABASE_PATH)
         except Exception:
-            logging.exception("Não consegui ligar as fotos já baixadas do FUT.AE.")
+            logging.exception("Não consegui sincronizar a enciclopédia, os escudos e as fotos do FUT.AE.")
         else:
-            if ligadas:
-                logging.info("FUT.AE: %s fotos já baixadas ligadas ao banco.", ligadas)
+            logging.info("FUT.AE sincronizado: %s", relatorio)
 
     async def get_context(self, origin, *, cls=commands.Context):
         """Aceita o comando com ou sem acento (mm!tática = mm!tatica)."""

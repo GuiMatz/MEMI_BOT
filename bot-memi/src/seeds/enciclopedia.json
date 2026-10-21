@@ -1,0 +1,4312 @@
+{
+ "coaches": [
+  {
+   "name": "Pep Guardiola",
+   "country": "Espanha"
+  },
+  {
+   "name": "Carlo Ancelotti",
+   "country": "Itália"
+  },
+  {
+   "name": "Jürgen Klopp",
+   "country": "Alemanha"
+  },
+  {
+   "name": "José Mourinho",
+   "country": "Portugal"
+  },
+  {
+   "name": "Arsène Wenger",
+   "country": "França"
+  },
+  {
+   "name": "Alex Ferguson",
+   "country": "Escócia"
+  },
+  {
+   "name": "Diego Simeone",
+   "country": "Argentina"
+  },
+  {
+   "name": "Antonio Conte",
+   "country": "Itália"
+  },
+  {
+   "name": "Zinedine Zidane",
+   "country": "França"
+  },
+  {
+   "name": "Luis Enrique",
+   "country": "Espanha"
+  },
+  {
+   "name": "Mikel Arteta",
+   "country": "Espanha"
+  },
+  {
+   "name": "Arne Slot",
+   "country": "Holanda"
+  },
+  {
+   "name": "Unai Emery",
+   "country": "Espanha"
+  },
+  {
+   "name": "Thomas Tuchel",
+   "country": "Alemanha"
+  },
+  {
+   "name": "Hansi Flick",
+   "country": "Alemanha"
+  },
+  {
+   "name": "Xabi Alonso",
+   "country": "Espanha"
+  },
+  {
+   "name": "Julian Nagelsmann",
+   "country": "Alemanha"
+  },
+  {
+   "name": "Mauricio Pochettino",
+   "country": "Argentina"
+  },
+  {
+   "name": "Massimiliano Allegri",
+   "country": "Itália"
+  },
+  {
+   "name": "Simone Inzaghi",
+   "country": "Itália"
+  },
+  {
+   "name": "Luciano Spalletti",
+   "country": "Itália"
+  },
+  {
+   "name": "Gian Piero Gasperini",
+   "country": "Itália"
+  },
+  {
+   "name": "Stefano Pioli",
+   "country": "Itália"
+  },
+  {
+   "name": "Roberto De Zerbi",
+   "country": "Itália"
+  },
+  {
+   "name": "Maurizio Sarri",
+   "country": "Itália"
+  },
+  {
+   "name": "Claudio Ranieri",
+   "country": "Itália"
+  },
+  {
+   "name": "Roberto Mancini",
+   "country": "Itália"
+  },
+  {
+   "name": "Marcelo Bielsa",
+   "country": "Argentina"
+  },
+  {
+   "name": "Ernesto Valverde",
+   "country": "Espanha"
+  },
+  {
+   "name": "Rafael Benítez",
+   "country": "Espanha"
+  },
+  {
+   "name": "Erik ten Hag",
+   "country": "Holanda"
+  },
+  {
+   "name": "Ruben Amorim",
+   "country": "Portugal"
+  },
+  {
+   "name": "Ange Postecoglou",
+   "country": "Austrália"
+  },
+  {
+   "name": "Eddie Howe",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Enzo Maresca",
+   "country": "Itália"
+  },
+  {
+   "name": "Oliver Glasner",
+   "country": "Áustria"
+  },
+  {
+   "name": "Andoni Iraola",
+   "country": "Espanha"
+  },
+  {
+   "name": "Thomas Frank",
+   "country": "Dinamarca"
+  },
+  {
+   "name": "Marco Silva",
+   "country": "Portugal"
+  },
+  {
+   "name": "Sean Dyche",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Graham Potter",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Roberto Martínez",
+   "country": "Espanha"
+  },
+  {
+   "name": "Brendan Rodgers",
+   "country": "Irlanda do Norte"
+  },
+  {
+   "name": "David Moyes",
+   "country": "Escócia"
+  },
+  {
+   "name": "Roy Hodgson",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Gareth Southgate",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Vincent Kompany",
+   "country": "Bélgica"
+  },
+  {
+   "name": "Ralf Rangnick",
+   "country": "Alemanha"
+  },
+  {
+   "name": "Niko Kovač",
+   "country": "Croácia"
+  },
+  {
+   "name": "Edin Terzić",
+   "country": "Alemanha"
+  },
+  {
+   "name": "Domenico Tedesco",
+   "country": "Alemanha"
+  },
+  {
+   "name": "Julen Lopetegui",
+   "country": "Espanha"
+  },
+  {
+   "name": "Marcelino García Toral",
+   "country": "Espanha"
+  },
+  {
+   "name": "José Bordalás",
+   "country": "Espanha"
+  },
+  {
+   "name": "Manuel Pellegrini",
+   "country": "Chile"
+  },
+  {
+   "name": "Xavi Hernández",
+   "country": "Espanha"
+  },
+  {
+   "name": "Didier Deschamps",
+   "country": "França"
+  },
+  {
+   "name": "Laurent Blanc",
+   "country": "França"
+  },
+  {
+   "name": "Rudi Garcia",
+   "country": "França"
+  },
+  {
+   "name": "Jorge Jesus",
+   "country": "Portugal"
+  },
+  {
+   "name": "Abel Ferreira",
+   "country": "Portugal"
+  },
+  {
+   "name": "Filipe Luís",
+   "country": "Brasil"
+  },
+  {
+   "name": "Tite",
+   "country": "Brasil"
+  },
+  {
+   "name": "Renato Gaúcho",
+   "country": "Brasil"
+  },
+  {
+   "name": "Cuca",
+   "country": "Brasil"
+  },
+  {
+   "name": "Fernando Diniz",
+   "country": "Brasil"
+  },
+  {
+   "name": "Dorival Júnior",
+   "country": "Brasil"
+  },
+  {
+   "name": "Mano Menezes",
+   "country": "Brasil"
+  },
+  {
+   "name": "Vanderlei Luxemburgo",
+   "country": "Brasil"
+  },
+  {
+   "name": "Muricy Ramalho",
+   "country": "Brasil"
+  },
+  {
+   "name": "Abel Braga",
+   "country": "Brasil"
+  },
+  {
+   "name": "Luiz Felipe Scolari",
+   "country": "Brasil"
+  },
+  {
+   "name": "Carlos Alberto Parreira",
+   "country": "Brasil"
+  },
+  {
+   "name": "Mário Zagallo",
+   "country": "Brasil"
+  },
+  {
+   "name": "Telê Santana",
+   "country": "Brasil"
+  },
+  {
+   "name": "Rogério Ceni",
+   "country": "Brasil"
+  },
+  {
+   "name": "Fábio Carille",
+   "country": "Brasil"
+  },
+  {
+   "name": "Jorge Sampaoli",
+   "country": "Argentina"
+  },
+  {
+   "name": "Marcelo Gallardo",
+   "country": "Argentina"
+  },
+  {
+   "name": "Lionel Scaloni",
+   "country": "Argentina"
+  },
+  {
+   "name": "Carlos Bilardo",
+   "country": "Argentina"
+  },
+  {
+   "name": "César Luis Menotti",
+   "country": "Argentina"
+  },
+  {
+   "name": "Johan Cruyff",
+   "country": "Holanda"
+  },
+  {
+   "name": "Rinus Michels",
+   "country": "Holanda"
+  },
+  {
+   "name": "Arrigo Sacchi",
+   "country": "Itália"
+  },
+  {
+   "name": "Fabio Capello",
+   "country": "Itália"
+  },
+  {
+   "name": "Giovanni Trapattoni",
+   "country": "Itália"
+  },
+  {
+   "name": "Vicente del Bosque",
+   "country": "Espanha"
+  },
+  {
+   "name": "Jupp Heynckes",
+   "country": "Alemanha"
+  },
+  {
+   "name": "Ottmar Hitzfeld",
+   "country": "Alemanha"
+  },
+  {
+   "name": "Joachim Löw",
+   "country": "Alemanha"
+  },
+  {
+   "name": "Louis van Gaal",
+   "country": "Holanda"
+  },
+  {
+   "name": "Guus Hiddink",
+   "country": "Holanda"
+  },
+  {
+   "name": "Bob Paisley",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Brian Clough",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Matt Busby",
+   "country": "Escócia"
+  },
+  {
+   "name": "Helenio Herrera",
+   "country": "Argentina"
+  },
+  {
+   "name": "Ernst Happel",
+   "country": "Áustria"
+  },
+  {
+   "name": "Valeriy Lobanovskyi",
+   "country": "Ucrânia"
+  },
+  {
+   "name": "Bill Shankly",
+   "country": "Escócia"
+  }
+ ],
+ "legends": [
+  {
+   "name": "Alisson Becker",
+   "country": "Brasil",
+   "position": "GOL"
+  },
+  {
+   "name": "Amadeo Carrizo",
+   "country": "Argentina",
+   "position": "GOL"
+  },
+  {
+   "name": "Andoni Zubizarreta",
+   "country": "Espanha",
+   "position": "GOL"
+  },
+  {
+   "name": "Castilho",
+   "country": "Brasil",
+   "position": "GOL"
+  },
+  {
+   "name": "Cláudio Taffarel",
+   "country": "Brasil",
+   "position": "GOL"
+  },
+  {
+   "name": "Dida",
+   "country": "Brasil",
+   "position": "GOL"
+  },
+  {
+   "name": "Dino Zoff",
+   "country": "Itália",
+   "position": "GOL"
+  },
+  {
+   "name": "Ederson",
+   "country": "Brasil",
+   "position": "GOL"
+  },
+  {
+   "name": "Edwin van der Sar",
+   "country": "Holanda",
+   "position": "GOL"
+  },
+  {
+   "name": "Emiliano Martínez",
+   "country": "Argentina",
+   "position": "GOL"
+  },
+  {
+   "name": "Fabien Barthez",
+   "country": "França",
+   "position": "GOL"
+  },
+  {
+   "name": "Félix",
+   "country": "Brasil",
+   "position": "GOL"
+  },
+  {
+   "name": "Fernando Muslera",
+   "country": "Uruguai",
+   "position": "GOL"
+  },
+  {
+   "name": "Gianluigi Buffon",
+   "country": "Itália",
+   "position": "GOL"
+  },
+  {
+   "name": "Gilmar",
+   "country": "Brasil",
+   "position": "GOL"
+  },
+  {
+   "name": "Gordon Banks",
+   "country": "Inglaterra",
+   "position": "GOL"
+  },
+  {
+   "name": "Harald Schumacher",
+   "country": "Alemanha",
+   "position": "GOL"
+  },
+  {
+   "name": "Hugo Lloris",
+   "country": "França",
+   "position": "GOL"
+  },
+  {
+   "name": "Iker Casillas",
+   "country": "Espanha",
+   "position": "GOL"
+  },
+  {
+   "name": "Jean-Marie Pfaff",
+   "country": "Bélgica",
+   "position": "GOL"
+  },
+  {
+   "name": "Jorge Campos",
+   "country": "México",
+   "position": "GOL"
+  },
+  {
+   "name": "José Luis Chilavert",
+   "country": "Paraguai",
+   "position": "GOL"
+  },
+  {
+   "name": "Júlio César",
+   "country": "Brasil",
+   "position": "GOL"
+  },
+  {
+   "name": "Keylor Navas",
+   "country": "Costa Rica",
+   "position": "GOL"
+  },
+  {
+   "name": "Leão",
+   "country": "Brasil",
+   "position": "GOL"
+  },
+  {
+   "name": "Lev Yashin",
+   "country": "Rússia",
+   "position": "GOL"
+  },
+  {
+   "name": "Manuel Neuer",
+   "country": "Alemanha",
+   "position": "GOL"
+  },
+  {
+   "name": "Marcos",
+   "country": "Brasil",
+   "position": "GOL"
+  },
+  {
+   "name": "Moacir Barbosa",
+   "country": "Brasil",
+   "position": "GOL"
+  },
+  {
+   "name": "Neville Southall",
+   "country": "País de Gales",
+   "position": "GOL"
+  },
+  {
+   "name": "Oliver Kahn",
+   "country": "Alemanha",
+   "position": "GOL"
+  },
+  {
+   "name": "Pat Jennings",
+   "country": "Irlanda do Norte",
+   "position": "GOL"
+  },
+  {
+   "name": "Peter Schmeichel",
+   "country": "Dinamarca",
+   "position": "GOL"
+  },
+  {
+   "name": "Peter Shilton",
+   "country": "Inglaterra",
+   "position": "GOL"
+  },
+  {
+   "name": "Petr Čech",
+   "country": "República Tcheca",
+   "position": "GOL"
+  },
+  {
+   "name": "René Higuita",
+   "country": "Colômbia",
+   "position": "GOL"
+  },
+  {
+   "name": "Ricardo Zamora",
+   "country": "Espanha",
+   "position": "GOL"
+  },
+  {
+   "name": "Rogério Ceni",
+   "country": "Brasil",
+   "position": "GOL"
+  },
+  {
+   "name": "Sepp Maier",
+   "country": "Alemanha",
+   "position": "GOL"
+  },
+  {
+   "name": "Sergio Goycochea",
+   "country": "Argentina",
+   "position": "GOL"
+  },
+  {
+   "name": "Thibaut Courtois",
+   "country": "Bélgica",
+   "position": "GOL"
+  },
+  {
+   "name": "Ubaldo Fillol",
+   "country": "Argentina",
+   "position": "GOL"
+  },
+  {
+   "name": "Vítor Baía",
+   "country": "Portugal",
+   "position": "GOL"
+  },
+  {
+   "name": "Waldir Peres",
+   "country": "Brasil",
+   "position": "GOL"
+  },
+  {
+   "name": "Walter Zenga",
+   "country": "Itália",
+   "position": "GOL"
+  },
+  {
+   "name": "Alan Hansen",
+   "country": "Escócia",
+   "position": "ZAG"
+  },
+  {
+   "name": "Aldair",
+   "country": "Brasil",
+   "position": "ZAG"
+  },
+  {
+   "name": "Alessandro Costacurta",
+   "country": "Itália",
+   "position": "ZAG"
+  },
+  {
+   "name": "Alessandro Nesta",
+   "country": "Itália",
+   "position": "ZAG"
+  },
+  {
+   "name": "Bellini",
+   "country": "Brasil",
+   "position": "ZAG"
+  },
+  {
+   "name": "Billy Wright",
+   "country": "Inglaterra",
+   "position": "ZAG"
+  },
+  {
+   "name": "Bobby Moore",
+   "country": "Inglaterra",
+   "position": "ZAG"
+  },
+  {
+   "name": "Brito",
+   "country": "Brasil",
+   "position": "ZAG"
+  },
+  {
+   "name": "Carles Puyol",
+   "country": "Espanha",
+   "position": "ZAG"
+  },
+  {
+   "name": "Carlos Gamarra",
+   "country": "Paraguai",
+   "position": "ZAG"
+  },
+  {
+   "name": "Carlos Mozer",
+   "country": "Brasil",
+   "position": "ZAG"
+  },
+  {
+   "name": "Ciro Ferrara",
+   "country": "Itália",
+   "position": "ZAG"
+  },
+  {
+   "name": "Claudio Gentile",
+   "country": "Itália",
+   "position": "ZAG"
+  },
+  {
+   "name": "Cristian Chivu",
+   "country": "Romênia",
+   "position": "ZAG"
+  },
+  {
+   "name": "Daniel Passarella",
+   "country": "Argentina",
+   "position": "ZAG"
+  },
+  {
+   "name": "David Luiz",
+   "country": "Brasil",
+   "position": "ZAG"
+  },
+  {
+   "name": "Diego Godín",
+   "country": "Uruguai",
+   "position": "ZAG"
+  },
+  {
+   "name": "Domingos da Guia",
+   "country": "Brasil",
+   "position": "ZAG"
+  },
+  {
+   "name": "Edinho",
+   "country": "Brasil",
+   "position": "ZAG"
+  },
+  {
+   "name": "Edmílson",
+   "country": "Brasil",
+   "position": "ZAG"
+  },
+  {
+   "name": "Elías Figueroa",
+   "country": "Chile",
+   "position": "ZAG"
+  },
+  {
+   "name": "Fabio Cannavaro",
+   "country": "Itália",
+   "position": "ZAG"
+  },
+  {
+   "name": "Fernando Couto",
+   "country": "Portugal",
+   "position": "ZAG"
+  },
+  {
+   "name": "Fernando Hierro",
+   "country": "Espanha",
+   "position": "ZAG"
+  },
+  {
+   "name": "Franco Baresi",
+   "country": "Itália",
+   "position": "ZAG"
+  },
+  {
+   "name": "Frank de Boer",
+   "country": "Holanda",
+   "position": "ZAG"
+  },
+  {
+   "name": "Franz Beckenbauer",
+   "country": "Alemanha",
+   "position": "ZAG"
+  },
+  {
+   "name": "Gaetano Scirea",
+   "country": "Itália",
+   "position": "ZAG"
+  },
+  {
+   "name": "Gerard Piqué",
+   "country": "Espanha",
+   "position": "ZAG"
+  },
+  {
+   "name": "Giorgio Chiellini",
+   "country": "Itália",
+   "position": "ZAG"
+  },
+  {
+   "name": "Giuseppe Bergomi",
+   "country": "Itália",
+   "position": "ZAG"
+  },
+  {
+   "name": "Héctor Chumpitaz",
+   "country": "Peru",
+   "position": "ZAG"
+  },
+  {
+   "name": "Hong Myung-bo",
+   "country": "Coreia do Sul",
+   "position": "ZAG"
+  },
+  {
+   "name": "Iván Córdoba",
+   "country": "Colômbia",
+   "position": "ZAG"
+  },
+  {
+   "name": "Jaap Stam",
+   "country": "Holanda",
+   "position": "ZAG"
+  },
+  {
+   "name": "Jack Charlton",
+   "country": "Inglaterra",
+   "position": "ZAG"
+  },
+  {
+   "name": "Jamie Carragher",
+   "country": "Inglaterra",
+   "position": "ZAG"
+  },
+  {
+   "name": "Jérôme Boateng",
+   "country": "Alemanha",
+   "position": "ZAG"
+  },
+  {
+   "name": "John Charles",
+   "country": "País de Gales",
+   "position": "ZAG"
+  },
+  {
+   "name": "John Terry",
+   "country": "Inglaterra",
+   "position": "ZAG"
+  },
+  {
+   "name": "José Luis Brown",
+   "country": "Argentina",
+   "position": "ZAG"
+  },
+  {
+   "name": "José Nasazzi",
+   "country": "Uruguai",
+   "position": "ZAG"
+  },
+  {
+   "name": "Juan",
+   "country": "Brasil",
+   "position": "ZAG"
+  },
+  {
+   "name": "Jürgen Kohler",
+   "country": "Alemanha",
+   "position": "ZAG"
+  },
+  {
+   "name": "Karlheinz Förster",
+   "country": "Alemanha",
+   "position": "ZAG"
+  },
+  {
+   "name": "Laurent Blanc",
+   "country": "França",
+   "position": "ZAG"
+  },
+  {
+   "name": "Leonardo Bonucci",
+   "country": "Itália",
+   "position": "ZAG"
+  },
+  {
+   "name": "Lúcio",
+   "country": "Brasil",
+   "position": "ZAG"
+  },
+  {
+   "name": "Luís Pereira",
+   "country": "Brasil",
+   "position": "ZAG"
+  },
+  {
+   "name": "Luizinho",
+   "country": "Brasil",
+   "position": "ZAG"
+  },
+  {
+   "name": "Marcel Desailly",
+   "country": "França",
+   "position": "ZAG"
+  },
+  {
+   "name": "Márcio Santos",
+   "country": "Brasil",
+   "position": "ZAG"
+  },
+  {
+   "name": "Marco Materazzi",
+   "country": "Itália",
+   "position": "ZAG"
+  },
+  {
+   "name": "Marquinhos",
+   "country": "Brasil",
+   "position": "ZAG"
+  },
+  {
+   "name": "Mats Hummels",
+   "country": "Alemanha",
+   "position": "ZAG"
+  },
+  {
+   "name": "Mauro Galvão",
+   "country": "Brasil",
+   "position": "ZAG"
+  },
+  {
+   "name": "Mauro Ramos",
+   "country": "Brasil",
+   "position": "ZAG"
+  },
+  {
+   "name": "Nemanja Vidić",
+   "country": "Sérvia",
+   "position": "ZAG"
+  },
+  {
+   "name": "Orlando Peçanha",
+   "country": "Brasil",
+   "position": "ZAG"
+  },
+  {
+   "name": "Oscar Ruggeri",
+   "country": "Argentina",
+   "position": "ZAG"
+  },
+  {
+   "name": "Paolo Montero",
+   "country": "Uruguai",
+   "position": "ZAG"
+  },
+  {
+   "name": "Paul McGrath",
+   "country": "Irlanda",
+   "position": "ZAG"
+  },
+  {
+   "name": "Pepe",
+   "country": "Portugal",
+   "position": "ZAG"
+  },
+  {
+   "name": "Per Mertesacker",
+   "country": "Alemanha",
+   "position": "ZAG"
+  },
+  {
+   "name": "Rafael Márquez",
+   "country": "México",
+   "position": "ZAG"
+  },
+  {
+   "name": "Raphaël Varane",
+   "country": "França",
+   "position": "ZAG"
+  },
+  {
+   "name": "Ricardo Carvalho",
+   "country": "Portugal",
+   "position": "ZAG"
+  },
+  {
+   "name": "Ricardo Gomes",
+   "country": "Brasil",
+   "position": "ZAG"
+  },
+  {
+   "name": "Ricardo Rocha",
+   "country": "Brasil",
+   "position": "ZAG"
+  },
+  {
+   "name": "Rio Ferdinand",
+   "country": "Inglaterra",
+   "position": "ZAG"
+  },
+  {
+   "name": "Roberto Ayala",
+   "country": "Argentina",
+   "position": "ZAG"
+  },
+  {
+   "name": "Ronald Koeman",
+   "country": "Holanda",
+   "position": "ZAG"
+  },
+  {
+   "name": "Roque Júnior",
+   "country": "Brasil",
+   "position": "ZAG"
+  },
+  {
+   "name": "Sami Hyypiä",
+   "country": "Finlândia",
+   "position": "ZAG"
+  },
+  {
+   "name": "Sergio Ramos",
+   "country": "Espanha",
+   "position": "ZAG"
+  },
+  {
+   "name": "Siniša Mihajlović",
+   "country": "Sérvia",
+   "position": "ZAG"
+  },
+  {
+   "name": "Slaven Bilić",
+   "country": "Croácia",
+   "position": "ZAG"
+  },
+  {
+   "name": "Sol Campbell",
+   "country": "Inglaterra",
+   "position": "ZAG"
+  },
+  {
+   "name": "Terry Butcher",
+   "country": "Inglaterra",
+   "position": "ZAG"
+  },
+  {
+   "name": "Thiago Silva",
+   "country": "Brasil",
+   "position": "ZAG"
+  },
+  {
+   "name": "Tony Adams",
+   "country": "Inglaterra",
+   "position": "ZAG"
+  },
+  {
+   "name": "Vincent Kompany",
+   "country": "Bélgica",
+   "position": "ZAG"
+  },
+  {
+   "name": "Virgil van Dijk",
+   "country": "Holanda",
+   "position": "ZAG"
+  },
+  {
+   "name": "Walter Samuel",
+   "country": "Argentina",
+   "position": "ZAG"
+  },
+  {
+   "name": "Wilson Piazza",
+   "country": "Brasil",
+   "position": "ZAG"
+  },
+  {
+   "name": "Albert Ferrer",
+   "country": "Espanha",
+   "position": "LD"
+  },
+  {
+   "name": "Bacary Sagna",
+   "country": "França",
+   "position": "LD"
+  },
+  {
+   "name": "Berti Vogts",
+   "country": "Alemanha",
+   "position": "LD"
+  },
+  {
+   "name": "Branislav Ivanović",
+   "country": "Sérvia",
+   "position": "LD"
+  },
+  {
+   "name": "Cafu",
+   "country": "Brasil",
+   "position": "LD"
+  },
+  {
+   "name": "Carlos Alberto Torres",
+   "country": "Brasil",
+   "position": "LD"
+  },
+  {
+   "name": "Christian Panucci",
+   "country": "Itália",
+   "position": "LD"
+  },
+  {
+   "name": "Dan Petrescu",
+   "country": "Romênia",
+   "position": "LD"
+  },
+  {
+   "name": "Dani Alves",
+   "country": "Brasil",
+   "position": "LD"
+  },
+  {
+   "name": "Danny McGrain",
+   "country": "Escócia",
+   "position": "LD"
+  },
+  {
+   "name": "Darijo Srna",
+   "country": "Croácia",
+   "position": "LD"
+  },
+  {
+   "name": "Djalma Santos",
+   "country": "Brasil",
+   "position": "LD"
+  },
+  {
+   "name": "Eric Gerets",
+   "country": "Bélgica",
+   "position": "LD"
+  },
+  {
+   "name": "Gary Neville",
+   "country": "Inglaterra",
+   "position": "LD"
+  },
+  {
+   "name": "Gianluca Pessotto",
+   "country": "Itália",
+   "position": "LD"
+  },
+  {
+   "name": "Gianluca Zambrotta",
+   "country": "Itália",
+   "position": "LD"
+  },
+  {
+   "name": "Javier Zanetti",
+   "country": "Argentina",
+   "position": "LD"
+  },
+  {
+   "name": "Jorginho",
+   "country": "Brasil",
+   "position": "LD"
+  },
+  {
+   "name": "Josimar",
+   "country": "Brasil",
+   "position": "LD"
+  },
+  {
+   "name": "Leandro",
+   "country": "Brasil",
+   "position": "LD"
+  },
+  {
+   "name": "Lee Dixon",
+   "country": "Inglaterra",
+   "position": "LD"
+  },
+  {
+   "name": "Lilian Thuram",
+   "country": "França",
+   "position": "LD"
+  },
+  {
+   "name": "Maicon",
+   "country": "Brasil",
+   "position": "LD"
+  },
+  {
+   "name": "Mauro Tassotti",
+   "country": "Itália",
+   "position": "LD"
+  },
+  {
+   "name": "Míchel Salgado",
+   "country": "Espanha",
+   "position": "LD"
+  },
+  {
+   "name": "Nelinho",
+   "country": "Brasil",
+   "position": "LD"
+  },
+  {
+   "name": "Paulo Ferreira",
+   "country": "Portugal",
+   "position": "LD"
+  },
+  {
+   "name": "Phil Neal",
+   "country": "Inglaterra",
+   "position": "LD"
+  },
+  {
+   "name": "Philipp Lahm",
+   "country": "Alemanha",
+   "position": "LD"
+  },
+  {
+   "name": "Roland Nilsson",
+   "country": "Suécia",
+   "position": "LD"
+  },
+  {
+   "name": "Stephan Lichtsteiner",
+   "country": "Suíça",
+   "position": "LD"
+  },
+  {
+   "name": "Viv Anderson",
+   "country": "Inglaterra",
+   "position": "LD"
+  },
+  {
+   "name": "Willy Sagnol",
+   "country": "França",
+   "position": "LD"
+  },
+  {
+   "name": "Wim Suurbier",
+   "country": "Holanda",
+   "position": "LD"
+  },
+  {
+   "name": "Zé Maria",
+   "country": "Brasil",
+   "position": "LD"
+  },
+  {
+   "name": "Alberto Tarantini",
+   "country": "Argentina",
+   "position": "LE"
+  },
+  {
+   "name": "Andreas Brehme",
+   "country": "Alemanha",
+   "position": "LE"
+  },
+  {
+   "name": "Antonio Cabrini",
+   "country": "Itália",
+   "position": "LE"
+  },
+  {
+   "name": "Ashley Cole",
+   "country": "Inglaterra",
+   "position": "LE"
+  },
+  {
+   "name": "Bixente Lizarazu",
+   "country": "França",
+   "position": "LE"
+  },
+  {
+   "name": "Branco",
+   "country": "Brasil",
+   "position": "LE"
+  },
+  {
+   "name": "Denis Irwin",
+   "country": "Irlanda",
+   "position": "LE"
+  },
+  {
+   "name": "Eric Abidal",
+   "country": "França",
+   "position": "LE"
+  },
+  {
+   "name": "Everaldo",
+   "country": "Brasil",
+   "position": "LE"
+  },
+  {
+   "name": "Fábio Coentrão",
+   "country": "Portugal",
+   "position": "LE"
+  },
+  {
+   "name": "Filipe Luís",
+   "country": "Brasil",
+   "position": "LE"
+  },
+  {
+   "name": "Gabriel Heinze",
+   "country": "Argentina",
+   "position": "LE"
+  },
+  {
+   "name": "Giacinto Facchetti",
+   "country": "Itália",
+   "position": "LE"
+  },
+  {
+   "name": "Giovanni van Bronckhorst",
+   "country": "Holanda",
+   "position": "LE"
+  },
+  {
+   "name": "Joan Capdevila",
+   "country": "Espanha",
+   "position": "LE"
+  },
+  {
+   "name": "Jordi Alba",
+   "country": "Espanha",
+   "position": "LE"
+  },
+  {
+   "name": "José Antonio Camacho",
+   "country": "Espanha",
+   "position": "LE"
+  },
+  {
+   "name": "Juan Pablo Sorín",
+   "country": "Argentina",
+   "position": "LE"
+  },
+  {
+   "name": "Júnior",
+   "country": "Brasil",
+   "position": "LE"
+  },
+  {
+   "name": "Karl-Heinz Schnellinger",
+   "country": "Alemanha",
+   "position": "LE"
+  },
+  {
+   "name": "Kenny Sansom",
+   "country": "Inglaterra",
+   "position": "LE"
+  },
+  {
+   "name": "Leonardo",
+   "country": "Brasil",
+   "position": "LE"
+  },
+  {
+   "name": "Manuel Amoros",
+   "country": "França",
+   "position": "LE"
+  },
+  {
+   "name": "Marcelo",
+   "country": "Brasil",
+   "position": "LE"
+  },
+  {
+   "name": "Marinho Chagas",
+   "country": "Brasil",
+   "position": "LE"
+  },
+  {
+   "name": "Maxwell",
+   "country": "Brasil",
+   "position": "LE"
+  },
+  {
+   "name": "Nilton Santos",
+   "country": "Brasil",
+   "position": "LE"
+  },
+  {
+   "name": "Paolo Maldini",
+   "country": "Itália",
+   "position": "LE"
+  },
+  {
+   "name": "Patrice Evra",
+   "country": "França",
+   "position": "LE"
+  },
+  {
+   "name": "Paul Breitner",
+   "country": "Alemanha",
+   "position": "LE"
+  },
+  {
+   "name": "Roberto Carlos",
+   "country": "Brasil",
+   "position": "LE"
+  },
+  {
+   "name": "Ruud Krol",
+   "country": "Holanda",
+   "position": "LE"
+  },
+  {
+   "name": "Sergi Barjuan",
+   "country": "Espanha",
+   "position": "LE"
+  },
+  {
+   "name": "Stuart Pearce",
+   "country": "Inglaterra",
+   "position": "LE"
+  },
+  {
+   "name": "Wladimir",
+   "country": "Brasil",
+   "position": "LE"
+  },
+  {
+   "name": "Abédi Pelé",
+   "country": "Gana",
+   "position": "MEI"
+  },
+  {
+   "name": "Ademir da Guia",
+   "country": "Brasil",
+   "position": "MEI"
+  },
+  {
+   "name": "Alain Giresse",
+   "country": "França",
+   "position": "MEI"
+  },
+  {
+   "name": "Alan Ball",
+   "country": "Inglaterra",
+   "position": "MEI"
+  },
+  {
+   "name": "Aleksandr Mostovoi",
+   "country": "Rússia",
+   "position": "MEI"
+  },
+  {
+   "name": "Ali Karimi",
+   "country": "Irã",
+   "position": "MEI"
+  },
+  {
+   "name": "Andrea Pirlo",
+   "country": "Itália",
+   "position": "MEI"
+  },
+  {
+   "name": "Andrés Iniesta",
+   "country": "Espanha",
+   "position": "MEI"
+  },
+  {
+   "name": "Arda Turan",
+   "country": "Turquia",
+   "position": "MEI"
+  },
+  {
+   "name": "Bastian Schweinsteiger",
+   "country": "Alemanha",
+   "position": "MEI"
+  },
+  {
+   "name": "Billy Bremner",
+   "country": "Escócia",
+   "position": "MEI"
+  },
+  {
+   "name": "Bobby Charlton",
+   "country": "Inglaterra",
+   "position": "MEI"
+  },
+  {
+   "name": "Bryan Robson",
+   "country": "Inglaterra",
+   "position": "MEI"
+  },
+  {
+   "name": "Carlo Ancelotti",
+   "country": "Itália",
+   "position": "MEI"
+  },
+  {
+   "name": "Carlos Valderrama",
+   "country": "Colômbia",
+   "position": "MEI"
+  },
+  {
+   "name": "Cesc Fàbregas",
+   "country": "Espanha",
+   "position": "MEI"
+  },
+  {
+   "name": "Clarence Seedorf",
+   "country": "Holanda",
+   "position": "MEI"
+  },
+  {
+   "name": "Clodoaldo",
+   "country": "Brasil",
+   "position": "MEI"
+  },
+  {
+   "name": "Daniele De Rossi",
+   "country": "Itália",
+   "position": "MEI"
+  },
+  {
+   "name": "David Silva",
+   "country": "Espanha",
+   "position": "MEI"
+  },
+  {
+   "name": "Deco",
+   "country": "Portugal",
+   "position": "MEI"
+  },
+  {
+   "name": "Dejan Savićević",
+   "country": "Montenegro",
+   "position": "MEI"
+  },
+  {
+   "name": "Didi",
+   "country": "Brasil",
+   "position": "MEI"
+  },
+  {
+   "name": "Didier Deschamps",
+   "country": "França",
+   "position": "MEI"
+  },
+  {
+   "name": "Diego Maradona",
+   "country": "Argentina",
+   "position": "MEI"
+  },
+  {
+   "name": "Diego Simeone",
+   "country": "Argentina",
+   "position": "MEI"
+  },
+  {
+   "name": "Dirceu Lopes",
+   "country": "Brasil",
+   "position": "MEI"
+  },
+  {
+   "name": "Dragan Stojković",
+   "country": "Sérvia",
+   "position": "MEI"
+  },
+  {
+   "name": "Duncan Edwards",
+   "country": "Inglaterra",
+   "position": "MEI"
+  },
+  {
+   "name": "Dunga",
+   "country": "Brasil",
+   "position": "MEI"
+  },
+  {
+   "name": "Edgar Davids",
+   "country": "Holanda",
+   "position": "MEI"
+  },
+  {
+   "name": "Emre Belözoğlu",
+   "country": "Turquia",
+   "position": "MEI"
+  },
+  {
+   "name": "Enzo Francescoli",
+   "country": "Uruguai",
+   "position": "MEI"
+  },
+  {
+   "name": "Enzo Scifo",
+   "country": "Bélgica",
+   "position": "MEI"
+  },
+  {
+   "name": "Fernando Redondo",
+   "country": "Argentina",
+   "position": "MEI"
+  },
+  {
+   "name": "Francesco Totti",
+   "country": "Itália",
+   "position": "MEI"
+  },
+  {
+   "name": "Frank Lampard",
+   "country": "Inglaterra",
+   "position": "MEI"
+  },
+  {
+   "name": "Frank Rijkaard",
+   "country": "Holanda",
+   "position": "MEI"
+  },
+  {
+   "name": "Fritz Walter",
+   "country": "Alemanha",
+   "position": "MEI"
+  },
+  {
+   "name": "Fyodor Cherenkov",
+   "country": "Rússia",
+   "position": "MEI"
+  },
+  {
+   "name": "Gennaro Gattuso",
+   "country": "Itália",
+   "position": "MEI"
+  },
+  {
+   "name": "Gérson",
+   "country": "Brasil",
+   "position": "MEI"
+  },
+  {
+   "name": "Gheorghe Hagi",
+   "country": "Romênia",
+   "position": "MEI"
+  },
+  {
+   "name": "Giancarlo Antognoni",
+   "country": "Itália",
+   "position": "MEI"
+  },
+  {
+   "name": "Gianni Rivera",
+   "country": "Itália",
+   "position": "MEI"
+  },
+  {
+   "name": "Glenn Hoddle",
+   "country": "Inglaterra",
+   "position": "MEI"
+  },
+  {
+   "name": "Graeme Souness",
+   "country": "Escócia",
+   "position": "MEI"
+  },
+  {
+   "name": "Günter Netzer",
+   "country": "Alemanha",
+   "position": "MEI"
+  },
+  {
+   "name": "Herbert Prohaska",
+   "country": "Áustria",
+   "position": "MEI"
+  },
+  {
+   "name": "Hidetoshi Nakata",
+   "country": "Japão",
+   "position": "MEI"
+  },
+  {
+   "name": "Ivan Rakitić",
+   "country": "Croácia",
+   "position": "MEI"
+  },
+  {
+   "name": "Jari Litmanen",
+   "country": "Finlândia",
+   "position": "MEI"
+  },
+  {
+   "name": "Javier Mascherano",
+   "country": "Argentina",
+   "position": "MEI"
+  },
+  {
+   "name": "Jay-Jay Okocha",
+   "country": "Nigéria",
+   "position": "MEI"
+  },
+  {
+   "name": "Jean Tigana",
+   "country": "França",
+   "position": "MEI"
+  },
+  {
+   "name": "Johan Cruyff",
+   "country": "Holanda",
+   "position": "MEI"
+  },
+  {
+   "name": "Johan Neeskens",
+   "country": "Holanda",
+   "position": "MEI"
+  },
+  {
+   "name": "Josef Masopust",
+   "country": "República Tcheca",
+   "position": "MEI"
+  },
+  {
+   "name": "Juan Alberto Schiaffino",
+   "country": "Uruguai",
+   "position": "MEI"
+  },
+  {
+   "name": "Juan Román Riquelme",
+   "country": "Argentina",
+   "position": "MEI"
+  },
+  {
+   "name": "Juninho Pernambucano",
+   "country": "Brasil",
+   "position": "MEI"
+  },
+  {
+   "name": "Kaká",
+   "country": "Brasil",
+   "position": "MEI"
+  },
+  {
+   "name": "Karim Bagheri",
+   "country": "Irã",
+   "position": "MEI"
+  },
+  {
+   "name": "Kazimierz Deyna",
+   "country": "Polônia",
+   "position": "MEI"
+  },
+  {
+   "name": "Kevin De Bruyne",
+   "country": "Bélgica",
+   "position": "MEI"
+  },
+  {
+   "name": "Liam Brady",
+   "country": "Irlanda",
+   "position": "MEI"
+  },
+  {
+   "name": "Lothar Matthäus",
+   "country": "Alemanha",
+   "position": "MEI"
+  },
+  {
+   "name": "Luis Suárez Miramontes",
+   "country": "Espanha",
+   "position": "MEI"
+  },
+  {
+   "name": "Luka Modrić",
+   "country": "Croácia",
+   "position": "MEI"
+  },
+  {
+   "name": "Marco Tardelli",
+   "country": "Itália",
+   "position": "MEI"
+  },
+  {
+   "name": "Mário Coluna",
+   "country": "Portugal",
+   "position": "MEI"
+  },
+  {
+   "name": "Martin Peters",
+   "country": "Inglaterra",
+   "position": "MEI"
+  },
+  {
+   "name": "Matthias Sammer",
+   "country": "Alemanha",
+   "position": "MEI"
+  },
+  {
+   "name": "Mauro Silva",
+   "country": "Brasil",
+   "position": "MEI"
+  },
+  {
+   "name": "Mesut Özil",
+   "country": "Alemanha",
+   "position": "MEI"
+  },
+  {
+   "name": "Michael Ballack",
+   "country": "Alemanha",
+   "position": "MEI"
+  },
+  {
+   "name": "Michael Essien",
+   "country": "Gana",
+   "position": "MEI"
+  },
+  {
+   "name": "Michael Laudrup",
+   "country": "Dinamarca",
+   "position": "MEI"
+  },
+  {
+   "name": "Michel Platini",
+   "country": "França",
+   "position": "MEI"
+  },
+  {
+   "name": "Mohamed Aboutrika",
+   "country": "Egito",
+   "position": "MEI"
+  },
+  {
+   "name": "Obdulio Varela",
+   "country": "Uruguai",
+   "position": "MEI"
+  },
+  {
+   "name": "Oleksandr Zavarov",
+   "country": "Ucrânia",
+   "position": "MEI"
+  },
+  {
+   "name": "Osvaldo Ardiles",
+   "country": "Argentina",
+   "position": "MEI"
+  },
+  {
+   "name": "Park Ji-sung",
+   "country": "Coreia do Sul",
+   "position": "MEI"
+  },
+  {
+   "name": "Patrick Vieira",
+   "country": "França",
+   "position": "MEI"
+  },
+  {
+   "name": "Paul Gascoigne",
+   "country": "Inglaterra",
+   "position": "MEI"
+  },
+  {
+   "name": "Paul Scholes",
+   "country": "Inglaterra",
+   "position": "MEI"
+  },
+  {
+   "name": "Paulo Roberto Falcão",
+   "country": "Brasil",
+   "position": "MEI"
+  },
+  {
+   "name": "Pavel Nedvěd",
+   "country": "República Tcheca",
+   "position": "MEI"
+  },
+  {
+   "name": "Pep Guardiola",
+   "country": "Espanha",
+   "position": "MEI"
+  },
+  {
+   "name": "Raí",
+   "country": "Brasil",
+   "position": "MEI"
+  },
+  {
+   "name": "Raymond Kopa",
+   "country": "França",
+   "position": "MEI"
+  },
+  {
+   "name": "Ricardo Bochini",
+   "country": "Argentina",
+   "position": "MEI"
+  },
+  {
+   "name": "Rivaldo",
+   "country": "Brasil",
+   "position": "MEI"
+  },
+  {
+   "name": "Robert Prosinečki",
+   "country": "Croácia",
+   "position": "MEI"
+  },
+  {
+   "name": "Roberto Rivellino",
+   "country": "Brasil",
+   "position": "MEI"
+  },
+  {
+   "name": "Ronaldinho Gaúcho",
+   "country": "Brasil",
+   "position": "MEI"
+  },
+  {
+   "name": "Roy Keane",
+   "country": "Irlanda",
+   "position": "MEI"
+  },
+  {
+   "name": "Rui Costa",
+   "country": "Portugal",
+   "position": "MEI"
+  },
+  {
+   "name": "Ruud Gullit",
+   "country": "Holanda",
+   "position": "MEI"
+  },
+  {
+   "name": "Safet Sušić",
+   "country": "Bósnia",
+   "position": "MEI"
+  },
+  {
+   "name": "Sandro Mazzola",
+   "country": "Itália",
+   "position": "MEI"
+  },
+  {
+   "name": "Sergio Busquets",
+   "country": "Espanha",
+   "position": "MEI"
+  },
+  {
+   "name": "Shinji Kagawa",
+   "country": "Japão",
+   "position": "MEI"
+  },
+  {
+   "name": "Shunsuke Nakamura",
+   "country": "Japão",
+   "position": "MEI"
+  },
+  {
+   "name": "Sócrates",
+   "country": "Brasil",
+   "position": "MEI"
+  },
+  {
+   "name": "Steven Gerrard",
+   "country": "Inglaterra",
+   "position": "MEI"
+  },
+  {
+   "name": "Teófilo Cubillas",
+   "country": "Peru",
+   "position": "MEI"
+  },
+  {
+   "name": "Theodoros Zagorakis",
+   "country": "Grécia",
+   "position": "MEI"
+  },
+  {
+   "name": "Tim Cahill",
+   "country": "Austrália",
+   "position": "MEI"
+  },
+  {
+   "name": "Toni Kroos",
+   "country": "Alemanha",
+   "position": "MEI"
+  },
+  {
+   "name": "Toninho Cerezo",
+   "country": "Brasil",
+   "position": "MEI"
+  },
+  {
+   "name": "Valentino Mazzola",
+   "country": "Itália",
+   "position": "MEI"
+  },
+  {
+   "name": "Wesley Sneijder",
+   "country": "Holanda",
+   "position": "MEI"
+  },
+  {
+   "name": "Xabi Alonso",
+   "country": "Espanha",
+   "position": "MEI"
+  },
+  {
+   "name": "Xavi Hernández",
+   "country": "Espanha",
+   "position": "MEI"
+  },
+  {
+   "name": "Yasuhito Endo",
+   "country": "Japão",
+   "position": "MEI"
+  },
+  {
+   "name": "Yaya Touré",
+   "country": "Costa do Marfim",
+   "position": "MEI"
+  },
+  {
+   "name": "Zbigniew Boniek",
+   "country": "Polônia",
+   "position": "MEI"
+  },
+  {
+   "name": "Zico",
+   "country": "Brasil",
+   "position": "MEI"
+  },
+  {
+   "name": "Zinedine Zidane",
+   "country": "França",
+   "position": "MEI"
+  },
+  {
+   "name": "Zito",
+   "country": "Brasil",
+   "position": "MEI"
+  },
+  {
+   "name": "Zizinho",
+   "country": "Brasil",
+   "position": "MEI"
+  },
+  {
+   "name": "Zlatko Zahovič",
+   "country": "Eslovênia",
+   "position": "MEI"
+  },
+  {
+   "name": "Zvonimir Boban",
+   "country": "Croácia",
+   "position": "MEI"
+  },
+  {
+   "name": "Ademir de Menezes",
+   "country": "Brasil",
+   "position": "CA"
+  },
+  {
+   "name": "Alan Shearer",
+   "country": "Inglaterra",
+   "position": "CA"
+  },
+  {
+   "name": "Alessandro Del Piero",
+   "country": "Itália",
+   "position": "CA"
+  },
+  {
+   "name": "Alfredo Di Stéfano",
+   "country": "Argentina",
+   "position": "CA"
+  },
+  {
+   "name": "Ali Daei",
+   "country": "Irã",
+   "position": "CA"
+  },
+  {
+   "name": "Allan Simonsen",
+   "country": "Dinamarca",
+   "position": "CA"
+  },
+  {
+   "name": "Andriy Shevchenko",
+   "country": "Ucrânia",
+   "position": "CA"
+  },
+  {
+   "name": "Antoine Griezmann",
+   "country": "França",
+   "position": "CA"
+  },
+  {
+   "name": "Arthur Friedenreich",
+   "country": "Brasil",
+   "position": "CA"
+  },
+  {
+   "name": "Bebeto",
+   "country": "Brasil",
+   "position": "CA"
+  },
+  {
+   "name": "Careca",
+   "country": "Brasil",
+   "position": "CA"
+  },
+  {
+   "name": "Carlos Caszely",
+   "country": "Chile",
+   "position": "CA"
+  },
+  {
+   "name": "Carlos Tévez",
+   "country": "Argentina",
+   "position": "CA"
+  },
+  {
+   "name": "Cha Bum-kun",
+   "country": "Coreia do Sul",
+   "position": "CA"
+  },
+  {
+   "name": "Christian Vieri",
+   "country": "Itália",
+   "position": "CA"
+  },
+  {
+   "name": "Coutinho",
+   "country": "Brasil",
+   "position": "CA"
+  },
+  {
+   "name": "Cristiano Ronaldo",
+   "country": "Portugal",
+   "position": "CA"
+  },
+  {
+   "name": "David Trezeguet",
+   "country": "França",
+   "position": "CA"
+  },
+  {
+   "name": "David Villa",
+   "country": "Espanha",
+   "position": "CA"
+  },
+  {
+   "name": "Davor Šuker",
+   "country": "Croácia",
+   "position": "CA"
+  },
+  {
+   "name": "Denis Law",
+   "country": "Escócia",
+   "position": "CA"
+  },
+  {
+   "name": "Dennis Bergkamp",
+   "country": "Holanda",
+   "position": "CA"
+  },
+  {
+   "name": "Didier Drogba",
+   "country": "Costa do Marfim",
+   "position": "CA"
+  },
+  {
+   "name": "Diego Forlán",
+   "country": "Uruguai",
+   "position": "CA"
+  },
+  {
+   "name": "Dimitar Berbatov",
+   "country": "Bulgária",
+   "position": "CA"
+  },
+  {
+   "name": "Edin Džeko",
+   "country": "Bósnia",
+   "position": "CA"
+  },
+  {
+   "name": "Edinson Cavani",
+   "country": "Uruguai",
+   "position": "CA"
+  },
+  {
+   "name": "Emilio Butragueño",
+   "country": "Espanha",
+   "position": "CA"
+  },
+  {
+   "name": "Eric Cantona",
+   "country": "França",
+   "position": "CA"
+  },
+  {
+   "name": "Eusébio",
+   "country": "Portugal",
+   "position": "CA"
+  },
+  {
+   "name": "Faustino Asprilla",
+   "country": "Colômbia",
+   "position": "CA"
+  },
+  {
+   "name": "Ferenc Puskás",
+   "country": "Hungria",
+   "position": "CA"
+  },
+  {
+   "name": "Fernando Torres",
+   "country": "Espanha",
+   "position": "CA"
+  },
+  {
+   "name": "Gabriel Batistuta",
+   "country": "Argentina",
+   "position": "CA"
+  },
+  {
+   "name": "Gary Lineker",
+   "country": "Inglaterra",
+   "position": "CA"
+  },
+  {
+   "name": "Geoff Hurst",
+   "country": "Inglaterra",
+   "position": "CA"
+  },
+  {
+   "name": "George Weah",
+   "country": "Libéria",
+   "position": "CA"
+  },
+  {
+   "name": "Gerd Müller",
+   "country": "Alemanha",
+   "position": "CA"
+  },
+  {
+   "name": "Gianfranco Zola",
+   "country": "Itália",
+   "position": "CA"
+  },
+  {
+   "name": "Gianluca Vialli",
+   "country": "Itália",
+   "position": "CA"
+  },
+  {
+   "name": "Giuseppe Meazza",
+   "country": "Itália",
+   "position": "CA"
+  },
+  {
+   "name": "Gonzalo Higuaín",
+   "country": "Argentina",
+   "position": "CA"
+  },
+  {
+   "name": "Gunnar Nordahl",
+   "country": "Suécia",
+   "position": "CA"
+  },
+  {
+   "name": "Hakan Şükür",
+   "country": "Turquia",
+   "position": "CA"
+  },
+  {
+   "name": "Harry Kane",
+   "country": "Inglaterra",
+   "position": "CA"
+  },
+  {
+   "name": "Henrik Larsson",
+   "country": "Suécia",
+   "position": "CA"
+  },
+  {
+   "name": "Hernán Crespo",
+   "country": "Argentina",
+   "position": "CA"
+  },
+  {
+   "name": "Hristo Stoichkov",
+   "country": "Bulgária",
+   "position": "CA"
+  },
+  {
+   "name": "Hugo Sánchez",
+   "country": "México",
+   "position": "CA"
+  },
+  {
+   "name": "Ian Rush",
+   "country": "País de Gales",
+   "position": "CA"
+  },
+  {
+   "name": "Iván Zamorano",
+   "country": "Chile",
+   "position": "CA"
+  },
+  {
+   "name": "Jean-Pierre Papin",
+   "country": "França",
+   "position": "CA"
+  },
+  {
+   "name": "Jimmy Greaves",
+   "country": "Inglaterra",
+   "position": "CA"
+  },
+  {
+   "name": "John Toshack",
+   "country": "País de Gales",
+   "position": "CA"
+  },
+  {
+   "name": "Jürgen Klinsmann",
+   "country": "Alemanha",
+   "position": "CA"
+  },
+  {
+   "name": "Just Fontaine",
+   "country": "França",
+   "position": "CA"
+  },
+  {
+   "name": "Karim Benzema",
+   "country": "França",
+   "position": "CA"
+  },
+  {
+   "name": "Karl-Heinz Rummenigge",
+   "country": "Alemanha",
+   "position": "CA"
+  },
+  {
+   "name": "Kenny Dalglish",
+   "country": "Escócia",
+   "position": "CA"
+  },
+  {
+   "name": "Kevin Keegan",
+   "country": "Inglaterra",
+   "position": "CA"
+  },
+  {
+   "name": "László Kubala",
+   "country": "Hungria",
+   "position": "CA"
+  },
+  {
+   "name": "Leônidas da Silva",
+   "country": "Brasil",
+   "position": "CA"
+  },
+  {
+   "name": "Luigi Riva",
+   "country": "Itália",
+   "position": "CA"
+  },
+  {
+   "name": "Luis Suárez",
+   "country": "Uruguai",
+   "position": "CA"
+  },
+  {
+   "name": "Marcelo Salas",
+   "country": "Chile",
+   "position": "CA"
+  },
+  {
+   "name": "Marco van Basten",
+   "country": "Holanda",
+   "position": "CA"
+  },
+  {
+   "name": "Mario Kempes",
+   "country": "Argentina",
+   "position": "CA"
+  },
+  {
+   "name": "Mario Mandžukić",
+   "country": "Croácia",
+   "position": "CA"
+  },
+  {
+   "name": "Mark Hughes",
+   "country": "País de Gales",
+   "position": "CA"
+  },
+  {
+   "name": "Michael Owen",
+   "country": "Inglaterra",
+   "position": "CA"
+  },
+  {
+   "name": "Miroslav Klose",
+   "country": "Alemanha",
+   "position": "CA"
+  },
+  {
+   "name": "Nándor Hidegkuti",
+   "country": "Hungria",
+   "position": "CA"
+  },
+  {
+   "name": "Nicolas Anelka",
+   "country": "França",
+   "position": "CA"
+  },
+  {
+   "name": "Nwankwo Kanu",
+   "country": "Nigéria",
+   "position": "CA"
+  },
+  {
+   "name": "Ole Gunnar Solskjær",
+   "country": "Noruega",
+   "position": "CA"
+  },
+  {
+   "name": "Oleg Blokhin",
+   "country": "Ucrânia",
+   "position": "CA"
+  },
+  {
+   "name": "Olivier Giroud",
+   "country": "França",
+   "position": "CA"
+  },
+  {
+   "name": "Omar Sívori",
+   "country": "Argentina",
+   "position": "CA"
+  },
+  {
+   "name": "Paolo Rossi",
+   "country": "Itália",
+   "position": "CA"
+  },
+  {
+   "name": "Patrick Kluivert",
+   "country": "Holanda",
+   "position": "CA"
+  },
+  {
+   "name": "Pelé",
+   "country": "Brasil",
+   "position": "CA"
+  },
+  {
+   "name": "Preben Elkjær",
+   "country": "Dinamarca",
+   "position": "CA"
+  },
+  {
+   "name": "Predrag Mijatović",
+   "country": "Montenegro",
+   "position": "CA"
+  },
+  {
+   "name": "Radamel Falcao",
+   "country": "Colômbia",
+   "position": "CA"
+  },
+  {
+   "name": "Raúl González",
+   "country": "Espanha",
+   "position": "CA"
+  },
+  {
+   "name": "Robbie Keane",
+   "country": "Irlanda",
+   "position": "CA"
+  },
+  {
+   "name": "Robert Lewandowski",
+   "country": "Polônia",
+   "position": "CA"
+  },
+  {
+   "name": "Roberto Baggio",
+   "country": "Itália",
+   "position": "CA"
+  },
+  {
+   "name": "Roberto Dinamite",
+   "country": "Brasil",
+   "position": "CA"
+  },
+  {
+   "name": "Roberto Mancini",
+   "country": "Itália",
+   "position": "CA"
+  },
+  {
+   "name": "Robin van Persie",
+   "country": "Holanda",
+   "position": "CA"
+  },
+  {
+   "name": "Roger Milla",
+   "country": "Camarões",
+   "position": "CA"
+  },
+  {
+   "name": "Romário",
+   "country": "Brasil",
+   "position": "CA"
+  },
+  {
+   "name": "Romelu Lukaku",
+   "country": "Bélgica",
+   "position": "CA"
+  },
+  {
+   "name": "Ronaldo Fenômeno",
+   "country": "Brasil",
+   "position": "CA"
+  },
+  {
+   "name": "Rudi Völler",
+   "country": "Alemanha",
+   "position": "CA"
+  },
+  {
+   "name": "Ruud van Nistelrooy",
+   "country": "Holanda",
+   "position": "CA"
+  },
+  {
+   "name": "Salvatore Schillaci",
+   "country": "Itália",
+   "position": "CA"
+  },
+  {
+   "name": "Samuel Eto'o",
+   "country": "Camarões",
+   "position": "CA"
+  },
+  {
+   "name": "Sándor Kocsis",
+   "country": "Hungria",
+   "position": "CA"
+  },
+  {
+   "name": "Sergio Agüero",
+   "country": "Argentina",
+   "position": "CA"
+  },
+  {
+   "name": "Telmo Zarra",
+   "country": "Espanha",
+   "position": "CA"
+  },
+  {
+   "name": "Thierry Henry",
+   "country": "França",
+   "position": "CA"
+  },
+  {
+   "name": "Thomas Müller",
+   "country": "Alemanha",
+   "position": "CA"
+  },
+  {
+   "name": "Tomas Brolin",
+   "country": "Suécia",
+   "position": "CA"
+  },
+  {
+   "name": "Tostão",
+   "country": "Brasil",
+   "position": "CA"
+  },
+  {
+   "name": "Uwe Seeler",
+   "country": "Alemanha",
+   "position": "CA"
+  },
+  {
+   "name": "Vavá",
+   "country": "Brasil",
+   "position": "CA"
+  },
+  {
+   "name": "Wayne Rooney",
+   "country": "Inglaterra",
+   "position": "CA"
+  },
+  {
+   "name": "Zlatan Ibrahimović",
+   "country": "Suécia",
+   "position": "CA"
+  },
+  {
+   "name": "Alcides Ghiggia",
+   "country": "Uruguai",
+   "position": "PD"
+  },
+  {
+   "name": "Amancio Amaro",
+   "country": "Espanha",
+   "position": "PD"
+  },
+  {
+   "name": "Ángel Di María",
+   "country": "Argentina",
+   "position": "PD"
+  },
+  {
+   "name": "Arjen Robben",
+   "country": "Holanda",
+   "position": "PD"
+  },
+  {
+   "name": "Brian Laudrup",
+   "country": "Dinamarca",
+   "position": "PD"
+  },
+  {
+   "name": "Bruno Conti",
+   "country": "Itália",
+   "position": "PD"
+  },
+  {
+   "name": "David Beckham",
+   "country": "Inglaterra",
+   "position": "PD"
+  },
+  {
+   "name": "Dirk Kuyt",
+   "country": "Holanda",
+   "position": "PD"
+  },
+  {
+   "name": "Dominique Rocheteau",
+   "country": "França",
+   "position": "PD"
+  },
+  {
+   "name": "Franco Causio",
+   "country": "Itália",
+   "position": "PD"
+  },
+  {
+   "name": "Fredrik Ljungberg",
+   "country": "Suécia",
+   "position": "PD"
+  },
+  {
+   "name": "Gareth Bale",
+   "country": "País de Gales",
+   "position": "PD"
+  },
+  {
+   "name": "Garrincha",
+   "country": "Brasil",
+   "position": "PD"
+  },
+  {
+   "name": "George Best",
+   "country": "Irlanda do Norte",
+   "position": "PD"
+  },
+  {
+   "name": "Grzegorz Lato",
+   "country": "Polônia",
+   "position": "PD"
+  },
+  {
+   "name": "Helmut Rahn",
+   "country": "Alemanha",
+   "position": "PD"
+  },
+  {
+   "name": "Hulk",
+   "country": "Brasil",
+   "position": "PD"
+  },
+  {
+   "name": "Jairzinho",
+   "country": "Brasil",
+   "position": "PD"
+  },
+  {
+   "name": "Jimmy Johnstone",
+   "country": "Escócia",
+   "position": "PD"
+  },
+  {
+   "name": "Joaquín",
+   "country": "Espanha",
+   "position": "PD"
+  },
+  {
+   "name": "Johnny Rep",
+   "country": "Holanda",
+   "position": "PD"
+  },
+  {
+   "name": "Julinho Botelho",
+   "country": "Brasil",
+   "position": "PD"
+  },
+  {
+   "name": "Kurt Hamrin",
+   "country": "Suécia",
+   "position": "PD"
+  },
+  {
+   "name": "Lionel Messi",
+   "country": "Argentina",
+   "position": "PD"
+  },
+  {
+   "name": "Luís Figo",
+   "country": "Portugal",
+   "position": "PD"
+  },
+  {
+   "name": "Mauro Camoranesi",
+   "country": "Itália",
+   "position": "PD"
+  },
+  {
+   "name": "Mohamed Salah",
+   "country": "Egito",
+   "position": "PD"
+  },
+  {
+   "name": "Renato Gaúcho",
+   "country": "Brasil",
+   "position": "PD"
+  },
+  {
+   "name": "Riyad Mahrez",
+   "country": "Argélia",
+   "position": "PD"
+  },
+  {
+   "name": "Simão Sabrosa",
+   "country": "Portugal",
+   "position": "PD"
+  },
+  {
+   "name": "Stanley Matthews",
+   "country": "Inglaterra",
+   "position": "PD"
+  },
+  {
+   "name": "Steve McManaman",
+   "country": "Inglaterra",
+   "position": "PD"
+  },
+  {
+   "name": "Tesourinha",
+   "country": "Brasil",
+   "position": "PD"
+  },
+  {
+   "name": "Valdomiro",
+   "country": "Brasil",
+   "position": "PD"
+  },
+  {
+   "name": "Willian",
+   "country": "Brasil",
+   "position": "PD"
+  },
+  {
+   "name": "Alexis Sánchez",
+   "country": "Chile",
+   "position": "PE"
+  },
+  {
+   "name": "Amarildo",
+   "country": "Brasil",
+   "position": "PE"
+  },
+  {
+   "name": "Andrei Arshavin",
+   "country": "Rússia",
+   "position": "PE"
+  },
+  {
+   "name": "Canhoteiro",
+   "country": "Brasil",
+   "position": "PE"
+  },
+  {
+   "name": "Chris Waddle",
+   "country": "Inglaterra",
+   "position": "PE"
+  },
+  {
+   "name": "David Ginola",
+   "country": "França",
+   "position": "PE"
+  },
+  {
+   "name": "Denílson",
+   "country": "Brasil",
+   "position": "PE"
+  },
+  {
+   "name": "Dragan Džajić",
+   "country": "Sérvia",
+   "position": "PE"
+  },
+  {
+   "name": "Eden Hazard",
+   "country": "Bélgica",
+   "position": "PE"
+  },
+  {
+   "name": "Éder Aleixo",
+   "country": "Brasil",
+   "position": "PE"
+  },
+  {
+   "name": "Francisco Gento",
+   "country": "Espanha",
+   "position": "PE"
+  },
+  {
+   "name": "Franck Ribéry",
+   "country": "França",
+   "position": "PE"
+  },
+  {
+   "name": "Harry Kewell",
+   "country": "Austrália",
+   "position": "PE"
+  },
+  {
+   "name": "Juan Carlos Oblitas",
+   "country": "Peru",
+   "position": "PE"
+  },
+  {
+   "name": "Leonel Sánchez",
+   "country": "Chile",
+   "position": "PE"
+  },
+  {
+   "name": "Lukas Podolski",
+   "country": "Alemanha",
+   "position": "PE"
+  },
+  {
+   "name": "Marc Overmars",
+   "country": "Holanda",
+   "position": "PE"
+  },
+  {
+   "name": "Marco Reus",
+   "country": "Alemanha",
+   "position": "PE"
+  },
+  {
+   "name": "Mário Zagallo",
+   "country": "Brasil",
+   "position": "PE"
+  },
+  {
+   "name": "Müller",
+   "country": "Brasil",
+   "position": "PE"
+  },
+  {
+   "name": "Neymar",
+   "country": "Brasil",
+   "position": "PE"
+  },
+  {
+   "name": "Piet Keizer",
+   "country": "Holanda",
+   "position": "PE"
+  },
+  {
+   "name": "Rob Rensenbrink",
+   "country": "Holanda",
+   "position": "PE"
+  },
+  {
+   "name": "Robert Pirès",
+   "country": "França",
+   "position": "PE"
+  },
+  {
+   "name": "Robinho",
+   "country": "Brasil",
+   "position": "PE"
+  },
+  {
+   "name": "Ryan Giggs",
+   "country": "País de Gales",
+   "position": "PE"
+  },
+  {
+   "name": "Sadio Mané",
+   "country": "Senegal",
+   "position": "PE"
+  },
+  {
+   "name": "Son Heung-min",
+   "country": "Coreia do Sul",
+   "position": "PE"
+  },
+  {
+   "name": "Tom Finney",
+   "country": "Inglaterra",
+   "position": "PE"
+  },
+  {
+   "name": "Zoltán Czibor",
+   "country": "Hungria",
+   "position": "PE"
+  }
+ ],
+ "stadiums": [
+  {
+   "name": "Allianz Arena",
+   "city": "Munique",
+   "country": "Alemanha"
+  },
+  {
+   "name": "BayArena",
+   "city": "Leverkusen",
+   "country": "Alemanha"
+  },
+  {
+   "name": "Borussia-Park",
+   "city": "Mönchengladbach",
+   "country": "Alemanha"
+  },
+  {
+   "name": "Deutsche Bank Park",
+   "city": "Frankfurt",
+   "country": "Alemanha"
+  },
+  {
+   "name": "MHPArena",
+   "city": "Stuttgart",
+   "country": "Alemanha"
+  },
+  {
+   "name": "Millerntor-Stadion",
+   "city": "Hamburgo",
+   "country": "Alemanha"
+  },
+  {
+   "name": "Olympiastadion",
+   "city": "Berlim",
+   "country": "Alemanha"
+  },
+  {
+   "name": "PreZero Arena",
+   "city": "Sinsheim",
+   "country": "Alemanha"
+  },
+  {
+   "name": "Red Bull Arena",
+   "city": "Leipzig",
+   "country": "Alemanha"
+  },
+  {
+   "name": "RheinEnergieStadion",
+   "city": "Colônia",
+   "country": "Alemanha"
+  },
+  {
+   "name": "Signal Iduna Park",
+   "city": "Dortmund",
+   "country": "Alemanha"
+  },
+  {
+   "name": "Veltins-Arena",
+   "city": "Gelsenkirchen",
+   "country": "Alemanha"
+  },
+  {
+   "name": "Volksparkstadion",
+   "city": "Hamburgo",
+   "country": "Alemanha"
+  },
+  {
+   "name": "Volkswagen Arena",
+   "city": "Wolfsburg",
+   "country": "Alemanha"
+  },
+  {
+   "name": "Weserstadion",
+   "city": "Bremen",
+   "country": "Alemanha"
+  },
+  {
+   "name": "Allianz Parque",
+   "city": "São Paulo",
+   "country": "Brasil"
+  },
+  {
+   "name": "Arena da Baixada",
+   "city": "Curitiba",
+   "country": "Brasil"
+  },
+  {
+   "name": "Arena do Grêmio",
+   "city": "Porto Alegre",
+   "country": "Brasil"
+  },
+  {
+   "name": "Arena Fonte Nova",
+   "city": "Salvador",
+   "country": "Brasil"
+  },
+  {
+   "name": "Arena MRV",
+   "city": "Belo Horizonte",
+   "country": "Brasil"
+  },
+  {
+   "name": "Barradão",
+   "city": "Salvador",
+   "country": "Brasil"
+  },
+  {
+   "name": "Beira-Rio",
+   "city": "Porto Alegre",
+   "country": "Brasil"
+  },
+  {
+   "name": "Couto Pereira",
+   "city": "Curitiba",
+   "country": "Brasil"
+  },
+  {
+   "name": "Estádio Mário Pessoa (Colo Colo)",
+   "city": "Ilhéus",
+   "country": "Brasil"
+  },
+  {
+   "name": "Independência",
+   "city": "Belo Horizonte",
+   "country": "Brasil"
+  },
+  {
+   "name": "Mané Garrincha",
+   "city": "Brasília",
+   "country": "Brasil"
+  },
+  {
+   "name": "Maracanã",
+   "city": "Rio de Janeiro",
+   "country": "Brasil"
+  },
+  {
+   "name": "Mineirão",
+   "city": "Belo Horizonte",
+   "country": "Brasil"
+  },
+  {
+   "name": "Morumbi",
+   "city": "São Paulo",
+   "country": "Brasil"
+  },
+  {
+   "name": "Neo Química Arena",
+   "city": "São Paulo",
+   "country": "Brasil"
+  },
+  {
+   "name": "Nilton Santos (Engenhão)",
+   "city": "Rio de Janeiro",
+   "country": "Brasil"
+  },
+  {
+   "name": "São Januário",
+   "city": "Rio de Janeiro",
+   "country": "Brasil"
+  },
+  {
+   "name": "Vila Belmiro",
+   "city": "Santos",
+   "country": "Brasil"
+  },
+  {
+   "name": "Anoeta",
+   "city": "San Sebastián",
+   "country": "Espanha"
+  },
+  {
+   "name": "Balaídos",
+   "city": "Vigo",
+   "country": "Espanha"
+  },
+  {
+   "name": "Benito Villamarín",
+   "city": "Sevilha",
+   "country": "Espanha"
+  },
+  {
+   "name": "Camp Nou",
+   "city": "Barcelona",
+   "country": "Espanha"
+  },
+  {
+   "name": "Coliseum",
+   "city": "Getafe",
+   "country": "Espanha"
+  },
+  {
+   "name": "El Molinón",
+   "city": "Gijón",
+   "country": "Espanha"
+  },
+  {
+   "name": "El Sadar",
+   "city": "Pamplona",
+   "country": "Espanha"
+  },
+  {
+   "name": "Estadi Olímpic Lluís Companys",
+   "city": "Barcelona",
+   "country": "Espanha"
+  },
+  {
+   "name": "Estadio de la Cerámica",
+   "city": "Vila-real",
+   "country": "Espanha"
+  },
+  {
+   "name": "Estadio Metropolitano",
+   "city": "Madri",
+   "country": "Espanha"
+  },
+  {
+   "name": "La Rosaleda",
+   "city": "Málaga",
+   "country": "Espanha"
+  },
+  {
+   "name": "Mendizorrotza",
+   "city": "Vitoria-Gasteiz",
+   "country": "Espanha"
+  },
+  {
+   "name": "Mestalla",
+   "city": "Valência",
+   "country": "Espanha"
+  },
+  {
+   "name": "Ramón Sánchez-Pizjuán",
+   "city": "Sevilha",
+   "country": "Espanha"
+  },
+  {
+   "name": "RCDE Stadium",
+   "city": "Cornellà de Llobregat",
+   "country": "Espanha"
+  },
+  {
+   "name": "Riazor",
+   "city": "La Coruña",
+   "country": "Espanha"
+  },
+  {
+   "name": "San Mamés",
+   "city": "Bilbao",
+   "country": "Espanha"
+  },
+  {
+   "name": "Santiago Bernabéu",
+   "city": "Madri",
+   "country": "Espanha"
+  },
+  {
+   "name": "Allianz Riviera",
+   "city": "Nice",
+   "country": "França"
+  },
+  {
+   "name": "Groupama Stadium",
+   "city": "Décines-Charpieu",
+   "country": "França"
+  },
+  {
+   "name": "Matmut Atlantique",
+   "city": "Bordeaux",
+   "country": "França"
+  },
+  {
+   "name": "Parc des Princes",
+   "city": "Paris",
+   "country": "França"
+  },
+  {
+   "name": "Stade Auguste-Delaune",
+   "city": "Reims",
+   "country": "França"
+  },
+  {
+   "name": "Stade Bollaert-Delelis",
+   "city": "Lens",
+   "country": "França"
+  },
+  {
+   "name": "Stade de France",
+   "city": "Saint-Denis",
+   "country": "França"
+  },
+  {
+   "name": "Stade de la Beaujoire",
+   "city": "Nantes",
+   "country": "França"
+  },
+  {
+   "name": "Stade de la Mosson",
+   "city": "Montpellier",
+   "country": "França"
+  },
+  {
+   "name": "Stade Geoffroy-Guichard",
+   "city": "Saint-Étienne",
+   "country": "França"
+  },
+  {
+   "name": "Stade Pierre-Mauroy",
+   "city": "Villeneuve-d'Ascq",
+   "country": "França"
+  },
+  {
+   "name": "Stade Vélodrome",
+   "city": "Marselha",
+   "country": "França"
+  },
+  {
+   "name": "Amex Stadium",
+   "city": "Brighton",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Anfield",
+   "city": "Liverpool",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Bramley-Moore Dock Stadium",
+   "city": "Liverpool",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Carrow Road",
+   "city": "Norwich",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Craven Cottage",
+   "city": "Londres",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Elland Road",
+   "city": "Leeds",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Emirates Stadium",
+   "city": "Londres",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Etihad Stadium",
+   "city": "Manchester",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Goodison Park",
+   "city": "Liverpool",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "King Power Stadium",
+   "city": "Leicester",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "London Stadium",
+   "city": "Londres",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Molineux",
+   "city": "Wolverhampton",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Old Trafford",
+   "city": "Manchester",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Portman Road",
+   "city": "Ipswich",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Selhurst Park",
+   "city": "Londres",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "St James' Park",
+   "city": "Newcastle",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "St Mary's Stadium",
+   "city": "Southampton",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Stamford Bridge",
+   "city": "Londres",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Tottenham Hotspur Stadium",
+   "city": "Londres",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Turf Moor",
+   "city": "Burnley",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Villa Park",
+   "city": "Birmingham",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Allianz Stadium",
+   "city": "Turim",
+   "country": "Itália"
+  },
+  {
+   "name": "Gewiss Stadium",
+   "city": "Bérgamo",
+   "country": "Itália"
+  },
+  {
+   "name": "Giuseppe Meazza (San Siro)",
+   "city": "Milão",
+   "country": "Itália"
+  },
+  {
+   "name": "Mapei Stadium",
+   "city": "Reggio Emília",
+   "country": "Itália"
+  },
+  {
+   "name": "Stadio Arechi",
+   "city": "Salerno",
+   "country": "Itália"
+  },
+  {
+   "name": "Stadio Artemio Franchi",
+   "city": "Florença",
+   "country": "Itália"
+  },
+  {
+   "name": "Stadio Carlo Castellani",
+   "city": "Empoli",
+   "country": "Itália"
+  },
+  {
+   "name": "Stadio Diego Armando Maradona",
+   "city": "Nápoles",
+   "country": "Itália"
+  },
+  {
+   "name": "Stadio Ennio Tardini",
+   "city": "Parma",
+   "country": "Itália"
+  },
+  {
+   "name": "Stadio Friuli",
+   "city": "Údine",
+   "country": "Itália"
+  },
+  {
+   "name": "Stadio Luigi Ferraris",
+   "city": "Gênova",
+   "country": "Itália"
+  },
+  {
+   "name": "Stadio Marcantonio Bentegodi",
+   "city": "Verona",
+   "country": "Itália"
+  },
+  {
+   "name": "Stadio Olimpico",
+   "city": "Roma",
+   "country": "Itália"
+  },
+  {
+   "name": "Stadio Olimpico Grande Torino",
+   "city": "Turim",
+   "country": "Itália"
+  },
+  {
+   "name": "Stadio Renato Dall'Ara",
+   "city": "Bolonha",
+   "country": "Itália"
+  },
+  {
+   "name": "Stadio Via del Mare",
+   "city": "Lecce",
+   "country": "Itália"
+  }
+ ],
+ "leagues": [
+  {
+   "name": "Betway Premiership",
+   "country": "África do Sul"
+  },
+  {
+   "name": "2. Bundesliga",
+   "country": "Alemanha"
+  },
+  {
+   "name": "3. Liga",
+   "country": "Alemanha"
+  },
+  {
+   "name": "Bundesliga",
+   "country": "Alemanha"
+  },
+  {
+   "name": "Frauen-Bundesliga",
+   "country": "Alemanha"
+  },
+  {
+   "name": "Girabola",
+   "country": "Angola"
+  },
+  {
+   "name": "Saudi Pro League",
+   "country": "Arábia Saudita"
+  },
+  {
+   "name": "Liga Profesional de Fútbol",
+   "country": "Argentina"
+  },
+  {
+   "name": "Primera B Metropolitana",
+   "country": "Argentina"
+  },
+  {
+   "name": "Primera Nacional",
+   "country": "Argentina"
+  },
+  {
+   "name": "A-League Men",
+   "country": "Austrália"
+  },
+  {
+   "name": "A-League Women",
+   "country": "Austrália"
+  },
+  {
+   "name": "Bundesliga Austríaca",
+   "country": "Áustria"
+  },
+  {
+   "name": "Pro League",
+   "country": "Bélgica"
+  },
+  {
+   "name": "Brasileirão Feminino",
+   "country": "Brasil"
+  },
+  {
+   "name": "Campeonato Baiano",
+   "country": "Brasil"
+  },
+  {
+   "name": "Campeonato Brasileiro Série A",
+   "country": "Brasil"
+  },
+  {
+   "name": "Campeonato Brasileiro Série B",
+   "country": "Brasil"
+  },
+  {
+   "name": "Campeonato Brasileiro Série C",
+   "country": "Brasil"
+  },
+  {
+   "name": "Campeonato Brasileiro Série D",
+   "country": "Brasil"
+  },
+  {
+   "name": "Campeonato Carioca",
+   "country": "Brasil"
+  },
+  {
+   "name": "Campeonato Catarinense",
+   "country": "Brasil"
+  },
+  {
+   "name": "Campeonato Cearense",
+   "country": "Brasil"
+  },
+  {
+   "name": "Campeonato Gaúcho",
+   "country": "Brasil"
+  },
+  {
+   "name": "Campeonato Goiano",
+   "country": "Brasil"
+  },
+  {
+   "name": "Campeonato Mineiro",
+   "country": "Brasil"
+  },
+  {
+   "name": "Campeonato Paranaense",
+   "country": "Brasil"
+  },
+  {
+   "name": "Campeonato Paulista",
+   "country": "Brasil"
+  },
+  {
+   "name": "Campeonato Pernambucano",
+   "country": "Brasil"
+  },
+  {
+   "name": "Canadian Premier League",
+   "country": "Canadá"
+  },
+  {
+   "name": "Qatar Stars League",
+   "country": "Catar"
+  },
+  {
+   "name": "Primera B Chilena",
+   "country": "Chile"
+  },
+  {
+   "name": "Primera División Chilena",
+   "country": "Chile"
+  },
+  {
+   "name": "Chinese Super League",
+   "country": "China"
+  },
+  {
+   "name": "Categoría Primera A",
+   "country": "Colômbia"
+  },
+  {
+   "name": "K League 1",
+   "country": "Coreia do Sul"
+  },
+  {
+   "name": "K League 2",
+   "country": "Coreia do Sul"
+  },
+  {
+   "name": "HNL",
+   "country": "Croácia"
+  },
+  {
+   "name": "Superliga Dinamarquesa",
+   "country": "Dinamarca"
+  },
+  {
+   "name": "Egyptian Premier League",
+   "country": "Egito"
+  },
+  {
+   "name": "UAE Pro League",
+   "country": "Emirados Árabes Unidos"
+  },
+  {
+   "name": "LigaPro Serie A",
+   "country": "Equador"
+  },
+  {
+   "name": "Scottish Championship",
+   "country": "Escócia"
+  },
+  {
+   "name": "Scottish Premiership",
+   "country": "Escócia"
+  },
+  {
+   "name": "La Liga",
+   "country": "Espanha"
+  },
+  {
+   "name": "Liga F",
+   "country": "Espanha"
+  },
+  {
+   "name": "Primera Federación",
+   "country": "Espanha"
+  },
+  {
+   "name": "Segunda División",
+   "country": "Espanha"
+  },
+  {
+   "name": "Major League Soccer",
+   "country": "Estados Unidos"
+  },
+  {
+   "name": "National Women's Soccer League",
+   "country": "Estados Unidos"
+  },
+  {
+   "name": "USL Championship",
+   "country": "Estados Unidos"
+  },
+  {
+   "name": "Veikkausliiga",
+   "country": "Finlândia"
+  },
+  {
+   "name": "Ligue 1",
+   "country": "França"
+  },
+  {
+   "name": "Ligue 2",
+   "country": "França"
+  },
+  {
+   "name": "National",
+   "country": "França"
+  },
+  {
+   "name": "Première Ligue",
+   "country": "França"
+  },
+  {
+   "name": "Ghana Premier League",
+   "country": "Gana"
+  },
+  {
+   "name": "Super League 1",
+   "country": "Grécia"
+  },
+  {
+   "name": "Nemzeti Bajnokság I",
+   "country": "Hungria"
+  },
+  {
+   "name": "Indian Super League",
+   "country": "Índia"
+  },
+  {
+   "name": "EFL Championship",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "EFL League One",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "EFL League Two",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Premier League",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Women's Super League",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Persian Gulf Pro League",
+   "country": "Irã"
+  },
+  {
+   "name": "League of Ireland Premier Division",
+   "country": "Irlanda"
+  },
+  {
+   "name": "NIFL Premiership",
+   "country": "Irlanda do Norte"
+  },
+  {
+   "name": "Israeli Premier League",
+   "country": "Israel"
+  },
+  {
+   "name": "Serie A",
+   "country": "Itália"
+  },
+  {
+   "name": "Serie A Femminile",
+   "country": "Itália"
+  },
+  {
+   "name": "Serie B",
+   "country": "Itália"
+  },
+  {
+   "name": "Serie C",
+   "country": "Itália"
+  },
+  {
+   "name": "J1 League",
+   "country": "Japão"
+  },
+  {
+   "name": "J2 League",
+   "country": "Japão"
+  },
+  {
+   "name": "WE League",
+   "country": "Japão"
+  },
+  {
+   "name": "Botola Pro",
+   "country": "Marrocos"
+  },
+  {
+   "name": "Liga MX",
+   "country": "México"
+  },
+  {
+   "name": "Liga MX Femenil",
+   "country": "México"
+  },
+  {
+   "name": "Nigeria Premier Football League",
+   "country": "Nigéria"
+  },
+  {
+   "name": "Eliteserien",
+   "country": "Noruega"
+  },
+  {
+   "name": "Cymru Premier",
+   "country": "País de Gales"
+  },
+  {
+   "name": "Eerste Divisie",
+   "country": "Países Baixos"
+  },
+  {
+   "name": "Eredivisie",
+   "country": "Países Baixos"
+  },
+  {
+   "name": "Primera División Paraguaia",
+   "country": "Paraguai"
+  },
+  {
+   "name": "Liga 1",
+   "country": "Peru"
+  },
+  {
+   "name": "Ekstraklasa",
+   "country": "Polônia"
+  },
+  {
+   "name": "Liga Portugal 2",
+   "country": "Portugal"
+  },
+  {
+   "name": "Primeira Liga",
+   "country": "Portugal"
+  },
+  {
+   "name": "Linafoot",
+   "country": "RD Congo"
+  },
+  {
+   "name": "Czech First League",
+   "country": "República Tcheca"
+  },
+  {
+   "name": "Liga I",
+   "country": "Romênia"
+  },
+  {
+   "name": "Russian Premier League",
+   "country": "Rússia"
+  },
+  {
+   "name": "Serbian SuperLiga",
+   "country": "Sérvia"
+  },
+  {
+   "name": "Allsvenskan",
+   "country": "Suécia"
+  },
+  {
+   "name": "Super League Suíça",
+   "country": "Suíça"
+  },
+  {
+   "name": "Thai League 1",
+   "country": "Tailândia"
+  },
+  {
+   "name": "Süper Lig",
+   "country": "Turquia"
+  },
+  {
+   "name": "Ukrainian Premier League",
+   "country": "Ucrânia"
+  },
+  {
+   "name": "Primera División Uruguaia",
+   "country": "Uruguai"
+  }
+ ],
+ "mascots": [
+  {
+   "name": "Willie",
+   "owner": "Copa do Mundo 1966",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Juanito",
+   "owner": "Copa do Mundo 1970",
+   "country": "México"
+  },
+  {
+   "name": "Tip e Tap",
+   "owner": "Copa do Mundo 1974",
+   "country": "Alemanha Ocidental"
+  },
+  {
+   "name": "Gauchito",
+   "owner": "Copa do Mundo 1978",
+   "country": "Argentina"
+  },
+  {
+   "name": "Naranjito",
+   "owner": "Copa do Mundo 1982",
+   "country": "Espanha"
+  },
+  {
+   "name": "Pique",
+   "owner": "Copa do Mundo 1986",
+   "country": "México"
+  },
+  {
+   "name": "Ciao",
+   "owner": "Copa do Mundo 1990",
+   "country": "Itália"
+  },
+  {
+   "name": "Striker",
+   "owner": "Copa do Mundo 1994",
+   "country": "Estados Unidos"
+  },
+  {
+   "name": "Footix",
+   "owner": "Copa do Mundo 1998",
+   "country": "França"
+  },
+  {
+   "name": "Ato, Kaz e Nik",
+   "owner": "Copa do Mundo 2002",
+   "country": "Coreia do Sul / Japão"
+  },
+  {
+   "name": "Goleo VI",
+   "owner": "Copa do Mundo 2006",
+   "country": "Alemanha"
+  },
+  {
+   "name": "Zakumi",
+   "owner": "Copa do Mundo 2010",
+   "country": "África do Sul"
+  },
+  {
+   "name": "Fuleco",
+   "owner": "Copa do Mundo 2014",
+   "country": "Brasil"
+  },
+  {
+   "name": "Zabivaka",
+   "owner": "Copa do Mundo 2018",
+   "country": "Rússia"
+  },
+  {
+   "name": "La'eeb",
+   "owner": "Copa do Mundo 2022",
+   "country": "Catar"
+  },
+  {
+   "name": "Maple, Zayu e Clutch",
+   "owner": "Copa do Mundo 2026",
+   "country": "EUA / Canadá / México"
+  },
+  {
+   "name": "Goaliath",
+   "owner": "Eurocopa 1996",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Slavek e Slavko",
+   "owner": "Eurocopa 2012",
+   "country": "Polônia / Ucrânia"
+  },
+  {
+   "name": "Super Victor",
+   "owner": "Eurocopa 2016",
+   "country": "França"
+  },
+  {
+   "name": "Skillzy",
+   "owner": "Eurocopa 2020",
+   "country": "Europa"
+  },
+  {
+   "name": "Albart",
+   "owner": "Eurocopa 2024",
+   "country": "Alemanha"
+  },
+  {
+   "name": "Ettie",
+   "owner": "Copa do Mundo Feminina 2019",
+   "country": "França"
+  },
+  {
+   "name": "Tazuni",
+   "owner": "Copa do Mundo Feminina 2023",
+   "country": "Austrália / Nova Zelândia"
+  },
+  {
+   "name": "Hennes",
+   "owner": "1. FC Köln",
+   "country": "Alemanha"
+  },
+  {
+   "name": "Brian the Lion",
+   "owner": "Bayer Leverkusen",
+   "country": "Alemanha"
+  },
+  {
+   "name": "Berni",
+   "owner": "Bayern de Munique",
+   "country": "Alemanha"
+  },
+  {
+   "name": "Emma",
+   "owner": "Borussia Dortmund",
+   "country": "Alemanha"
+  },
+  {
+   "name": "Atilla",
+   "owner": "Eintracht Frankfurt",
+   "country": "Alemanha"
+  },
+  {
+   "name": "Hermann",
+   "owner": "Hamburger SV",
+   "country": "Alemanha"
+  },
+  {
+   "name": "Erwin",
+   "owner": "Schalke 04",
+   "country": "Alemanha"
+  },
+  {
+   "name": "Fritzle",
+   "owner": "VfB Stuttgart",
+   "country": "Alemanha"
+  },
+  {
+   "name": "Wölfi",
+   "owner": "VfL Wolfsburg",
+   "country": "Alemanha"
+  },
+  {
+   "name": "Galo",
+   "owner": "Atlético Mineiro",
+   "country": "Brasil"
+  },
+  {
+   "name": "Super-Homem",
+   "owner": "Bahia",
+   "country": "Brasil"
+  },
+  {
+   "name": "Biriba",
+   "owner": "Botafogo",
+   "country": "Brasil"
+  },
+  {
+   "name": "Vovô",
+   "owner": "Ceará",
+   "country": "Brasil"
+  },
+  {
+   "name": "Mosqueteiro",
+   "owner": "Corinthians",
+   "country": "Brasil"
+  },
+  {
+   "name": "Vovô",
+   "owner": "Coritiba",
+   "country": "Brasil"
+  },
+  {
+   "name": "Raposa",
+   "owner": "Cruzeiro",
+   "country": "Brasil"
+  },
+  {
+   "name": "Urubu",
+   "owner": "Flamengo",
+   "country": "Brasil"
+  },
+  {
+   "name": "Guerreirinho",
+   "owner": "Fluminense",
+   "country": "Brasil"
+  },
+  {
+   "name": "Leão",
+   "owner": "Fortaleza",
+   "country": "Brasil"
+  },
+  {
+   "name": "Mosqueteiro",
+   "owner": "Grêmio",
+   "country": "Brasil"
+  },
+  {
+   "name": "Saci",
+   "owner": "Internacional",
+   "country": "Brasil"
+  },
+  {
+   "name": "Timbu",
+   "owner": "Náutico",
+   "country": "Brasil"
+  },
+  {
+   "name": "Porco",
+   "owner": "Palmeiras",
+   "country": "Brasil"
+  },
+  {
+   "name": "Cobra-coral",
+   "owner": "Santa Cruz",
+   "country": "Brasil"
+  },
+  {
+   "name": "Baleião e Baleinha",
+   "owner": "Santos",
+   "country": "Brasil"
+  },
+  {
+   "name": "Saint Paul",
+   "owner": "São Paulo",
+   "country": "Brasil"
+  },
+  {
+   "name": "Leão da Ilha",
+   "owner": "Sport",
+   "country": "Brasil"
+  },
+  {
+   "name": "Almirante",
+   "owner": "Vasco da Gama",
+   "country": "Brasil"
+  },
+  {
+   "name": "Leão",
+   "owner": "Vitória",
+   "country": "Brasil"
+  },
+  {
+   "name": "Cruzado",
+   "owner": "Universidad Católica",
+   "country": "Chile"
+  },
+  {
+   "name": "Chunchito",
+   "owner": "Universidad de Chile",
+   "country": "Chile"
+  },
+  {
+   "name": "Nacho",
+   "owner": "Atlético Nacional",
+   "country": "Colômbia"
+  },
+  {
+   "name": "Igui",
+   "owner": "Deportivo Cali",
+   "country": "Colômbia"
+  },
+  {
+   "name": "Angus the Bull",
+   "owner": "Aberdeen",
+   "country": "Escócia"
+  },
+  {
+   "name": "Hoopy the Huddle Hound",
+   "owner": "Celtic",
+   "country": "Escócia"
+  },
+  {
+   "name": "Broxi Bear",
+   "owner": "Rangers",
+   "country": "Escócia"
+  },
+  {
+   "name": "Indi",
+   "owner": "Atlético de Madrid",
+   "country": "Espanha"
+  },
+  {
+   "name": "Perico",
+   "owner": "Espanyol",
+   "country": "Espanha"
+  },
+  {
+   "name": "Rojillo",
+   "owner": "Osasuna",
+   "country": "Espanha"
+  },
+  {
+   "name": "Palmerín",
+   "owner": "Real Betis",
+   "country": "Espanha"
+  },
+  {
+   "name": "Txurdin",
+   "owner": "Real Sociedad",
+   "country": "Espanha"
+  },
+  {
+   "name": "Locco",
+   "owner": "Sevilla",
+   "country": "Espanha"
+  },
+  {
+   "name": "Super Rat Penat",
+   "owner": "Valencia",
+   "country": "Espanha"
+  },
+  {
+   "name": "Groguet",
+   "owner": "Villarreal",
+   "country": "Espanha"
+  },
+  {
+   "name": "Gunnersaurus Rex",
+   "owner": "Arsenal",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Hercules the Lion",
+   "owner": "Aston Villa",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Cherry Bear",
+   "owner": "Bournemouth",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Gully the Seagull",
+   "owner": "Brighton",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Bertie Bee",
+   "owner": "Burnley",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Stamford the Lion",
+   "owner": "Chelsea",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Pete the Eagle",
+   "owner": "Crystal Palace",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Changy the Elephant",
+   "owner": "Everton",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Billy the Badger",
+   "owner": "Fulham",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Lucas the Kop Cat",
+   "owner": "Leeds United",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Filbert Fox",
+   "owner": "Leicester City",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Mighty Red",
+   "owner": "Liverpool",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Moonchester",
+   "owner": "Manchester City",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Fred the Red",
+   "owner": "Manchester United",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Zampa the Lion",
+   "owner": "Millwall",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Monty Magpie",
+   "owner": "Newcastle United",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Captain Canary",
+   "owner": "Norwich City",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Hammerhead",
+   "owner": "West Ham",
+   "country": "Inglaterra"
+  },
+  {
+   "name": "Griffon",
+   "owner": "Genoa",
+   "country": "Itália"
+  },
+  {
+   "name": "Ambrogio",
+   "owner": "Inter de Milão",
+   "country": "Itália"
+  },
+  {
+   "name": "Jay Zebra",
+   "owner": "Juventus",
+   "country": "Itália"
+  },
+  {
+   "name": "Olympia",
+   "owner": "Lazio",
+   "country": "Itália"
+  },
+  {
+   "name": "Milanello",
+   "owner": "Milan",
+   "country": "Itália"
+  },
+  {
+   "name": "'O Ciuccio",
+   "owner": "Napoli",
+   "country": "Itália"
+  },
+  {
+   "name": "Romolo",
+   "owner": "Roma",
+   "country": "Itália"
+  },
+  {
+   "name": "Bacciccia",
+   "owner": "Sampdoria",
+   "country": "Itália"
+  },
+  {
+   "name": "Chiva Loca",
+   "owner": "Chivas de Guadalajara",
+   "country": "México"
+  },
+  {
+   "name": "Agüi",
+   "owner": "Club América",
+   "country": "México"
+  },
+  {
+   "name": "Águia Vitória",
+   "owner": "Benfica",
+   "country": "Portugal"
+  },
+  {
+   "name": "Draco",
+   "owner": "FC Porto",
+   "country": "Portugal"
+  },
+  {
+   "name": "Bracaru",
+   "owner": "SC Braga",
+   "country": "Portugal"
+  },
+  {
+   "name": "Jubas",
+   "owner": "Sporting CP",
+   "country": "Portugal"
+  },
+  {
+   "name": "Super Afonso",
+   "owner": "Vitória de Guimarães",
+   "country": "Portugal"
+  }
+ ]
+}

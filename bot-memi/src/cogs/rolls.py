@@ -7,6 +7,8 @@ from pathlib import Path
 import discord
 from discord.ext import commands
 
+from src.clock import brasilia_time
+from src.cogs.common import card_file
 from src.db import DATABASE_PATH
 from src.game import register_user
 from src.rolls import (
@@ -16,7 +18,6 @@ from src.rolls import (
     claim_roll_offer,
 )
 from src.ratings import rarity_label
-from src.roll_images import roll_image_file
 
 
 class RollOfferView(discord.ui.View):
@@ -84,7 +85,7 @@ class RollOfferView(discord.ui.View):
         if result.status == "cooldown" and result.retry_at:
             message = (
                 "Seu próximo claim libera às "
-                f"**{result.retry_at.strftime('%H:%M UTC')}**."
+                f"**{brasilia_time(result.retry_at)}**."
             )
         else:
             message = messages.get(
@@ -111,7 +112,7 @@ class RollsCog(commands.Cog):
             await context.reply(
                 f"Você usou os {error.capacity} rolls deste ciclo. "
                 "Eles renovam às "
-                f"**{error.reset_at.strftime('%H:%M UTC')}**.",
+                f"**{brasilia_time(error.reset_at)}**.",
                 mention_author=False,
             )
             return
@@ -161,7 +162,7 @@ class RollsCog(commands.Cog):
                 player_name=player["display_name"] or player["name"],
             )
 
-        image = roll_image_file(player)
+        image = await card_file({**player, "effective_overall": overall})
         embed.set_image(url=f"attachment://{image.filename}")
         await context.reply(
             embed=embed,

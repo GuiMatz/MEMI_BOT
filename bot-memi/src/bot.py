@@ -65,10 +65,10 @@ class MemiBot(commands.Bot):
         await self.load_extension("src.cogs.team")
         await self.load_extension("src.cogs.matches")
         await self.load_extension("src.cogs.admin")
-        from src.photos import sync_existing_photos
+        from src.encyclopedia import prepare_game_data
 
-        linked = sync_existing_photos(self.database_path)
-        LOGGER.info("Extensões do MEMI carregadas; %s fotos ligadas ao banco.", linked)
+        report = prepare_game_data(self.database_path)
+        LOGGER.info("Extensões do MEMI carregadas; dados sincronizados: %s", report)
 
     async def on_command_error(
         self,

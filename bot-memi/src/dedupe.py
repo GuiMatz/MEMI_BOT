@@ -2,7 +2,7 @@
 
 Dois registros são a mesma pessoa quando têm o mesmo nome normalizado e a mesma
 data de nascimento; sem data em um deles, também valem clube ou nacionalidade
-iguais. Cartas Cartola são feitas à mão e nunca entram na comparação.
+iguais. Cartas Cartola e lendas da Enciclopédia nunca entram na comparação.
 
     python -m src.dedupe            # só mostra o que faria
     python -m src.dedupe --apply    # remove de fato
@@ -43,7 +43,7 @@ def find_duplicates(database_path: str | Path = DATABASE_PATH) -> list[dict[str,
                        o.discord_user_id AS owner_id
                 FROM players AS p
                 LEFT JOIN player_ownership AS o ON o.player_id = p.id
-                WHERE COALESCE(p.overall_source, '') != 'Cartola'
+                WHERE COALESCE(p.overall_source, '') NOT IN ('Cartola', 'Lenda')
                 """
             )
         ]

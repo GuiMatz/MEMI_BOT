@@ -188,13 +188,14 @@ class RollTests(unittest.TestCase):
                 now=NOW,
                 rng=random.Random(11),
             )
-        self.assertEqual(error.exception.reset_at, NOW + timedelta(minutes=30))
+        # Ciclos de 1 hora começando na hora cheia: 12:10 renova às 13:00.
+        self.assertEqual(error.exception.reset_at, NOW + timedelta(minutes=50))
 
         next_cycle = roll_player(
             100,
             "Pessoa",
             self.database_path,
-            now=NOW + timedelta(minutes=30),
+            now=NOW + timedelta(minutes=50),
             rng=random.Random(12),
         )
         self.assertEqual(next_cycle.rolls_remaining, 9)

@@ -169,10 +169,12 @@ class GameAccountTests(unittest.TestCase):
 
     def test_top_players_excludes_ineligible_records(self):
         self.add_player(name="Elegível", overall=90)
+        # Candidatos da fase 2 e atividade desconhecida também entram na roleta.
         self.add_player(
             name="Candidato",
-            overall=99,
+            overall=95,
             phase2_candidate=1,
+            activity_status="unknown",
         )
         self.add_player(
             name="Inativo",
@@ -187,7 +189,7 @@ class GameAccountTests(unittest.TestCase):
 
         self.assertEqual(
             [player["name"] for player in get_top_players(self.database_path)],
-            ["Elegível"],
+            ["Candidato", "Elegível"],
         )
 
 

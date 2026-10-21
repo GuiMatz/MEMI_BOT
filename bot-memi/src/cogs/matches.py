@@ -6,7 +6,6 @@ import json
 import logging
 import os
 from datetime import time
-from zoneinfo import ZoneInfo
 
 import discord
 from discord.ext import commands, tasks
@@ -206,7 +205,7 @@ class MatchesCog(commands.Cog):
                 )
             else:
                 await context.reply(
-                    "Agendamento diário ativado para as 19:00 (America/Sao_Paulo).",
+                    "Agendamento diário ativado para as 19:00 (horário de Brasília).",
                     mention_author=False,
                 )
             return

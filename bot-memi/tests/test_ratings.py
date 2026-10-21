@@ -32,7 +32,10 @@ class GameOverallTests(unittest.TestCase):
         self.assertEqual(game_overall(40, "Cartola", "Fulano"), CARTOLA_OVERALL)
         self.assertEqual(game_overall(40, "Cartola", "Maria Sofia"), 100)
         self.assertEqual(game_overall(100, "EA", "Outra Pessoa"), 99)
-        self.assertIsNone(game_overall(None, "Cartola", "Fulano"))
+        self.assertEqual(game_overall(None, "Cartola", "Fulano"), CARTOLA_OVERALL)
+        self.assertEqual(game_overall(None), 60)
+        self.assertEqual(game_overall(85, "Lenda", "Zico"), 90)
+        self.assertEqual(game_overall(97, "Lenda", "Pelé"), 97)
 
     def test_only_the_special_card_reaches_100_with_balls(self):
         self.assertEqual(effective_overall(95, 10), 99)

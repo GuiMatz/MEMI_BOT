@@ -7,8 +7,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
-from zoneinfo import ZoneInfo
 
+from src.clock import BRASILIA
 from src.db import DATABASE_PATH, connect
 from src.game import register_user
 from src.rolls import CLAIM_COOLDOWN, CYCLE_LENGTH, ROLLS_PER_CYCLE, cycle_start_for
@@ -26,7 +26,7 @@ CRATE_WEIGHTS = {
     "rolls": 2.5,
     "star_wishes": 2.5,
 }
-DAILY_TIMEZONE = ZoneInfo("America/Sao_Paulo")
+DAILY_TIMEZONE = BRASILIA
 
 UPGRADE_LIMITS = {
     "rolls": 90,
