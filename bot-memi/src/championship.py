@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import json
 import random
+from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from src.db import DATABASE_PATH, connect
-from src.simulation import penalty_shootout, simulate_match
+from src.simulation import penalty_shootout_kicks, simulate_match
 from src.teams import TeamError, get_valid_lineup
 
 CHAMPIONSHIP_TIMEZONE = ZoneInfo("America/Sao_Paulo")
@@ -366,14 +367,16 @@ def _play_fixture(
     winner_id = None
     extra = {}
     if final and result.home_goals == result.away_goals:
-        home_penalties, away_penalties = penalty_shootout(
+        kicks = penalty_shootout_kicks(
             home_players,
             away_players,
             home_taker_id=home_team["penalty_player_id"],
             away_taker_id=away_team["penalty_player_id"],
             rng=rng,
         )
+        home_penalties, away_penalties = kicks[-1].home_score, kicks[-1].away_score
         extra["penalties"] = [home_penalties, away_penalties]
+        extra["penalty_kicks"] = [asdict(kick) for kick in kicks]
         winner_id = (
             fixture["home_user_id"]
             if home_penalties > away_penalties

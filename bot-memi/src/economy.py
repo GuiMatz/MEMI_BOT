@@ -11,8 +11,21 @@ from zoneinfo import ZoneInfo
 
 from src.db import DATABASE_PATH, connect
 from src.game import register_user
+from src.rolls import CLAIM_COOLDOWN, CYCLE_LENGTH, ROLLS_PER_CYCLE, cycle_start_for
 
 CRATE_PRICE = 500
+CRATE_PITY_LIMIT = 50
+# Chance de cada prêmio. Memilets sempre devolvem pelo menos 70% do preço e
+# o valor esperado de uma crate passa do que ela custa.
+CRATE_WEIGHTS = {
+    "memilets": 50.0,
+    "roll_tokens": 28.0,
+    "claim_reset": 10.0,
+    "jackpot": 4.0,
+    "wishes": 3.0,
+    "rolls": 2.5,
+    "star_wishes": 2.5,
+}
 DAILY_TIMEZONE = ZoneInfo("America/Sao_Paulo")
 
 UPGRADE_LIMITS = {
@@ -111,6 +124,8 @@ def get_upgrade_cost(key: str, current_level: int) -> int:
         return 5_000
     if key == "exclusivity":
         return 5_000 * (current_level + 1)
+    if key == "duplicate_bonus":
+        return 4_000 * (current_level + 1)
     if key == "star_wishes":
         raise UpgradeMaxed("Slots de Star Wish podem ser ganhos em crates.")
     raise ValueError(f"Upgrade desconhecido: {key}")
@@ -367,7 +382,7 @@ def open_crate(
             if level < UPGRADE_LIMITS[key]:
                 permanent_available.append(key)
 
-        pity_triggered = pity >= 99 and bool(permanent_available)
+        pity_triggered = pity >= CRATE_PITY_LIMIT and bool(permanent_available)
         if pity_triggered:
             pity_weights = {
                 "star_wishes": 50,
@@ -381,15 +396,36 @@ def open_crate(
             )[0]
         else:
             reward_key = generator.choices(
-                ("memilets", "roll_tokens", "star_wishes", "wishes", "rolls"),
-                weights=(74, 25, 0.5, 0.3, 0.2),
+                tuple(CRATE_WEIGHTS),
+                weights=tuple(CRATE_WEIGHTS.values()),
                 k=1,
             )[0]
             if reward_key in {"star_wishes", "wishes", "rolls"} and reward_key not in permanent_available:
-                reward_key = "memilets"
+                reward_key = "jackpot"
 
-        if reward_key == "memilets":
-            amount = generator.randint(200, 450)
+        if reward_key == "claim_reset":
+            account = connection.execute(
+                "SELECT last_claim_at FROM game_users WHERE discord_user_id = ?",
+                (user_id,),
+            ).fetchone()
+            on_cooldown = bool(account["last_claim_at"]) and (
+                datetime.fromisoformat(account["last_claim_at"]) + CLAIM_COOLDOWN
+                > _utc_now(None)
+            )
+            if on_cooldown:
+                connection.execute(
+                    "UPDATE game_users SET last_claim_at = NULL WHERE discord_user_id = ?",
+                    (user_id,),
+                )
+                kind = "claim_reset"
+                amount = 1
+            else:
+                # Sem claim em espera, o reset viraria nada: entrega rolls extras.
+                reward_key = "roll_tokens"
+
+        if reward_key in {"memilets", "jackpot"}:
+            low, high = (350, 900) if reward_key == "memilets" else (2_000, 5_000)
+            amount = generator.randint(low, high)
             connection.execute(
                 """
                 UPDATE game_users SET memilets = memilets + ?,
@@ -398,9 +434,9 @@ def open_crate(
                 """,
                 (amount, user_id),
             )
-            kind = "memilets"
+            kind = reward_key
         elif reward_key == "roll_tokens":
-            amount = generator.randint(1, 5)
+            amount = generator.randint(3, 8)
             connection.execute(
                 """
                 INSERT INTO user_upgrades
@@ -412,7 +448,7 @@ def open_crate(
                 (user_id, amount),
             )
             kind = "roll_tokens"
-        else:
+        elif reward_key != "claim_reset":
             reward_key = str(reward_key)
             connection.execute(
                 """
@@ -431,7 +467,7 @@ def open_crate(
         elif pity_triggered:
             new_pity = 0
         else:
-            new_pity = min(99, pity + 1)
+            new_pity = min(CRATE_PITY_LIMIT, pity + 1)
         connection.execute(
             """
             INSERT INTO user_upgrades
@@ -443,3 +479,99 @@ def open_crate(
             (user_id, new_pity),
         )
         return CrateReward(kind, amount, new_pity)
+
+
+@dataclass(frozen=True)
+class AccountStatus:
+    memilets: int
+    owned_players: int
+    rolls_left: int
+    roll_capacity: int
+    roll_tokens: int
+    rolls_reset_at: datetime
+    claim_available_at: datetime | None
+    daily_available_at: datetime | None
+    wishes: int
+    wish_capacity: int
+    star_wishes: int
+    star_wish_capacity: int
+    crate_pity: int
+    levels: dict[str, int]
+
+
+def get_account_status(
+    discord_user_id: int | str,
+    display_name: str,
+    database_path: str | Path = DATABASE_PATH,
+    *,
+    now: datetime | None = None,
+) -> AccountStatus:
+    """Saldo, timers e limites da conta, como o `$tu` do Mudae."""
+    current_time = _utc_now(now)
+    user_id = str(discord_user_id)
+    account = register_user(user_id, display_name, database_path)
+    levels = get_upgrade_levels(user_id, database_path)
+    cycle_start = cycle_start_for(current_time)
+    with connect(database_path) as connection:
+        row = connection.execute(
+            "SELECT last_claim_at, last_daily_at FROM game_users WHERE discord_user_id = ?",
+            (user_id,),
+        ).fetchone()
+        usage = connection.execute(
+            """
+            SELECT rolls_used FROM roll_cycles
+            WHERE discord_user_id = ? AND cycle_started_at = ?
+            """,
+            (user_id, cycle_start.isoformat(timespec="seconds")),
+        ).fetchone()
+        tokens = connection.execute(
+            """
+            SELECT roll_tokens, crate_pity FROM user_upgrades
+            WHERE discord_user_id = ? AND upgrade_key = 'rolls'
+            """,
+            (user_id,),
+        ).fetchone()
+        owned = connection.execute(
+            "SELECT COUNT(*) FROM player_ownership WHERE discord_user_id = ?",
+            (user_id,),
+        ).fetchone()[0]
+        wish_counts = {
+            wish["wish_type"]: int(wish["amount"])
+            for wish in connection.execute(
+                """
+                SELECT wish_type, COUNT(*) AS amount FROM user_wishes
+                WHERE discord_user_id = ? GROUP BY wish_type
+                """,
+                (user_id,),
+            )
+        }
+    capacity = ROLLS_PER_CYCLE + levels["rolls"]
+    used = int(usage["rolls_used"]) if usage else 0
+    claim_at = None
+    if row["last_claim_at"]:
+        claim_at = datetime.fromisoformat(row["last_claim_at"]) + CLAIM_COOLDOWN
+        if claim_at <= current_time:
+            claim_at = None
+    daily_at = None
+    if row["last_daily_at"]:
+        daily_at = datetime.fromisoformat(row["last_daily_at"]).astimezone(
+            timezone.utc
+        ) + timedelta(hours=24)
+        if daily_at <= current_time:
+            daily_at = None
+    return AccountStatus(
+        memilets=int(account["memilets"]),
+        owned_players=int(owned),
+        rolls_left=max(0, capacity - used),
+        roll_capacity=capacity,
+        roll_tokens=int(tokens["roll_tokens"]) if tokens else 0,
+        rolls_reset_at=cycle_start + CYCLE_LENGTH,
+        claim_available_at=claim_at,
+        daily_available_at=daily_at,
+        wishes=wish_counts.get("normal", 0),
+        wish_capacity=5 + levels["wishes"],
+        star_wishes=wish_counts.get("star", 0),
+        star_wish_capacity=1 + levels["star_wishes"],
+        crate_pity=int(tokens["crate_pity"]) if tokens else 0,
+        levels=levels,
+    )

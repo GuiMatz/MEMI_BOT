@@ -2,24 +2,28 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import discord
 from discord.ext import commands
 
-from src.db import DATABASE_PATH
+from src.db import DATABASE_PATH, normalize_player_name
 from src.game import list_owned_players
 from src.lineup_image import render_lineup
 from src.teams import (
     FORMATIONS,
     STYLE_LABELS,
     TeamError,
+    auto_fill_lineup,
+    clear_lineup_slot,
     ensure_team,
     get_lineup,
     get_team,
     get_team_statistics,
-    get_valid_lineup,
     remove_player_from_lineup,
     scale_player,
     set_formation,
+    set_lineup_slot,
     set_team_field,
     set_team_role,
     set_team_style,
@@ -34,6 +38,242 @@ TEAM_FIELDS = {
     "logo": "logo_path",
     "camisa": "kit_path",
 }
+
+
+POSITION_NAMES = {
+    "GOL": "Goleiro",
+    "ZAG": "Zagueiro",
+    "LD": "Lateral direito",
+    "LE": "Lateral esquerdo",
+    "MC": "Volante / meio-campo",
+    "MEI": "Meia",
+    "PE": "Ponta esquerda",
+    "PD": "Ponta direita",
+    "CA": "Centroavante",
+}
+
+
+async def lineup_file(team: dict, lineup: list[dict]) -> discord.File:
+    image = await asyncio.to_thread(render_lineup, team, lineup)
+    return discord.File(image, filename="escalacao.png")
+
+
+class LineupBuilderView(discord.ui.View):
+    """Monta o time: escolhe a formação, clica na vaga e escolhe o jogador da posição."""
+
+    def __init__(self, owner: discord.abc.User, database_path):
+        super().__init__(timeout=600)
+        self.owner = owner
+        self.database_path = database_path
+        self.selected_slot: int | None = None
+        self.notice = ""
+        self.message: discord.Message | None = None
+        self._build()
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner.id:
+            await interaction.response.send_message(
+                "Só o dono do time pode mexer nessa escalação. Use `mm!escalar` para abrir a sua.",
+                ephemeral=True,
+            )
+            return False
+        return True
+
+    def _state(self) -> tuple[dict, list[dict]]:
+        team = get_team(self.owner.id, self.database_path)
+        return team, get_lineup(self.owner.id, self.database_path)
+
+    def _build(self) -> None:
+        self.clear_items()
+        team, lineup = self._state()
+        positions = FORMATIONS[team["formation"]]
+        by_slot = {int(player["slot_order"]): player for player in lineup}
+
+        formation = discord.ui.Select(
+            placeholder=f"Formação: {team['formation']}",
+            options=[
+                discord.SelectOption(label=name, value=name, default=name == team["formation"])
+                for name in FORMATIONS
+            ],
+            row=0,
+        )
+        formation.callback = self._on_formation
+        self.add_item(formation)
+
+        slot_options = []
+        for slot, position in enumerate(positions, start=1):
+            player = by_slot.get(slot)
+            label = (
+                f"{position} · {player['name']} ({player['effective_overall']})"
+                if player
+                else f"{position} · vaga livre"
+            )
+            slot_options.append(
+                discord.SelectOption(
+                    label=label[:100],
+                    value=str(slot),
+                    description=POSITION_NAMES[position],
+                    emoji="✅" if player else "➕",
+                    default=slot == self.selected_slot,
+                )
+            )
+        slots = discord.ui.Select(placeholder="Escolha a posição", options=slot_options, row=1)
+        slots.callback = self._on_slot
+        self.add_item(slots)
+
+        if self.selected_slot is not None:
+            position = positions[self.selected_slot - 1]
+            current = by_slot.get(self.selected_slot)
+            elsewhere = {
+                int(player["id"]): int(player["slot_order"]) for player in lineup
+            }
+            players = list_owned_players(
+                self.owner.id,
+                self.database_path,
+                limit=24,
+                position=position,
+                sort_by="overall",
+            )
+            options = []
+            for player in players:
+                description = player["club_name"] or "Passe livre"
+                if int(player["id"]) in elsewhere and int(player["id"]) != (current or {}).get("id"):
+                    description = "já escalado em outra vaga (muda de lugar)"
+                options.append(
+                    discord.SelectOption(
+                        label=f"{player['overall']} · {player['name']}"[:100],
+                        value=str(player["id"]),
+                        description=description[:100],
+                        default=current is not None and int(current["id"]) == int(player["id"]),
+                    )
+                )
+            if current is not None:
+                options.append(
+                    discord.SelectOption(label="Deixar a vaga vazia", value="clear", emoji="🗑️")
+                )
+            if options:
+                picker = discord.ui.Select(
+                    placeholder=f"Jogador para {position} ({POSITION_NAMES[position]})",
+                    options=options,
+                    row=2,
+                )
+                picker.callback = self._on_player
+            else:
+                picker = discord.ui.Select(
+                    placeholder=f"Você não tem nenhum {position} no elenco",
+                    options=[discord.SelectOption(label="—", value="none")],
+                    disabled=True,
+                    row=2,
+                )
+            self.add_item(picker)
+
+        auto = discord.ui.Button(label="Escalar automático", emoji="🪄", style=discord.ButtonStyle.primary, row=3)
+        auto.callback = self._on_auto
+        self.add_item(auto)
+        done = discord.ui.Button(label="Concluir", emoji="✅", style=discord.ButtonStyle.success, row=3)
+        done.callback = self._on_done
+        self.add_item(done)
+
+    def embed(self, team: dict, lineup: list[dict]) -> discord.Embed:
+        complete = len(lineup) == 11
+        embed = discord.Embed(
+            title=f"✏️ Escalação · {team['team_name']}",
+            description=(
+                (f"{self.notice}\n\n" if self.notice else "")
+                + "1. Escolha a **formação**\n"
+                "2. Clique na **posição**\n"
+                "3. Escolha o **jogador** (ordenados por overall)\n"
+                + ("\n✅ Time completo! Pronto para `mm!amistoso`." if complete
+                   else f"\n{len(lineup)}/11 titulares escalados.")
+            ),
+            color=discord.Color.from_str(team["color"]),
+        )
+        embed.set_image(url="attachment://escalacao.png")
+        return embed
+
+    async def refresh(self, interaction: discord.Interaction) -> None:
+        self._build()
+        team, lineup = self._state()
+        await interaction.response.defer()
+        file = await lineup_file(team, lineup)
+        await interaction.edit_original_response(
+            embed=self.embed(team, lineup), attachments=[file], view=self
+        )
+
+    async def _on_formation(self, interaction: discord.Interaction) -> None:
+        value = interaction.data["values"][0]
+        dropped = set_formation(
+            self.owner.id, value, self.database_path, drop_incompatible=True
+        )
+        self.selected_slot = None
+        self.notice = f"Formação **{value}**." + (
+            f" {dropped} titular(es) sem vaga saíram." if dropped else ""
+        )
+        await self.refresh(interaction)
+
+    async def _on_slot(self, interaction: discord.Interaction) -> None:
+        self.selected_slot = int(interaction.data["values"][0])
+        self.notice = ""
+        await self.refresh(interaction)
+
+    async def _on_player(self, interaction: discord.Interaction) -> None:
+        value = interaction.data["values"][0]
+        try:
+            if value == "clear":
+                clear_lineup_slot(self.owner.id, self.selected_slot, self.database_path)
+                self.notice = "Vaga liberada."
+            else:
+                player = set_lineup_slot(
+                    self.owner.id, self.selected_slot, int(value), self.database_path
+                )
+                self.notice = f"**{player['name']}** escalado."
+                self.selected_slot = None
+        except TeamError as error:
+            self.notice = f"⚠️ {error}"
+        await self.refresh(interaction)
+
+    async def _on_auto(self, interaction: discord.Interaction) -> None:
+        filled = auto_fill_lineup(self.owner.id, self.database_path)
+        self.notice = (
+            f"🪄 {filled} vaga(s) preenchidas com seus maiores overalls."
+            if filled
+            else "Não há jogadores livres das posições que faltam."
+        )
+        self.selected_slot = None
+        await self.refresh(interaction)
+
+    async def _on_done(self, interaction: discord.Interaction) -> None:
+        team, lineup = self._state()
+        self.stop()
+        embed = self.embed(team, lineup)
+        embed.title = f"📋 {team['team_name']}"
+        embed.description = f"{team['formation']} · {len(lineup)}/11 titulares"
+        await interaction.response.edit_message(embed=embed, view=None)
+
+    async def on_timeout(self) -> None:
+        if self.message:
+            try:
+                await self.message.edit(view=None)
+            except discord.HTTPException:
+                pass
+
+
+class TeamProfileView(discord.ui.View):
+    def __init__(self, owner: discord.abc.User, database_path):
+        super().__init__(timeout=300)
+        self.owner = owner
+        self.database_path = database_path
+
+    @discord.ui.button(label="Editar escalação", emoji="✏️", style=discord.ButtonStyle.primary)
+    async def edit(self, interaction: discord.Interaction, button) -> None:
+        if interaction.user.id != self.owner.id:
+            await interaction.response.send_message(
+                "Use `mm!escalar` para editar o seu time.", ephemeral=True
+            )
+            return
+        builder = LineupBuilderView(self.owner, self.database_path)
+        builder.message = interaction.message
+        await builder.refresh(interaction)
 
 
 class TeamCog(commands.Cog):
@@ -120,34 +360,41 @@ class TeamCog(commands.Cog):
                 value=f"{name} · {appearances}",
                 inline=True,
             )
-        if field:
-            embed.description = "Perfil do time atualizado."
-        try:
-            valid_team, lineup = get_valid_lineup(
-                context.author.id,
-                self.database_path,
-            )
-        except TeamError:
-            lineup = get_lineup(context.author.id, self.database_path)
-            embed.description = (
-                f"Escalação: {len(lineup)}/11 titulares compatíveis. "
-                "Use `mm!escalar <jogador>` para completar."
-            )
-            await context.reply(embed=embed, mention_author=False)
-            return
-        image = render_lineup(valid_team, lineup)
-        file = discord.File(image, filename="escalacao.png")
+        lineup = get_lineup(context.author.id, self.database_path)
+        status = (
+            "✅ Escalação completa."
+            if len(lineup) == 11
+            else f"Escalação: {len(lineup)}/11 titulares. Clique em **Editar escalação**."
+        )
+        embed.description = ("Perfil do time atualizado.\n" if field else "") + status
+        file = await lineup_file(team, lineup)
         embed.set_image(url="attachment://escalacao.png")
-        await context.reply(embed=embed, file=file, mention_author=False)
+        await context.reply(
+            embed=embed,
+            file=file,
+            view=TeamProfileView(context.author, self.database_path),
+            mention_author=False,
+        )
 
-    @commands.command(name="escalar")
+    @commands.command(name="escalar", aliases=["escalacao", "lineup"])
     async def scale(
         self,
         context: commands.Context,
         *,
-        query: str,
+        query: str | None = None,
     ) -> None:
         ensure_team(context.author.id, context.author.display_name, self.database_path)
+        if not query:
+            builder = LineupBuilderView(context.author, self.database_path)
+            team, lineup = builder._state()
+            file = await lineup_file(team, lineup)
+            builder.message = await context.reply(
+                embed=builder.embed(team, lineup),
+                file=file,
+                view=builder,
+                mention_author=False,
+            )
+            return
         parts = query.split(maxsplit=1)
         if parts[0].casefold() in {"remover", "tirar"}:
             if len(parts) != 2:
@@ -174,11 +421,11 @@ class TeamCog(commands.Cog):
                 self.database_path,
                 limit=1000,
             )
-            normalized_query = query.casefold()
+            normalized_query = normalize_player_name(query)
             matches = [
                 player
                 for player in owned
-                if normalized_query in player["name"].casefold()
+                if normalized_query in normalize_player_name(player["name"])
             ]
             if len(matches) != 1:
                 await context.reply(
@@ -211,7 +458,7 @@ class TeamCog(commands.Cog):
     ) -> None:
         ensure_team(context.author.id, context.author.display_name, self.database_path)
         if operation and value:
-            op = operation.casefold()
+            op = normalize_player_name(operation)
             try:
                 if op in {"formacao", "formação"}:
                     set_formation(context.author.id, value, self.database_path)

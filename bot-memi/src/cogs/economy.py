@@ -5,8 +5,10 @@ from __future__ import annotations
 import discord
 from discord.ext import commands
 
-from src.db import DATABASE_PATH
+from src.db import DATABASE_PATH, normalize_player_name
 from src.economy import (
+    CRATE_PITY_LIMIT,
+    CRATE_PRICE,
     DAILY_TIMEZONE,
     DailyCooldown,
     EconomyError,
@@ -21,7 +23,7 @@ from src.economy import (
     list_wishes,
     open_crate,
 )
-from src.game import get_wallet, search_players
+from src.game import get_wallet, register_user, search_players
 from src.game import list_owned_players
 from src.transactions import TransactionError, dismiss_player
 
@@ -32,6 +34,7 @@ UPGRADE_ALIASES = {
     "wishes": "wishes",
     "daily": "daily",
     "exclusividade": "exclusivity",
+    "exclusiva": "exclusivity",
     "exclusivity": "exclusivity",
     "duplicata": "duplicate_bonus",
     "duplicatas": "duplicate_bonus",
@@ -39,12 +42,32 @@ UPGRADE_ALIASES = {
     "duplicate_bonus": "duplicate_bonus",
 }
 
+UPGRADE_COMMANDS = {
+    "rolls": "roll",
+    "wishes": "wish",
+    "daily": "daily",
+    "exclusivity": "exclusividade",
+    "duplicate_bonus": "duplicata",
+}
+
 REWARD_MESSAGES = {
-    "memilets": lambda amount: f"Você ganhou **{amount} Memilets**.",
-    "roll_tokens": lambda amount: f"Você ganhou **{amount} rolls extras**.",
-    "star_wishes": lambda amount: "Você ganhou **1 slot permanente de Star Wish**.",
-    "wishes": lambda amount: "Você ganhou **1 slot permanente de wish**.",
-    "rolls": lambda amount: "Você ganhou **+1 roll permanente por ciclo**.",
+    "memilets": lambda amount: f"🪙 **{amount} Memilets**",
+    "jackpot": lambda amount: f"💰 **JACKPOT! {amount} Memilets**",
+    "roll_tokens": lambda amount: f"🎲 **{amount} rolls extras**",
+    "claim_reset": lambda amount: "⏱️ **Claim liberado agora** (cooldown zerado)",
+    "star_wishes": lambda amount: "⭐ **+1 slot permanente de Star Wish**",
+    "wishes": lambda amount: "💫 **+1 slot permanente de wish**",
+    "rolls": lambda amount: "🔁 **+1 roll permanente por ciclo**",
+}
+
+REWARD_RARITY = {
+    "memilets": ("Comum", discord.Color.light_grey()),
+    "roll_tokens": ("Comum", discord.Color.green()),
+    "claim_reset": ("Raro", discord.Color.blue()),
+    "jackpot": ("Épico", discord.Color.purple()),
+    "wishes": ("Lendário", discord.Color.gold()),
+    "rolls": ("Lendário", discord.Color.gold()),
+    "star_wishes": ("Lendário", discord.Color.gold()),
 }
 
 
@@ -120,33 +143,36 @@ class EconomyCog(commands.Cog):
         context: commands.Context,
         upgrade_name: str | None = None,
     ) -> None:
+        register_user(context.author.id, context.author.display_name, self.database_path)
         if not upgrade_name:
             levels = get_upgrade_levels(context.author.id, self.database_path)
             lines = []
             for key, label in UPGRADE_LABELS.items():
                 level = levels[key]
                 if level >= UPGRADE_LIMITS[key]:
-                    cost_text = "máximo"
+                    cost_text = "✅ nível máximo"
                 elif key == "star_wishes":
-                    cost_text = "somente crates"
+                    cost_text = "📦 só em crates"
                 else:
-                    cost_text = f"{get_upgrade_cost(key, level):,}".replace(",", ".")
+                    cost = f"{get_upgrade_cost(key, level):,}".replace(",", ".")
+                    cost_text = f"🪙 {cost} · `mm!upgrade {UPGRADE_COMMANDS[key]}`"
                 lines.append(
-                    f"**{label.title()}** — nível {level}/{UPGRADE_LIMITS[key]} "
-                    f"· próximo custo: {cost_text} Memilets"
+                    f"**{label[:1].upper()}{label[1:]}** — nível "
+                    f"{level}/{UPGRADE_LIMITS[key]}\n└ {cost_text}"
                 )
             embed = discord.Embed(
                 title="Upgrades",
                 description="\n".join(lines),
                 color=discord.Color.gold(),
             )
+            balance = get_wallet(context.author.id, self.database_path)["memilets"]
             embed.set_footer(
-                text="Use mm!upgrade roll|wish|daily|exclusividade|duplicata. Star Wish extra sai em crate."
+                text=f"Saldo: {balance:,} Memilets · Star Wish extra só sai em crate.".replace(",", ".")
             )
             await context.reply(embed=embed, mention_author=False)
             return
 
-        key = UPGRADE_ALIASES.get(upgrade_name.casefold())
+        key = UPGRADE_ALIASES.get(normalize_player_name(upgrade_name))
         if key is None:
             await context.reply(
                 "Upgrade inválido. Consulte `mm!upgrade` para ver as opções.",
@@ -170,7 +196,7 @@ class EconomyCog(commands.Cog):
         await context.reply(
             f"✅ Upgrade **{UPGRADE_LABELS[key]}** comprado: nível "
             f"**{purchase.level}/{UPGRADE_LIMITS[key]}** por "
-            f"**{purchase.cost:,} Memilets**. Saldo: **{balance:,}**.",
+            f"**{purchase.cost:,} Memilets**. Saldo: **{balance:,}**.".replace(",", "."),
             mention_author=False,
         )
 
@@ -191,11 +217,22 @@ class EconomyCog(commands.Cog):
         except InsufficientFunds as error:
             await context.reply(str(error), mention_author=False)
             return
-        await context.reply(
-            f"📦 Você abriu uma crate (500 Memilets). "
-            f"{REWARD_MESSAGES[reward.kind](reward.amount)}",
-            mention_author=False,
+        rarity, color = REWARD_RARITY[reward.kind]
+        balance = get_wallet(context.author.id, self.database_path)["memilets"]
+        embed = discord.Embed(
+            title=f"📦 Crate aberta · {rarity}",
+            description=REWARD_MESSAGES[reward.kind](reward.amount),
+            color=color,
         )
+        embed.add_field(name="Saldo", value=f"{balance:,} Memilets".replace(",", "."))
+        embed.add_field(
+            name="Garantia",
+            value=f"{reward.pity}/{CRATE_PITY_LIMIT} até um prêmio permanente",
+        )
+        embed.set_footer(
+            text=f"Cada crate custa {CRATE_PRICE} Memilets · mm!crates para abrir outra"
+        )
+        await context.reply(embed=embed, mention_author=False)
 
     @commands.command(name="demitir")
     async def dismiss(self, context: commands.Context, *, query: str) -> None:
@@ -208,7 +245,8 @@ class EconomyCog(commands.Cog):
                 limit=1000,
             )
             matches = [
-                player for player in owned if query.casefold() in player["name"].casefold()
+                player for player in owned
+                if normalize_player_name(query) in normalize_player_name(player["name"])
             ]
             if len(matches) != 1:
                 await context.reply(

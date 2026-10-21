@@ -2,6 +2,7 @@ from concurrent.futures import ThreadPoolExecutor
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from src.db import connect, initialize_database
 from src.game import (
@@ -64,12 +65,26 @@ class GameAccountTests(unittest.TestCase):
         register_user(123, "Pessoa", self.database_path)
         self.assertTrue(claim_player(player_id, 123, self.database_path))
 
-        counts = get_collection_left(self.database_path)
+        root = Path(self.temporary_directory.name)
+        for folder, name in (("teams/camisas", "a.png"), ("teams/camisas", "b.png"), ("teams/escudos", "c.png")):
+            path = root / "data" / "assets" / "brasfoot" / folder / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"x")
+        with connect(self.database_path) as connection:
+            connection.execute(
+                "INSERT INTO game_teams (discord_user_id, kit_path) VALUES ('123', ?)",
+                ("data/assets/brasfoot/teams/camisas/a.png",),
+            )
+
+        with patch("src.game.ROOT", root):
+            counts = get_collection_left(self.database_path)
 
         self.assertEqual(counts["jogadores_total"], 1)
         self.assertEqual(counts["jogadores"], 0)
-        self.assertGreater(counts["uniformes"], 0)
-        self.assertGreater(counts["logos"], 0)
+        self.assertEqual((counts["uniformes"], counts["uniformes_total"]), (1, 2))
+        self.assertEqual((counts["logos"], counts["logos_total"]), (1, 1))
+        self.assertEqual(sum(free for _, free, _ in counts["series"]), 0)
+        self.assertEqual(sum(total for _, _, total in counts["series"]), 1)
 
     def test_lists_players_by_team_or_series_in_overall_order(self):
         self.add_player(name="Jogador baixo", club_name="Clube Azul", overall=70)

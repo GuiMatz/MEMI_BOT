@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from datetime import time
@@ -17,8 +18,9 @@ from src.championship import (
     play_championship,
     register_team,
 )
-from src.db import DATABASE_PATH, connect
-from src.simulation import simulate_match
+from src.db import DATABASE_PATH, connect, normalize_player_name
+from src.narration import narrate
+from src.simulation import penalty_events, simulate_match
 from src.teams import TeamError, get_valid_lineup
 
 LOGGER = logging.getLogger("memi.championship")
@@ -68,9 +70,12 @@ class MatchesCog(commands.Cog):
         except TeamError as error:
             await context.reply(str(error), mention_author=False)
             return
-        await context.reply(
-            self._format_match(result),
-            mention_author=False,
+        await narrate(
+            lambda embed: context.reply(embed=embed, mention_author=False),
+            result.home_name,
+            result.away_name,
+            result.events,
+            title="Amistoso",
         )
 
     @commands.group(name="campeonato", invoke_without_command=True)
@@ -81,6 +86,7 @@ class MatchesCog(commands.Cog):
         *,
         value: str | None = None,
     ) -> None:
+        operation = normalize_player_name(operation) if operation else None
         if operation == "inscrever":
             if context.guild is None:
                 await context.reply("O campeonato só funciona em um servidor.", mention_author=False)
@@ -119,10 +125,13 @@ class MatchesCog(commands.Cog):
             except (ChampionshipError, TeamError) as error:
                 await context.reply(str(error), mention_author=False)
                 return
-            messages = self._split_message(self._format_championship(table))
+            messages = self._split_message(
+                self._format_championship(table, include_final=False)
+            )
             await context.reply(messages[0], mention_author=False)
             for message in messages[1:]:
                 await context.send(message)
+            await self._narrate_final(context.send, table)
             return
 
         if operation == "canal":
@@ -257,12 +266,44 @@ class MatchesCog(commands.Cog):
                     )
                     continue
             if isinstance(channel, discord.TextChannel):
-                for message in self._split_message(self._format_championship(result)):
+                for message in self._split_message(
+                    self._format_championship(result, include_final=False)
+                ):
                     await channel.send(message)
+                await self._narrate_final(channel.send, result)
 
     @daily_scheduler.before_loop
     async def before_daily_scheduler(self) -> None:
         await self.bot.wait_until_ready()
+
+    @staticmethod
+    async def _narrate_final(send, table: dict) -> None:
+        """Repete a final lance a lance, com pênaltis se houve empate."""
+        final = next((fixture for fixture in table["fixtures"] if fixture["is_final"]), None)
+        if final is None or not final.get("events_json"):
+            return
+        events = json.loads(final["events_json"])
+        names = {team["discord_user_id"]: team["team_name"] for team in table["entries"]}
+        home = names.get(final["home_user_id"], events.get("home_name", "Mandante"))
+        away = names.get(final["away_user_id"], events.get("away_name", "Visitante"))
+        timeline = list(events.get("events", []))
+        if not timeline:
+            return
+        penalties = None
+        if events.get("penalty_kicks"):
+            timeline += penalty_events(events["penalty_kicks"], home, away)
+            penalties = tuple(events["penalties"])
+        await narrate(
+            lambda embed: send(embed=embed),
+            home,
+            away,
+            timeline,
+            title="FINAL do campeonato",
+            penalties=penalties,
+        )
+        if final.get("winner_user_id"):
+            winner = names.get(final["winner_user_id"], final["winner_user_id"])
+            await send(f"🏆 **{winner}** é o campeão do dia!")
 
     @staticmethod
     def _format_match(result) -> str:
@@ -284,7 +325,7 @@ class MatchesCog(commands.Cog):
         return "\n".join(lines)
 
     @staticmethod
-    def _format_championship(table: dict) -> str:
+    def _format_championship(table: dict, *, include_final: bool = True) -> str:
         names = {
             team["discord_user_id"]: team["team_name"]
             for team in table["entries"]
@@ -316,7 +357,11 @@ class MatchesCog(commands.Cog):
             (fixture for fixture in table["fixtures"] if fixture["is_final"]),
             None,
         )
-        if final and final["home_goals"] is not None:
+        if final and final["home_goals"] is not None and not include_final:
+            home = names.get(final["home_user_id"], final["home_user_id"])
+            away = names.get(final["away_user_id"], final["away_user_id"])
+            lines.extend(["", f"**Final:** {home} × {away} — começa agora! 🔴"])
+        elif final and final["home_goals"] is not None:
             home = names.get(final["home_user_id"], final["home_user_id"])
             away = names.get(final["away_user_id"], final["away_user_id"])
             lines.extend(

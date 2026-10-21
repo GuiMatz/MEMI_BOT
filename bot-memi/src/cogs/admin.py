@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import random
 
 import discord
 from discord.ext import commands
 
-from src.simulation import simulate_match
+from src.db import DATABASE_PATH
+from src.dedupe import find_duplicates, remove_duplicates
+from src.narration import narrate
+from src.simulation import penalty_events, penalty_shootout_kicks, simulate_match
 
 DEFAULT_OWNER_ID = 277898482960826369
+TEST_RATINGS = [80, 75, 90, 77, 60, 50]
 
 
 def _test_lineup(overall: int, prefix: str) -> list[dict]:
@@ -22,10 +27,56 @@ def _test_lineup(overall: int, prefix: str) -> list[dict]:
     ]
 
 
+async def _play_final(send, home: tuple[str, int], away: tuple[str, int], rng, title: str):
+    """Joga uma partida narrada; empate vai para os pênaltis."""
+    home_players = _test_lineup(home[1], home[0])
+    away_players = _test_lineup(away[1], away[0])
+    result = simulate_match(home[0], home_players, away[0], away_players, rng=rng)
+    timeline = list(result.events)
+    penalties = None
+    if result.home_goals == result.away_goals:
+        kicks = penalty_shootout_kicks(home_players, away_players, rng=rng)
+        timeline += penalty_events(kicks, home[0], away[0])
+        penalties = (kicks[-1].home_score, kicks[-1].away_score)
+    await narrate(send, home[0], away[0], timeline, title=title, penalties=penalties)
+    if penalties:
+        return home[0] if penalties[0] > penalties[1] else away[0]
+    return home[0] if result.home_goals > result.away_goals else away[0]
+
+
+class ConfirmDedupeView(discord.ui.View):
+    def __init__(self, owner_id: int, database_path):
+        super().__init__(timeout=120)
+        self.owner_id = owner_id
+        self.database_path = database_path
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return interaction.user.id == self.owner_id
+
+    @discord.ui.button(label="Remover duplicados", style=discord.ButtonStyle.danger)
+    async def confirm(self, interaction: discord.Interaction, button) -> None:
+        report = await asyncio.to_thread(remove_duplicates, self.database_path)
+        await interaction.response.edit_message(
+            content=(
+                f"✅ {report['removed']} duplicados removidos, "
+                f"{report['transferred']} posses/wishes transferidas, "
+                f"{report['skipped']} grupos mantidos por conflito de dono."
+            ),
+            view=None,
+        )
+        self.stop()
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button) -> None:
+        await interaction.response.edit_message(content="Nada foi alterado.", view=None)
+        self.stop()
+
+
 class AdminCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.owner_id = int(os.getenv("MEMI_OWNER_ID", DEFAULT_OWNER_ID))
+        self.database_path = getattr(bot, "database_path", DATABASE_PATH)
 
     async def cog_check(self, context: commands.Context) -> bool:
         if context.author.id != self.owner_id:
@@ -34,62 +85,118 @@ class AdminCog(commands.Cog):
             return False
         return True
 
-    @commands.group(name="admin", invoke_without_command=True)
+    @commands.group(name="admin", invoke_without_command=True, case_insensitive=True)
     async def admin(self, context: commands.Context) -> None:
         embed = discord.Embed(
             title="MEMI Admin",
-            description="Use `mm!admin testeamistoso` ou `mm!admin testecampeonato <n>`.",
+            description=(
+                "`mm!testeamistoso` — partida de teste narrada (empate vai aos pênaltis)\n"
+                "`mm!testecampeonato <n>` — campeonato de teste com final narrada\n"
+                "`mm!admin duplicados` — procura e remove jogadores duplicados"
+            ),
             color=discord.Color.red(),
         )
         await context.reply(embed=embed, mention_author=False)
 
     @admin.command(name="testeamistoso")
     async def test_friendly(self, context: commands.Context) -> None:
-        result = simulate_match(
-            "Teste 80", _test_lineup(80, "80"),
-            "Teste 75", _test_lineup(75, "75"),
-            rng=random.Random(80),
+        winner = await _play_final(
+            lambda embed: context.reply(embed=embed, mention_author=False),
+            ("Teste 80", 80),
+            ("Teste 75", 75),
+            random.SystemRandom(),
+            "Amistoso de teste",
         )
-        embed = discord.Embed(
-            title="Teste de amistoso",
-            description=f"**{result.home_name} {result.home_goals} x {result.away_goals} {result.away_name}**",
-            color=discord.Color.green(),
-        )
-        embed.add_field(name="xG", value=f"{result.home_xg:.2f} x {result.away_xg:.2f}")
-        await context.reply(embed=embed, mention_author=False)
+        await context.send(f"🏆 Vencedor do teste: **{winner}**")
 
     @admin.command(name="testecampeonato")
     async def test_championship(self, context: commands.Context, teams: int = 6) -> None:
         if not 2 <= teams <= 30:
             await context.reply("Informe entre 2 e 30 times.", mention_author=False)
             return
-        ratings = [80, 75, 90, 77, 60, 50]
-        rng = random.Random(teams)
-        scores = {f"Teste {index + 1}": 0 for index in range(teams)}
-        for home_index in range(teams):
-            for away_index in range(home_index + 1, teams):
-                home_rating = ratings[home_index % len(ratings)]
-                away_rating = ratings[away_index % len(ratings)]
+        rng = random.SystemRandom()
+        ratings = {f"Teste {index + 1}": TEST_RATINGS[index % len(TEST_RATINGS)] for index in range(teams)}
+        table = {name: {"pts": 0, "gf": 0, "ga": 0} for name in ratings}
+        names = list(ratings)
+        results = []
+        for home_index, home in enumerate(names):
+            for away in names[home_index + 1:]:
                 result = simulate_match(
-                    f"Teste {home_index + 1}", _test_lineup(home_rating, "H"),
-                    f"Teste {away_index + 1}", _test_lineup(away_rating, "A"),
+                    home, _test_lineup(ratings[home], "H"),
+                    away, _test_lineup(ratings[away], "A"),
                     rng=rng,
                 )
-                if result.home_goals > result.away_goals:
-                    scores[f"Teste {home_index + 1}"] += 3
-                elif result.home_goals < result.away_goals:
-                    scores[f"Teste {away_index + 1}"] += 3
-                else:
-                    scores[f"Teste {home_index + 1}"] += 1
-                    scores[f"Teste {away_index + 1}"] += 1
-        ranking = sorted(scores.items(), key=lambda item: (-item[1], item[0]))
-        description = "\n".join(
-            f"`{index}.` {name} — **{points} pts**"
-            for index, (name, points) in enumerate(ranking, 1)
+                results.append(f"{home} {result.home_goals} × {result.away_goals} {away}")
+                for name, scored, conceded in (
+                    (home, result.home_goals, result.away_goals),
+                    (away, result.away_goals, result.home_goals),
+                ):
+                    table[name]["gf"] += scored
+                    table[name]["ga"] += conceded
+                    table[name]["pts"] += 3 if scored > conceded else (1 if scored == conceded else 0)
+        ranking = sorted(
+            table.items(),
+            key=lambda item: (-item[1]["pts"], -(item[1]["gf"] - item[1]["ga"]), -item[1]["gf"], item[0]),
         )
-        embed = discord.Embed(title=f"Teste de campeonato ({teams} times)",
-                              description=description, color=discord.Color.red())
+        description = "\n".join(
+            f"`{index}.` {name} ({ratings[name]}) — **{row['pts']} pts** · SG {row['gf'] - row['ga']}"
+            for index, (name, row) in enumerate(ranking, 1)
+        )
+        embed = discord.Embed(
+            title=f"Teste de campeonato ({teams} times)",
+            description=description[:4000],
+            color=discord.Color.red(),
+        )
+        if len(results) <= 15:
+            embed.add_field(name="Jogos", value="\n".join(results)[:1024], inline=False)
+        embed.set_footer(text="A final entre os dois primeiros começa agora.")
         await context.reply(embed=embed, mention_author=False)
+        (first, _), (second, _) = ranking[0], ranking[1]
+        winner = await _play_final(
+            lambda final_embed: context.send(embed=final_embed),
+            (first, ratings[first]),
+            (second, ratings[second]),
+            rng,
+            "FINAL de teste",
+        )
+        await context.send(f"🏆 Campeão do teste: **{winner}**")
+
+    @commands.command(name="testeamistoso", hidden=True)
+    async def test_friendly_shortcut(self, context: commands.Context) -> None:
+        await self.test_friendly(context)
+
+    @commands.command(name="testecampeonato", hidden=True)
+    async def test_championship_shortcut(self, context: commands.Context, teams: int = 6) -> None:
+        await self.test_championship(context, teams)
+
+    @admin.command(name="duplicados", aliases=["duplicatas"])
+    async def duplicates(self, context: commands.Context) -> None:
+        groups = await asyncio.to_thread(find_duplicates, self.database_path)
+        if not groups:
+            await context.reply("Nenhum jogador duplicado encontrado. ✅", mention_author=False)
+            return
+        lines = []
+        for group in groups[:15]:
+            keep, *drop = group["players"]
+            lines.append(
+                f"**{keep['name']}** — mantém ID {keep['id']} ({keep['overall']}), remove "
+                + ", ".join(f"ID {player['id']} ({player['overall']})" for player in drop)
+                + (" ⚠️ conflito de dono" if group["conflict"] else "")
+            )
+        embed = discord.Embed(
+            title=f"{len(groups)} grupos de duplicados",
+            description="\n".join(lines)[:4000],
+            color=discord.Color.orange(),
+        )
+        embed.set_footer(
+            text="Mantém o de maior overall; posse, bolas e wishes passam para ele. "
+            "Grupos com donos diferentes não são alterados."
+        )
+        await context.reply(
+            embed=embed,
+            view=ConfirmDedupeView(context.author.id, self.database_path),
+            mention_author=False,
+        )
 
 
 async def setup(bot: commands.Bot) -> None:

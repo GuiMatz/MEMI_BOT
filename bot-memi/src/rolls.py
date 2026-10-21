@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from src.db import DATABASE_PATH, connect
+from src.ratings import GAME_OVERALL_SQL, RARITY_TIERS, effective_overall
 
 ROLLS_PER_CYCLE = 10
 CYCLE_LENGTH = timedelta(minutes=30)
@@ -18,15 +19,8 @@ CLAIM_OFFER_LIFETIME = timedelta(minutes=5)
 CLAIM_COOLDOWN = timedelta(hours=1)
 MAX_DUPLICATE_BALLS = 10
 
-RARITY_BANDS = (
-    (1, 59, 51.85),
-    (60, 69, 30.0),
-    (70, 79, 15.0),
-    (80, 86, 3.0),
-    (87, 89, 0.1),
-    (90, 94, 0.04),
-    (95, 97, 0.008),
-    (98, 100, 0.002),
+RARITY_BANDS = tuple(
+    (lower, upper, weight) for _, _, lower, upper, weight in RARITY_TIERS
 )
 
 
@@ -81,6 +75,9 @@ def _cycle_start(now: datetime) -> datetime:
         cycle_index * int(CYCLE_LENGTH.total_seconds()) + 10 * 60,
         tz=timezone.utc,
     )
+
+
+cycle_start_for = _cycle_start
 
 
 def _create_offer(
@@ -171,22 +168,13 @@ def roll_player(
         if use_roll_token and roll_tokens == 0:
             raise RollLimitReached(reset_at, roll_capacity)
 
-        counts = connection.execute("""
-            SELECT CASE
-                WHEN overall BETWEEN 1 AND 59 THEN 0
-                WHEN overall BETWEEN 60 AND 69 THEN 1
-                WHEN overall BETWEEN 70 AND 79 THEN 2
-                WHEN overall BETWEEN 80 AND 86 THEN 3
-                WHEN overall BETWEEN 87 AND 89 THEN 4
-                WHEN overall BETWEEN 90 AND 94 THEN 5
-                WHEN overall BETWEEN 95 AND 97 THEN 6
-                WHEN overall BETWEEN 98 AND 100 THEN 7
-            END AS band, COUNT(*) AS player_count
-            FROM players
-            WHERE activity_status = 'active'
-              AND phase2_candidate = 0
-              AND overall IS NOT NULL
-              AND game_position IS NOT NULL
+        counts = connection.execute(f"""
+            SELECT rarity_index({GAME_OVERALL_SQL}) AS band, COUNT(*) AS player_count
+            FROM players AS p
+            WHERE p.activity_status = 'active'
+              AND p.phase2_candidate = 0
+              AND p.overall IS NOT NULL
+              AND p.game_position IS NOT NULL
             GROUP BY band
             """).fetchall()
         available_counts = {
@@ -203,7 +191,7 @@ def roll_player(
         )[0]
         lower_bound, upper_bound, _ = RARITY_BANDS[selected_band]
         star_wish_rows = connection.execute(
-            """
+            f"""
             SELECT p.id
             FROM players AS p
             JOIN user_wishes AS w
@@ -212,7 +200,7 @@ def roll_player(
              AND w.wish_type = 'star'
             WHERE p.activity_status = 'active'
               AND p.phase2_candidate = 0
-              AND p.overall BETWEEN ? AND ?
+              AND {GAME_OVERALL_SQL} BETWEEN ? AND ?
               AND p.game_position IS NOT NULL
             """,
             (user_id, lower_bound, upper_bound),
@@ -224,10 +212,10 @@ def roll_player(
         ) / (candidate_count + 0.25 * len(star_wish_ids)):
             selected_player_id = generator.choice(star_wish_ids)
             player_row = connection.execute(
-                """
+                f"""
                 SELECT p.id, p.name, p.display_name, p.club_name, p.nationality,
-                       p.game_position, p.overall, p.overall_source, p.overall_edition,
-                       p.photo_path,
+                       p.game_position, {GAME_OVERALL_SQL} AS overall, p.overall_source,
+                       p.overall_edition, p.photo_path,
                        o.discord_user_id AS owner_id,
                        owner.display_name AS owner_name,
                        COALESCE(b.balls, 0) AS balls
@@ -256,8 +244,8 @@ def roll_player(
             player_row = connection.execute(
                 f"""
             SELECT p.id, p.name, p.display_name, p.club_name, p.nationality,
-                   p.game_position, p.overall, p.overall_source, p.overall_edition,
-                   p.photo_path,
+                   p.game_position, {GAME_OVERALL_SQL} AS overall, p.overall_source,
+                   p.overall_edition, p.photo_path,
                    o.discord_user_id AS owner_id,
                    owner.display_name AS owner_name,
                    COALESCE(b.balls, 0) AS balls
@@ -267,7 +255,7 @@ def roll_player(
             LEFT JOIN player_balls AS b ON b.player_id = p.id
             WHERE p.activity_status = 'active'
               AND p.phase2_candidate = 0
-              AND p.overall BETWEEN ? AND ?
+              AND {GAME_OVERALL_SQL} BETWEEN ? AND ?
               AND p.game_position IS NOT NULL
               {star_exclusion}
             ORDER BY p.id
@@ -302,7 +290,7 @@ def roll_player(
         offer_id = None
         reward_amount = None
         balls = None
-        effective_overall = min(100, int(player["overall"]) + int(player["balls"]))
+        effective = effective_overall(player["overall"], player["balls"])
         if player["owner_id"] == user_id:
             balls = int(player["balls"])
             if balls < MAX_DUPLICATE_BALLS:
@@ -318,11 +306,11 @@ def roll_player(
                     """,
                     (player["id"],),
                 )
-                effective_overall = min(100, int(player["overall"]) + balls)
+                effective = effective_overall(player["overall"], balls)
                 kind = "own_duplicate_ball"
             else:
                 reward_amount = 500
-                effective_overall = min(100, int(player["overall"]) + balls)
+                effective = effective_overall(player["overall"], balls)
                 kind = "own_duplicate_max_balls"
             connection.execute(
                 """
@@ -368,7 +356,7 @@ def roll_player(
             offer_id=offer_id,
             reward_amount=reward_amount,
             balls=balls,
-            effective_overall=effective_overall,
+            effective_overall=effective,
             exclusive_seconds=exclusive_seconds,
         )
 

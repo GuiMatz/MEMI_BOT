@@ -15,6 +15,7 @@ from src.rolls import (
     roll_player,
     claim_roll_offer,
 )
+from src.ratings import rarity_label
 from src.roll_images import roll_image_file
 
 
@@ -122,13 +123,15 @@ class RollsCog(commands.Cog):
             return
 
         player = result.player
+        overall = result.effective_overall or player["overall"]
         embed = discord.Embed(
             title=player["display_name"] or player["name"],
-            color=discord.Color.blurple(),
+            color=discord.Color.gold() if overall >= 90 else discord.Color.blurple(),
         )
-        overall = result.effective_overall or player["overall"]
-        club = player["club_name"] or "Clube não informado"
-        embed.description = f"**{overall}** · {player['game_position']} · {club}"
+        club = player["club_name"] or "Passe livre"
+        embed.description = (
+            f"**{overall}** · {rarity_label(overall)} · {player['game_position']} · {club}"
+        )
         embed.set_footer(
             text=f"Rolls restantes neste ciclo: {result.rolls_remaining}"
         )

@@ -37,7 +37,11 @@ class DiscordBotSetupTests(unittest.IsolatedAsyncioTestCase):
                         "amistoso",
                         "campeonato",
                         "admin",
+                        "tu",
+                        "testeamistoso",
+                        "testecampeonato",
                     },
                 )
+                self.assertIs(bot.get_command("ajudajogo"), bot.get_command("futae"))
             finally:
                 await bot.close()
