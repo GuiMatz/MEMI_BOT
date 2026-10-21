@@ -13,6 +13,8 @@ from src.db import ROOT
 
 PLACEHOLDER_FILENAME = "silhueta.png"
 PLACEHOLDER_PATH = ROOT / "data" / "placeholder.jpg"
+PHOTO_ROOT = ROOT / "data" / "photos"
+IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 
 
 def _safe_photo_path(photo_path: object) -> Path | None:
@@ -20,7 +22,7 @@ def _safe_photo_path(photo_path: object) -> Path | None:
         return None
     candidate = Path(photo_path)
     candidates = (
-        (candidate,) if candidate.is_absolute() else (ROOT / candidate, ROOT / "data" / "photos" / candidate)
+        (candidate,) if candidate.is_absolute() else (ROOT / candidate, PHOTO_ROOT / candidate)
     )
     for candidate in candidates:
         try:
@@ -31,6 +33,25 @@ def _safe_photo_path(photo_path: object) -> Path | None:
         if resolved.is_file():
             return resolved
     return None
+
+
+def find_image(
+    image_path: object,
+    entity: str | None = None,
+    entity_id: object = None,
+) -> Path | None:
+    """Usa o caminho salvo no banco ou, se faltar, o arquivo já baixado pelo worker."""
+    found = _safe_photo_path(image_path)
+    if found is not None or entity is None or entity_id is None:
+        return found
+    for candidate in sorted((PHOTO_ROOT / entity).glob(f"{entity_id}.*")):
+        if candidate.is_file() and candidate.suffix.casefold() in IMAGE_SUFFIXES:
+            return candidate
+    return None
+
+
+def image_file(path: Path, stem: str) -> discord.File:
+    return discord.File(path, filename=f"{stem}{path.suffix.lower()}")
 
 
 def _placeholder_file() -> discord.File:
@@ -49,7 +70,7 @@ def _placeholder_file() -> discord.File:
 
 def roll_image_file(player: dict[str, Any]) -> discord.File:
     """Retorna a foto local do jogador ou uma silhueta de fallback."""
-    photo_path = _safe_photo_path(player.get("photo_path"))
+    photo_path = find_image(player.get("photo_path"), "players", player.get("id"))
     if photo_path is not None:
-        return discord.File(photo_path, filename=f"jogador{photo_path.suffix.lower()}")
+        return image_file(photo_path, "jogador")
     return _placeholder_file()

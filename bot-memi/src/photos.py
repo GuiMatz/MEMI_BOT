@@ -252,6 +252,43 @@ class PhotoCollector:
         return result
 
 
+def sync_existing_photos(
+    database_path: str | Path = DATABASE_PATH,
+    photo_root: str | Path = PHOTO_ROOT,
+) -> int:
+    """Liga ao banco as imagens já baixadas cujo caminho ainda não foi gravado."""
+    root = Path(photo_root)
+    updated = 0
+    with connect(database_path) as connection:
+        for entity, config in ENTITIES.items():
+            folder = root / entity
+            if not folder.is_dir():
+                continue
+            files: dict[int, str] = {}
+            for path in sorted(folder.iterdir()):
+                if (
+                    path.is_file()
+                    and path.stem.isdigit()
+                    and path.suffix.casefold() in IMAGE_EXTENSIONS.values()
+                ):
+                    files.setdefault(int(path.stem), path.relative_to(root).as_posix())
+            if not files:
+                continue
+            missing = [
+                int(row["id"])
+                for row in connection.execute(
+                    f"SELECT id FROM {entity} WHERE {config['path']} IS NULL"
+                )
+                if int(row["id"]) in files
+            ]
+            connection.executemany(
+                f"UPDATE {entity} SET {config['path']} = ? WHERE id = ?",
+                [(files[entity_id], entity_id) for entity_id in missing],
+            )
+            updated += len(missing)
+    return updated
+
+
 def collect_photos(
     database_path: str | Path = DATABASE_PATH,
     photo_root: str | Path = PHOTO_ROOT,

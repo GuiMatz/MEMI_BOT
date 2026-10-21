@@ -10,6 +10,7 @@ from typing import Any
 
 from src.db import DATABASE_PATH, ROOT, connect
 from src.game import register_user
+from src.ratings import EFFECTIVE_OVERALL_SQL, GAME_OVERALL_SQL
 
 FORMATIONS: dict[str, tuple[str, ...]] = {
     "4-4-2": ("GOL", "ZAG", "ZAG", "LD", "LE", "MC", "MC", "MEI", "MEI", "CA", "CA"),
@@ -151,7 +152,10 @@ def set_formation(
     discord_user_id: int | str,
     formation: str,
     database_path: str | Path = DATABASE_PATH,
-) -> None:
+    *,
+    drop_incompatible: bool = False,
+) -> int:
+    """Troca a formação; devolve quantos titulares saíram por falta de vaga."""
     normalized = formation.strip()
     if normalized not in FORMATIONS:
         raise TeamError(
@@ -176,7 +180,9 @@ def set_formation(
             {row["position"]: int(row["amount"]) for row in lineup}
         )
         allowed_counts = Counter(FORMATIONS[normalized])
-        if any(current_counts[position] > allowed_counts[position] for position in current_counts):
+        if not drop_incompatible and any(
+            current_counts[position] > allowed_counts[position] for position in current_counts
+        ):
             raise TeamError(
                 "A formação nova não comporta sua escalação atual. "
                 "Remova os jogadores incompatíveis e tente novamente."
@@ -199,7 +205,11 @@ def set_formation(
             "DELETE FROM team_lineups WHERE discord_user_id = ?",
             (user_id,),
         )
+        dropped = 0
         for player in players:
+            if not available_slots.get(player["position"]):
+                dropped += 1
+                continue
             slot = available_slots[player["position"]].pop(0)
             connection.execute(
                 """
@@ -209,6 +219,7 @@ def set_formation(
                 """,
                 (user_id, slot, player["player_id"], player["position"]),
             )
+        return dropped
 
 
 def set_team_style(
@@ -360,10 +371,10 @@ def get_lineup(
 ) -> list[dict[str, Any]]:
     with connect(database_path) as connection:
         rows = connection.execute(
-            """
+            f"""
             SELECT l.slot_order, l.position, p.id, p.name, p.display_name,
-                   p.overall, p.club_name,
-                   MIN(99, p.overall + COALESCE(b.balls, 0)) AS effective_overall
+                   {GAME_OVERALL_SQL} AS overall, p.club_name, p.photo_path,
+                   {EFFECTIVE_OVERALL_SQL} AS effective_overall
             FROM team_lineups AS l
             JOIN players AS p ON p.id = l.player_id
             LEFT JOIN player_balls AS b ON b.player_id = p.id
@@ -491,3 +502,118 @@ def formation_slots(formation: str) -> tuple[str, ...]:
         return FORMATIONS[formation]
     except KeyError as error:
         raise TeamError(f"Formação desconhecida: {formation}") from error
+
+
+def set_lineup_slot(
+    discord_user_id: int | str,
+    slot_order: int,
+    player_id: int,
+    database_path: str | Path = DATABASE_PATH,
+) -> dict[str, Any]:
+    """Coloca o jogador numa vaga; quem estava nela sai e ele deixa a vaga antiga."""
+    user_id = str(discord_user_id)
+    with connect(database_path) as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        team = connection.execute(
+            "SELECT formation FROM team_tactics WHERE discord_user_id = ?",
+            (user_id,),
+        ).fetchone()
+        if team is None:
+            raise TeamError("Configure seu time primeiro com `mm!time`.")
+        positions = FORMATIONS[team["formation"]]
+        if not 1 <= slot_order <= len(positions):
+            raise TeamError("Vaga inválida para essa formação.")
+        required = positions[slot_order - 1]
+        player = connection.execute(
+            """
+            SELECT p.id, COALESCE(NULLIF(p.display_name, ''), p.name) AS name,
+                   p.game_position
+            FROM player_ownership AS o
+            JOIN players AS p ON p.id = o.player_id
+            WHERE o.discord_user_id = ? AND p.id = ?
+            """,
+            (user_id, player_id),
+        ).fetchone()
+        if player is None:
+            raise TeamError("Esse jogador não pertence ao seu elenco.")
+        if player["game_position"] != required:
+            raise TeamError(
+                f"{player['name']} joga de {player['game_position']}; essa vaga pede {required}."
+            )
+        connection.execute(
+            "DELETE FROM team_lineups WHERE discord_user_id = ? AND (slot_order = ? OR player_id = ?)",
+            (user_id, slot_order, player_id),
+        )
+        connection.execute(
+            """
+            INSERT INTO team_lineups (discord_user_id, slot_order, player_id, position)
+            VALUES (?, ?, ?, ?)
+            """,
+            (user_id, slot_order, player_id, required),
+        )
+        return dict(player)
+
+
+def clear_lineup_slot(
+    discord_user_id: int | str,
+    slot_order: int,
+    database_path: str | Path = DATABASE_PATH,
+) -> bool:
+    with connect(database_path) as connection:
+        cursor = connection.execute(
+            "DELETE FROM team_lineups WHERE discord_user_id = ? AND slot_order = ?",
+            (str(discord_user_id), slot_order),
+        )
+    return cursor.rowcount > 0
+
+
+def auto_fill_lineup(
+    discord_user_id: int | str,
+    database_path: str | Path = DATABASE_PATH,
+) -> int:
+    """Preenche as vagas vazias com os maiores overalls de cada posição."""
+    user_id = str(discord_user_id)
+    with connect(database_path) as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        team = connection.execute(
+            "SELECT formation FROM team_tactics WHERE discord_user_id = ?",
+            (user_id,),
+        ).fetchone()
+        if team is None:
+            raise TeamError("Configure seu time primeiro com `mm!time`.")
+        lineup = {
+            int(row["slot_order"]): int(row["player_id"])
+            for row in connection.execute(
+                "SELECT slot_order, player_id FROM team_lineups WHERE discord_user_id = ?",
+                (user_id,),
+            )
+        }
+        used = set(lineup.values())
+        candidates: dict[str, list[int]] = {}
+        for row in connection.execute(
+            f"""
+            SELECT p.id, p.game_position
+            FROM player_ownership AS o
+            JOIN players AS p ON p.id = o.player_id
+            LEFT JOIN player_balls AS b ON b.player_id = p.id
+            WHERE o.discord_user_id = ? AND p.game_position IS NOT NULL
+              AND p.overall IS NOT NULL
+            ORDER BY {EFFECTIVE_OVERALL_SQL} DESC, p.id
+            """,
+            (user_id,),
+        ):
+            if int(row["id"]) not in used:
+                candidates.setdefault(row["game_position"], []).append(int(row["id"]))
+        filled = 0
+        for slot, position in enumerate(FORMATIONS[team["formation"]], start=1):
+            if slot in lineup or not candidates.get(position):
+                continue
+            connection.execute(
+                """
+                INSERT INTO team_lineups (discord_user_id, slot_order, player_id, position)
+                VALUES (?, ?, ?, ?)
+                """,
+                (user_id, slot, candidates[position].pop(0), position),
+            )
+            filled += 1
+        return filled

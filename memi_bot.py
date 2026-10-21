@@ -3683,32 +3683,42 @@ AJUDA = [
 
 AJUDA_JOGO = [
     (
-        "🎲 Rolls e derivados",
+        "🎲 FUT.AE · Coleção",
         [
-            ("mm!roll", "rola um jogador; use o botão para reivindicar ou resgatar moedas"),
+            ("mm!roll", "rola um jogador; o botão reivindica ou resgata Memilets"),
+            ("mm!tu", "mostra rolls restantes, claim e daily com horário"),
+            ("mm!scout <nome>", "ficha com foto de jogador, técnico, estádio, clube ou item"),
+            ("mm!top [categoria]", "catálogo: jogadores, cartola, técnicos, uniformes, mascotes…"),
+            ("mm!left", "quanto ainda está livre em cada série (livres/total)"),
+            (
+                "mm!elenco [@pessoa] [filtro]",
+                "elenco paginado; filtros: posição, overall, clube ou liga",
+            ),
+            ("mm!wish / mm!starwish <jogador>", "adiciona/remove wish; sem jogador, lista"),
+            ("mm!wishlist / mm!wl", "mostra todas as suas wishes"),
+        ],
+    ),
+    (
+        "🪙 FUT.AE · Economia",
+        [
             ("mm!daily", "resgata Memilets uma vez por dia"),
-            ("mm!upgrade", "consulta ou compra upgrades de rolls, wishes, daily e exclusividade"),
-            ("mm!crates", "abre uma crate por 500 Memilets"),
-            ("mm!wish <jogador>", "adiciona/remove wish; sem jogador, lista suas wishes"),
-            ("mm!starwish <jogador>", "adiciona/remove Star Wish; sem jogador, lista"),
-            ("mm!im <nome>", "procura um jogador pelo nome"),
-            ("mm!top [quantidade]", "mostra os maiores overalls elegíveis"),
-            ("mm!elenco [@pessoa] [filtro]", "consulta elenco; filtros: posição, overall, clube ou liga"),
-            ("mm!carteira", "consulta seu saldo de Memilets"),
-            ("mm!demitir <id>", "libera jogador e recebe reembolso"),
-            ("mm!troca @pessoa <seu_id> <id_dela> [moedas]", "propõe troca de jogadores e Memilets"),
-            ("mm!time [campo valor]", "consulta ou personaliza seu time"),
-            ("mm!escalar <id>", "escala ou remove jogador da formação"),
-            ("mm!tatica <operação> <valor>", "configura formação, estilo e cobradores"),
-            ("mm!amistoso @pessoa", "simula partida entre dois times completos"),
+            ("mm!carteira", "saldo, rolls, wishes, timers e garantia das crates"),
+            ("mm!upgrade [tipo]", "rolls, wishes, daily, exclusividade e duplicata"),
+            ("mm!crates", "abre uma crate por 500 Memilets (sempre volta pelo menos 350)"),
+            ("mm!demitir <jogador>", "libera jogador e recebe reembolso"),
+            ("mm!troca @pessoa <seu_id> <id_dela> [moedas]", "propõe troca de jogadores"),
+        ],
+    ),
+    (
+        "⚽ FUT.AE · Time e partidas",
+        [
+            ("mm!escalar", "monta o time clicando na posição e escolhendo o jogador"),
+            ("mm!time [campo valor]", "perfil do time com imagem da formação"),
+            ("mm!tatica <operação> <valor>", "formação, estilo e cobradores"),
+            ("mm!amistoso @pessoa", "partida narrada minuto a minuto"),
             ("mm!campeonato inscrever", "inscreve seu time no campeonato diário"),
-            ("mm!campeonato", "consulta classificação e resultados"),
-            ("mm!campeonato iniciar", "inicia o campeonato (requer Gerenciar servidor)"),
-            ("mm!campeonato canal [#canal]", "configura o canal dos avisos do campeonato"),
-            ("mm!campeonato ativar", "ativa o agendamento diário (requer configuração)"),
-            ("mm!left", "mostra jogadores, uniformes e logos ainda disponíveis"),
-            ("mm!ima <time ou série>", "lista jogadores do time ou série por overall"),
-            ("mm!ajudajogo", "mostra a ajuda do jogo"),
+            ("mm!campeonato iniciar", "joga o campeonato; final empatada vai para os pênaltis"),
+            ("mm!futae", "mostra só os comandos do FUT.AE"),
         ],
     ),
 ]
@@ -3852,16 +3862,33 @@ class MeMiBot(commands.Bot):
     async def setup_hook(self):
         for cog in COGS:
             await self.add_cog(cog(self))
+        from src.cogs.admin import AdminCog
         from src.cogs.economy import EconomyCog
         from src.cogs.game import GameCog
         from src.cogs.matches import MatchesCog
         from src.cogs.rolls import RollsCog
         from src.cogs.team import TeamCog
         from src.cogs.trades import TradesCog
+        from src.photos import sync_existing_photos
+
         initialize_database(GAME_DATABASE_PATH)
         self.database_path = GAME_DATABASE_PATH
-        for cog in (GameCog, EconomyCog, RollsCog, TradesCog, TeamCog, MatchesCog):
+        for cog in (GameCog, EconomyCog, RollsCog, TradesCog, TeamCog, MatchesCog, AdminCog):
             await self.add_cog(cog(self))
+        try:
+            ligadas = await asyncio.to_thread(sync_existing_photos, GAME_DATABASE_PATH)
+        except Exception:
+            logging.exception("Não consegui ligar as fotos já baixadas do FUT.AE.")
+        else:
+            if ligadas:
+                logging.info("FUT.AE: %s fotos já baixadas ligadas ao banco.", ligadas)
+
+    async def get_context(self, origin, *, cls=commands.Context):
+        """Aceita o comando com ou sem acento (mm!tática = mm!tatica)."""
+        ctx = await super().get_context(origin, cls=cls)
+        if ctx.command is None and ctx.invoked_with:
+            ctx.command = self.all_commands.get(sem_acento(ctx.invoked_with))
+        return ctx
 
     async def on_ready(self):
         await self.change_presence(activity=discord.Game(name=f"{PREFIX}help"))
@@ -3918,6 +3945,7 @@ def criar_bot(membros=MEMBERS_INTENT):
     return MeMiBot(
         command_prefix=prefixo,
         case_insensitive=True,
+        strip_after_prefix=True,
         intents=criar_intents(membros),
         help_command=None,
         allowed_mentions=discord.AllowedMentions.none(),

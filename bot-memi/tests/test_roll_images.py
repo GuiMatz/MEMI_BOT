@@ -13,10 +13,11 @@ class RollImageTests(unittest.TestCase):
         image_file = roll_image_file({})
 
         try:
-            self.assertEqual(image_file.filename, "silhueta.jpg")
+            expected = ("silhueta.jpg", "JPEG") if PLACEHOLDER_PATH.is_file() else ("silhueta.png", "PNG")
+            self.assertEqual(image_file.filename, expected[0])
             image_file.fp.seek(0)
             with Image.open(image_file.fp) as image:
-                self.assertEqual(image.format, "JPEG")
+                self.assertEqual(image.format, expected[1])
         finally:
             image_file.close()
 
@@ -40,6 +41,19 @@ class RollImageTests(unittest.TestCase):
         Image.new("RGB", (12, 12), "blue").save(photo_path)
         try:
             image_file = roll_image_file({"photo_path": "players/test-roll.png"})
+            self.assertEqual(image_file.filename, "jogador.png")
+            image_file.close()
+        finally:
+            photo_path.unlink(missing_ok=True)
+
+
+class FindImageTests(unittest.TestCase):
+    def test_downloaded_photo_is_used_even_without_database_path(self):
+        photo_path = ROOT / "data" / "photos" / "players" / "987654321.png"
+        photo_path.parent.mkdir(parents=True, exist_ok=True)
+        Image.new("RGB", (12, 12), "red").save(photo_path)
+        try:
+            image_file = roll_image_file({"id": 987654321, "photo_path": None})
             self.assertEqual(image_file.filename, "jogador.png")
             image_file.close()
         finally:

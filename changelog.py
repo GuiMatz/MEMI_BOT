@@ -9,6 +9,45 @@ SECOES = ("novidades", "melhorias", "correcoes", "admin")
 
 VERSOES = [
     {
+        "versao": "3.1.0",
+        "data": "20/10/2026",
+        "titulo": "FUT.AE — escalação clicável, jogos narrados e overall novo",
+        "novidades": [
+            "`mm!escalar` abre um montador: escolha a formação, clique na posição e escolha o "
+            "jogador (só os daquela posição, por overall). Tem também **Escalar automático**.",
+            "`mm!time` mostra a imagem da formação escolhida, com fotos, overall e vagas livres.",
+            "`mm!amistoso` agora é narrado minuto a minuto: gols, defesas, cartões, intervalo, "
+            "acréscimos e segundo tempo. Final de campeonato empatada vai para os pênaltis.",
+            "`mm!tu` mostra rolls restantes, claim e daily com horário, como no Mudae.",
+            "`mm!scout` mostra a foto do jogador e também procura técnicos, estádios, clubes, "
+            "ligas, uniformes, emblemas, logos e mascotes.",
+            "`mm!left` mostra quantos jogadores de cada série ainda estão livres (livres/total).",
+        ],
+        "melhorias": [
+            "Overall reformulado: notas baixas foram valorizadas, jogadores do Cartola são 90 "
+            "e Maria Sofia é a única carta 100 (com raridade própria no roll).",
+            "Crates melhores: Memilets nunca voltam menos de 350, jackpot de até 5.000, reset "
+            "de claim, mais rolls extras e garantia de prêmio permanente a cada 50.",
+            "`mm!carteira` virou embed com saldo, rolls, wishes, timers e garantia das crates.",
+            "Comandos aceitam qualquer maiúscula no prefixo (MM!, Mm!, mM!), espaço depois "
+            "dele e acentos (`mm!tática`, `mm!escalação`).",
+            "Fotos já baixadas aparecem no roll, no scout e na escalação mesmo sem estarem "
+            "ligadas ao banco.",
+            "`mm!top cartola`, `mascotes`, `uniformes` e `emblemas` mostram nomes padronizados "
+            "(só o time, ou Time (Mascote)).",
+            "`mm!elenco` e `mm!top` paginados e ordenados por overall.",
+        ],
+        "correcoes": [
+            "O bot voltava a falhar ao iniciar por causa de um `mm!help` duplicado.",
+            "`mm!upgrade` dava erro ao listar o bônus de duplicata.",
+        ],
+        "admin": [
+            "`mm!testeamistoso` e `mm!testecampeonato` funcionam direto, com narração e pênaltis.",
+            "`mm!admin duplicados` encontra jogadores repetidos e remove o de menor overall, "
+            "levando posse, bolas e wishes para o que fica. Também via `python -m src.dedupe`.",
+        ],
+    },
+    {
         "versao": "3.0.0",
         "data": "19/10/2026",
         "titulo": "FUT.AE — coleção e simulação de futebol",

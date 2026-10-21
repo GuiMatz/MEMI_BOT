@@ -94,7 +94,8 @@ class RollTests(unittest.TestCase):
 
         self.assertEqual(result.kind, "own_duplicate_ball")
         self.assertEqual(result.balls, 1)
-        self.assertEqual(result.effective_overall, 81)
+        # Overall bruto 80 vira 84 na escala do jogo; a bola soma +1.
+        self.assertEqual(result.effective_overall, 85)
         self.assertEqual(result.reward_amount, 100)
         self.assertEqual(get_wallet(100, self.database_path)["memilets"], 100)
 

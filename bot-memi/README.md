@@ -108,6 +108,32 @@ testar a simulação sem alterar times reais.
 O FUT.AE é um módulo do MeMi BOT, não um bot separado. O menu geral continua em
 `mm!ajuda`; `mm!fut.ae` e `mm!futae` mostram apenas os comandos do jogo.
 
+### 3.1 — escalação clicável, jogos narrados e overall novo
+
+- **Overall do jogo** (`src/ratings.py`): o banco guarda a nota da fonte e o jogo usa
+  uma escala valorizada, `nota + (90 − nota) × 0,4` abaixo de 90 (45 → 63, 60 → 72,
+  75 → 81). Jogadores Cartola valem 90 e Maria Sofia é a única carta 100; ninguém mais
+  passa de 99, nem com bolas. A conta é feita por funções SQLite registradas em
+  `connect()`, então reimportações não precisam de migração.
+- **Séries de raridade**: Base, Comum, Incomum, Raro, Épico, Lendário, Ícone,
+  Galáctico e Única (só a carta 100, com peso próprio no roll). `mm!left` mostra
+  livres/total por série, além de Cartola, uniformes e logos.
+- **Escalação**: `mm!escalar` sem argumentos abre um montador com menu de formação,
+  menu de posição e menu de jogador filtrado pela posição e ordenado por overall, mais
+  o botão **Escalar automático**. A imagem é desenhada por formação, com fotos.
+- **Partidas**: o motor simula minuto a minuto (chances, gols, defesas, trave,
+  cartões, intervalo, acréscimos) e a narração edita o embed lance a lance. Ajuste a
+  velocidade com `MEMI_NARRATION_DELAY` (segundos, padrão 1,6). Final empatada vai para
+  os pênaltis, cobrança a cobrança.
+- **Economia**: crates com retorno mínimo de 350 Memilets, jackpot, reset de claim e
+  garantia de prêmio permanente a cada 50; `mm!carteira` em embed; novo `mm!tu`.
+- **Scout**: foto do jogador e busca em técnicos, estádios, clubes, ligas, uniformes,
+  emblemas, logos e mascotes. Fotos já baixadas em `data/photos/` são ligadas ao banco
+  na inicialização.
+- **Duplicados**: `python -m src.dedupe` lista e `--apply` remove; o proprietário também
+  pode usar `mm!admin duplicados`. Mantém o de maior overall e transfere posse, bolas,
+  wishes e fontes. Grupos com donos diferentes não são alterados.
+
 ### Coleção e rolagens
 
 - Banco local com jogadores, ligas, clubes, técnicos, estádios e fontes de dados.

@@ -932,6 +932,32 @@ class IntegracaoTests(CogBase):
                 ):
                     self.assertIsNotNone(candidato.get_command(nome), nome)
 
+    async def test_31b_comandos_aceitam_maiusculas_espaco_e_acento(self):
+        candidato = m.criar_bot(False)
+        with (
+            patch.object(m, "ARQUIVO_BANCO", Path(self.temp.name) / "acento.db"),
+            patch.object(m, "GAME_DATABASE_PATH", Path(self.temp.name) / "acento.sqlite"),
+        ):
+            async with candidato:
+                await candidato.setup_hook()
+                candidato._connection.user = NS(id=1)
+                for texto, esperado in (
+                    ("mm!Tática", "tatica"),
+                    ("MM!ROLL", "roll"),
+                    ("mM! escalar", "escalar"),
+                    ("Mm!escalação", "escalar"),
+                    ("mm!testeamistoso", "testeamistoso"),
+                ):
+                    mensagem = NS(
+                        content=texto,
+                        author=NS(id=5, bot=False),
+                        guild=None,
+                        channel=None,
+                        _state=candidato._connection,
+                    )
+                    ctx = await candidato.get_context(mensagem)
+                    self.assertEqual(ctx.command.qualified_name, esperado, texto)
+
     async def test_32_genero_mostra_so_o_ranking_de_generos(self):
         self.b.inserir([(sid(), 1, "Faixa", "Artista", "jockie")])
         self.b.salvar_cache_deezer(m.chave_deezer("Faixa Artista"), "", "Música Brasileira", 1)
@@ -1600,8 +1626,9 @@ class VisualTests(CogBase):
         self.assertIn("**🏆 Rankings**", view.paginas[0].description)
         self.assertIn("**ℹ️ Sobre o bot**", view.paginas[0].description)
         self.assertNotIn("mm!roll", view.paginas[0].description)
-        self.assertEqual(view.paginas[1].description.count("**"), 2)
-        self.assertIn("**🎲 Rolls e derivados**", view.paginas[1].description)
+        self.assertEqual(view.paginas[1].description.count("**"), 6)
+        self.assertIn("**🎲 FUT.AE · Coleção**", view.paginas[1].description)
+        self.assertIn("**⚽ FUT.AE · Time e partidas**", view.paginas[1].description)
         self.assertIn("`mm!roll`", view.paginas[1].description)
         self.assertNotIn("mm!mudae", view.paginas[1].description)
         self.assertNotIn("mm!perfil", view.paginas[1].description)

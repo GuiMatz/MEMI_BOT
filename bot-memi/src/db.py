@@ -10,6 +10,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from collections.abc import Iterator
 
+from src.ratings import register_sql_functions
+
 ROOT = Path(__file__).resolve().parents[1]
 DATABASE_PATH = ROOT / "data" / "memi.sqlite"
 GAME_POSITIONS = ("GOL", "ZAG", "LD", "LE", "MC", "MEI", "PE", "PD", "CA")
@@ -360,6 +362,7 @@ def connect(
     connection = sqlite3.connect(path, timeout=30)
     connection.row_factory = sqlite3.Row
     connection.create_function("normalize_player_name", 1, normalize_player_name)
+    register_sql_functions(connection)
     connection.execute("PRAGMA busy_timeout = 30000")
     connection.execute("PRAGMA foreign_keys = ON")
     try:

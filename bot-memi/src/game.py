@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from typing import Any
 
 from src.db import DATABASE_PATH, GAME_POSITIONS, ROOT, connect, normalize_player_name
+from src.ratings import EFFECTIVE_OVERALL_SQL, GAME_OVERALL_SQL, RARITY_TIERS
 
 CATALOG_ASSET_DIRECTORIES = {
     "uniformes": (
@@ -18,38 +20,59 @@ CATALOG_ASSET_DIRECTORIES = {
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 
 
-def get_collection_left(database_path=DATABASE_PATH) -> dict[str, int]:
-    """Retorna jogadores não reivindicados e assets disponíveis no catálogo local."""
+def get_collection_left(database_path=DATABASE_PATH) -> dict[str, Any]:
+    """Conta o que ainda está livre, no total e por série de raridade."""
     with connect(database_path) as connection:
-        row = connection.execute(
-            """
-            SELECT COUNT(*) AS total,
-                   COALESCE(SUM(
-                       NOT EXISTS (
-                           SELECT 1 FROM player_ownership AS o
-                           WHERE o.player_id = p.id
-                       )
-                   ), 0) AS remaining
+        rows = connection.execute(
+            f"""
+            SELECT rarity_index({GAME_OVERALL_SQL}) AS tier,
+                   COALESCE(p.overall_source, '') = 'Cartola' AS cartola,
+                   COUNT(*) AS total,
+                   SUM(o.player_id IS NULL) AS remaining
             FROM players AS p
+            LEFT JOIN player_ownership AS o ON o.player_id = p.id
             WHERE p.activity_status = 'active'
               AND p.phase2_candidate = 0
               AND p.overall IS NOT NULL
               AND p.game_position IS NOT NULL
+            GROUP BY tier, cartola
             """
-        ).fetchone()
+        ).fetchall()
+        used_paths = {
+            str(path)
+            for row in connection.execute(
+                "SELECT logo_path, kit_path FROM game_teams"
+            )
+            for path in (row["logo_path"], row["kit_path"])
+            if path
+        }
 
-    counts = {
-        "jogadores": int(row["remaining"]),
-        "jogadores_total": int(row["total"]),
+    tiers = {index: [0, 0] for index in range(len(RARITY_TIERS))}
+    cartola = [0, 0]
+    for row in rows:
+        bucket = cartola if row["cartola"] else tiers[int(row["tier"])]
+        bucket[0] += int(row["remaining"] or 0)
+        bucket[1] += int(row["total"])
+    counts: dict[str, Any] = {
+        "jogadores": sum(free for free, _ in tiers.values()) + cartola[0],
+        "jogadores_total": sum(total for _, total in tiers.values()) + cartola[1],
+        "series": [
+            (f"{RARITY_TIERS[index][1]} {RARITY_TIERS[index][0]}", free, total)
+            for index, (free, total) in tiers.items()
+            if total
+        ],
+        "cartola": tuple(cartola),
     }
     asset_root = ROOT / "data" / "assets" / "brasfoot"
     for label, directories in CATALOG_ASSET_DIRECTORIES.items():
-        counts[label] = sum(
-            1
+        files = [
+            path.relative_to(ROOT).as_posix()
             for directory in directories
             for path in (asset_root / directory).rglob("*")
             if path.is_file() and path.suffix.casefold() in IMAGE_SUFFIXES
-        )
+        ]
+        counts[label] = sum(1 for path in files if path not in used_paths)
+        counts[f"{label}_total"] = len(files)
     return counts
 
 
@@ -136,7 +159,7 @@ def list_owned_players(
     if position is not None:
         clauses.append("p.game_position = ?")
         parameters.append(position)
-    effective_overall = "MIN(100, p.overall + COALESCE(b.balls, 0))"
+    effective_overall = EFFECTIVE_OVERALL_SQL
     if min_overall is not None:
         clauses.append(f"{effective_overall} >= ?")
         parameters.append(min_overall)
@@ -162,7 +185,7 @@ def list_owned_players(
         rows = connection.execute(
             f"""
             SELECT p.id, COALESCE(NULLIF(p.display_name, ''), p.name) AS name,
-                   p.club_name, p.game_position,
+                   p.club_name, p.game_position, p.photo_path,
                    {effective_overall} AS overall,
                    COALESCE(b.balls, 0) AS balls, o.acquired_at
             FROM player_ownership AS o
@@ -188,28 +211,33 @@ def search_players(
         return []
     if limit < 1:
         raise ValueError("limit deve ser maior que zero.")
+    columns = f"""
+        p.id, p.name, p.display_name, p.club_name, p.nationality,
+        p.game_position, {GAME_OVERALL_SQL} AS overall, p.overall_source,
+        p.overall_edition, p.photo_path, COALESCE(b.balls, 0) AS balls,
+        o.discord_user_id AS owner_id, owner.display_name AS owner_name
+    """
+    joins = """
+        FROM players AS p
+        LEFT JOIN player_balls AS b ON b.player_id = p.id
+        LEFT JOIN player_ownership AS o ON o.player_id = p.id
+        LEFT JOIN game_users AS owner ON owner.discord_user_id = o.discord_user_id
+    """
     with connect(database_path) as connection:
         if query.strip().isdigit():
             rows = connection.execute(
-                """
-                SELECT id, name, display_name, club_name, nationality,
-                       game_position, overall, overall_source, overall_edition
-                FROM players
-                WHERE id = ?
-                """,
+                f"SELECT {columns} {joins} WHERE p.id = ?",
                 (int(query.strip()),),
             ).fetchall()
             return [dict(row) for row in rows]
         rows = connection.execute(
-            """
-            SELECT id, name, display_name, club_name, nationality,
-                   game_position, overall, overall_source, overall_edition
-            FROM players
-            WHERE normalize_player_name(name) LIKE ?
-               OR normalize_player_name(display_name) LIKE ?
+            f"""
+            SELECT {columns} {joins}
+            WHERE normalize_player_name(p.name) LIKE ?
+               OR normalize_player_name(p.display_name) LIKE ?
             ORDER BY
-                CASE WHEN normalize_player_name(name) = ? THEN 0 ELSE 1 END,
-                overall DESC, name, id
+                CASE WHEN normalize_player_name(p.name) = ? THEN 0 ELSE 1 END,
+                overall DESC, p.name, p.id
             LIMIT ?
             """,
             (
@@ -237,10 +265,10 @@ def list_players_by_team_or_series(
     pattern = f"%{normalized_query}%"
     with connect(database_path) as connection:
         rows = connection.execute(
-            """
+            f"""
             SELECT DISTINCT p.id,
                    COALESCE(NULLIF(p.display_name, ''), p.name) AS name,
-                   p.club_name, p.game_position, p.overall,
+                   p.club_name, p.game_position, {GAME_OVERALL_SQL} AS overall,
                    COALESCE(ps.source_league_name, '') AS league_name
             FROM players AS p
             LEFT JOIN player_sources AS ps ON ps.player_id = p.id
@@ -251,7 +279,7 @@ def list_players_by_team_or_series(
                   normalize_player_name(p.club_name) LIKE ?
                   OR normalize_player_name(ps.source_league_name) LIKE ?
               )
-            ORDER BY p.overall DESC, name COLLATE NOCASE, p.id
+            ORDER BY overall DESC, name COLLATE NOCASE, p.id
             LIMIT ?
             """,
             (pattern, pattern, limit),
@@ -268,13 +296,13 @@ def get_top_players(
         raise ValueError("limit deve ser maior que zero.")
     with connect(database_path) as connection:
         rows = connection.execute(
-            """
-            SELECT id, COALESCE(NULLIF(display_name, ''), name) AS name,
-                   club_name, game_position,
-                   MIN(100, overall + COALESCE(b.balls, 0)) AS overall
+            f"""
+            SELECT p.id, COALESCE(NULLIF(p.display_name, ''), p.name) AS name,
+                   p.club_name, p.game_position,
+                   {EFFECTIVE_OVERALL_SQL} AS overall
             FROM players AS p
             LEFT JOIN player_balls AS b ON b.player_id = p.id
-            WHERE activity_status = 'active'
+            WHERE p.activity_status = 'active'
               AND p.phase2_candidate = 0
               AND p.overall IS NOT NULL
               AND p.game_position IS NOT NULL
@@ -284,6 +312,84 @@ def get_top_players(
             (limit,),
         ).fetchall()
     return [dict(row) for row in rows]
+
+
+# Palavras que só descrevem o arquivo e não fazem parte do nome exibido.
+_ASSET_NOISE = {
+    "logo", "logos", "escudo", "escudos", "emblema", "emblemas", "mascote",
+    "mascotes", "mascot", "mascots", "cartola", "cartolafc", "badge", "crest",
+    "png", "jpg", "svg", "webp", "icon", "icone", "oficial", "official", "vetor",
+    "vector", "hd", "img", "image", "imagem", "camisa", "uniforme", "kit",
+    "novo", "nova", "new", "final", "copy", "copia",
+}
+_LOWERCASE_WORDS = {"de", "da", "do", "das", "dos", "e"}
+_NUMERIC_TOKEN = re.compile(r"(?:v?\d+|\d+x\d+|\(\d+\))", re.I)
+_WORD_SEPARATOR = re.compile(r"[\s_\-.]+")
+
+
+def pretty_asset_name(stem: str) -> str:
+    """Transforma `flamengo_logo_2024-v2` em `Flamengo`."""
+    raw_words = [word for word in _WORD_SEPARATOR.split(stem.strip()) if word]
+    words = [
+        word
+        for word in raw_words
+        if normalize_player_name(word) not in _ASSET_NOISE
+        and not _NUMERIC_TOKEN.fullmatch(word)
+    ] or raw_words or [stem]
+    pretty = []
+    for index, word in enumerate(words):
+        lowered = word.casefold()
+        if index and lowered in _LOWERCASE_WORDS:
+            pretty.append(lowered)
+        elif word.isupper() and len(word) <= 3:
+            pretty.append(word)
+        else:
+            pretty.append(word[:1].upper() + word[1:].lower())
+    return " ".join(pretty)
+
+
+ASSET_KINDS = {
+    "uniforme": (
+        "Uniforme",
+        (
+            "data/assets/brasfoot/teams/camisas",
+            "data/assets/brasfoot/teams/camisas2",
+            "data/assets/brasfoot/teams/camisas3",
+        ),
+    ),
+    "emblema": ("Emblema", ("data/assets/brasfoot/teams/escudos",)),
+    "logo_cartola": ("Logo Cartola", ("data/assets/cartola/logos",)),
+    "mascote": ("Mascote", ("data/assets/cartola/mascots",)),
+}
+
+
+def asset_display_name(kind: str, stem: str) -> str:
+    """Padroniza o nome: logos mostram só o time; mascotes, `Time (Mascote)`."""
+    name = pretty_asset_name(stem)
+    return f"{name} (Mascote)" if kind == "mascote" else name
+
+
+def list_assets(kind: str) -> list[dict[str, Any]]:
+    """Arquivos locais de uma categoria, com nome padronizado e sem repetição."""
+    _, directories = ASSET_KINDS[kind]
+    paths = sorted(
+        (
+            path
+            for directory in directories
+            for path in (ROOT / directory).rglob("*")
+            if path.is_file() and path.suffix.casefold() in IMAGE_SUFFIXES
+        ),
+        key=lambda path: (asset_display_name(kind, path.stem).casefold(), str(path)),
+    )
+    entries: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for path in paths:
+        name = asset_display_name(kind, path.stem)
+        if name.casefold() in seen:
+            continue
+        seen.add(name.casefold())
+        entries.append({"name": name, "kind": kind, "path": str(path.relative_to(ROOT))})
+    return entries
 
 
 def get_catalog_entries(
@@ -304,79 +410,126 @@ def get_catalog_entries(
                      AND overall IS NOT NULL AND game_position IS NOT NULL"""
             ).fetchone()["total"]
             rows = connection.execute(
-                """SELECT id, COALESCE(NULLIF(display_name, ''), name) AS name,
-                          overall, game_position
-                   FROM players
-                   WHERE activity_status = 'active' AND phase2_candidate = 0
-                     AND overall IS NOT NULL AND game_position IS NOT NULL
-                   ORDER BY overall DESC, name COLLATE NOCASE, id
+                f"""SELECT p.id, COALESCE(NULLIF(p.display_name, ''), p.name) AS name,
+                          {GAME_OVERALL_SQL} AS overall, p.game_position
+                   FROM players AS p
+                   WHERE p.activity_status = 'active' AND p.phase2_candidate = 0
+                     AND p.overall IS NOT NULL AND p.game_position IS NOT NULL
+                   ORDER BY overall DESC, name COLLATE NOCASE, p.id
                    LIMIT ? OFFSET ?""",
                 (limit, offset),
             ).fetchall()
         return [dict(row) for row in rows], int(total)
 
-    asset_dirs = {
-        "tecnico": ("data/assets/brasfoot",),
-        "tecnicos": ("data/assets/brasfoot",),
-        "uniforme": ("data/assets/brasfoot/teams/camisas",),
-        "uniformes": ("data/assets/brasfoot/teams/camisas",),
-        "mascote": ("data/assets/cartola/mascots",),
-        "mascotes": ("data/assets/cartola/mascots",),
-        "estadio": ("data/assets/brasfoot",),
-        "estadios": ("data/assets/brasfoot",),
-        "liga": ("data/assets/brasfoot",),
-        "ligas": ("data/assets/brasfoot",),
-        "emblema": ("data/assets/brasfoot/teams/escudos",),
-        "emblemas": ("data/assets/brasfoot/teams/escudos",),
-    }
     if normalized == "cartola":
         with connect(database_path) as connection:
             players = connection.execute(
-                """SELECT id, COALESCE(NULLIF(display_name, ''), name) AS name,
-                          overall, game_position
-                   FROM players
-                   WHERE overall_source = 'Cartola'
-                   ORDER BY overall DESC, name COLLATE NOCASE, id"""
+                f"""SELECT p.id, COALESCE(NULLIF(p.display_name, ''), p.name) AS name,
+                          {GAME_OVERALL_SQL} AS overall, p.game_position
+                   FROM players AS p
+                   WHERE p.overall_source = 'Cartola'
+                   ORDER BY overall DESC, name COLLATE NOCASE, p.id"""
             ).fetchall()
         entries = [dict(row) for row in players]
-        directories = ("data/assets/cartola/logos", "data/assets/cartola/mascots")
-        paths = sorted(
-            path for directory in directories
-            for path in (ROOT / directory).rglob("*")
-            if path.is_file() and path.suffix.casefold() in IMAGE_SUFFIXES
-        )
-        entries.extend(
-            {"name": path.stem, "path": str(path.relative_to(ROOT))}
-            for path in paths
-        )
+        entries.extend(list_assets("logo_cartola"))
+        entries.extend(list_assets("mascote"))
         return entries[offset : offset + limit], len(entries)
-    else:
-        directories = asset_dirs.get(normalized)
-    if directories is None:
-        return [], 0
-    table_categories = {
-        "tecnicos": ("coaches", "name"),
-        "tecnico": ("coaches", "name"),
-        "estadios": ("stadiums", "name"),
-        "estadio": ("stadiums", "name"),
-        "ligas": ("leagues", "name"),
-        "liga": ("leagues", "name"),
+
+    asset_categories = {
+        "uniforme": "uniforme",
+        "uniformes": "uniforme",
+        "mascote": "mascote",
+        "mascotes": "mascote",
+        "emblema": "emblema",
+        "emblemas": "emblema",
+        "logo": "logo_cartola",
+        "logos": "logo_cartola",
     }
-    if normalized in table_categories:
-        table, column = table_categories[normalized]
-        with connect(database_path) as connection:
-            rows = connection.execute(
-                f"SELECT {column} AS name FROM {table} ORDER BY name COLLATE NOCASE"
-            ).fetchall()
-        entries = [{"name": row["name"]} for row in rows]
+    if normalized in asset_categories:
+        entries = list_assets(asset_categories[normalized])
         return entries[offset : offset + limit], len(entries)
-    paths = sorted(
-        path for directory in directories
-        for path in (ROOT / directory).rglob("*")
-        if path.is_file() and path.suffix.casefold() in IMAGE_SUFFIXES
-    )
-    entries = [{"name": path.stem, "path": str(path.relative_to(ROOT))} for path in paths]
+
+    table_categories = {
+        "tecnico": "coaches",
+        "tecnicos": "coaches",
+        "estadio": "stadiums",
+        "estadios": "stadiums",
+        "liga": "leagues",
+        "ligas": "leagues",
+        "clube": "clubs",
+        "clubes": "clubs",
+    }
+    table = table_categories.get(normalized)
+    if table is None:
+        return [], 0
+    with connect(database_path) as connection:
+        rows = connection.execute(
+            f"SELECT name FROM {table} ORDER BY name COLLATE NOCASE"
+        ).fetchall()
+    entries = [{"name": row["name"]} for row in rows]
     return entries[offset : offset + limit], len(entries)
+
+
+# Tabelas que o mm!scout pesquisa além dos jogadores: (tabela, coluna da imagem).
+SCOUT_TABLES = {
+    "Técnico": ("coaches", "photo_path"),
+    "Estádio": ("stadiums", "photo_path"),
+    "Clube": ("clubs", "logo_path"),
+    "Liga": ("leagues", None),
+}
+
+
+def search_catalog(
+    query: str,
+    database_path=DATABASE_PATH,
+    limit: int = 10,
+) -> list[dict[str, Any]]:
+    """Procura técnicos, estádios, clubes, ligas, uniformes, emblemas, logos e mascotes."""
+    normalized_query = normalize_player_name(query)
+    if not normalized_query:
+        return []
+    results: list[dict[str, Any]] = []
+    with connect(database_path) as connection:
+        for label, (table, image_column) in SCOUT_TABLES.items():
+            image = f"{image_column}" if image_column else "NULL"
+            rows = connection.execute(
+                f"""
+                SELECT id, name, {image} AS image_path FROM {table}
+                WHERE normalize_player_name(name) LIKE ?
+                ORDER BY name COLLATE NOCASE
+                LIMIT ?
+                """,
+                (f"%{normalized_query}%", limit),
+            ).fetchall()
+            results.extend(
+                {
+                    "kind": label,
+                    "id": int(row["id"]),
+                    "name": row["name"],
+                    "image_path": row["image_path"],
+                    "entity": table,
+                }
+                for row in rows
+            )
+    for kind, (label, _) in ASSET_KINDS.items():
+        results.extend(
+            {
+                "kind": label,
+                "id": None,
+                "name": entry["name"],
+                "image_path": entry["path"],
+                "entity": None,
+            }
+            for entry in list_assets(kind)
+            if normalized_query in normalize_player_name(entry["name"])
+        )
+    results.sort(
+        key=lambda item: (
+            normalize_player_name(item["name"]) != normalized_query,
+            normalize_player_name(item["name"]),
+        )
+    )
+    return results[:limit]
 
 
 def claim_player(

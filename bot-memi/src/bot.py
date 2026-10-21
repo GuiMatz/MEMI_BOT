@@ -10,9 +10,19 @@ import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 
-from src.db import DATABASE_PATH, ROOT, initialize_database
+from src.db import DATABASE_PATH, ROOT, initialize_database, normalize_player_name
 
 LOGGER = logging.getLogger("memi")
+PREFIX = "mm!"
+
+
+def command_prefix(bot: commands.Bot, message: discord.Message) -> list[str]:
+    """Aceita o prefixo em qualquer combinação de maiúsculas (MM!, Mm!, mM!...)."""
+    prefixes = commands.when_mentioned(bot, message)
+    start = (message.content or "")[: len(PREFIX)]
+    if start.casefold() == PREFIX:
+        prefixes.append(start)
+    return prefixes
 
 
 class MemiBot(commands.Bot):
@@ -20,8 +30,9 @@ class MemiBot(commands.Bot):
         intents = discord.Intents.default()
         intents.message_content = True
         super().__init__(
-            command_prefix="mm!",
+            command_prefix=command_prefix,
             case_insensitive=True,
+            strip_after_prefix=True,
             help_command=None,
             intents=intents,
         )
@@ -36,6 +47,15 @@ class MemiBot(commands.Bot):
             len(self.commands),
         )
 
+    async def get_context(self, origin, *, cls=commands.Context):
+        """Aceita o comando com ou sem acento (mm!tática = mm!tatica)."""
+        context = await super().get_context(origin, cls=cls)
+        if context.command is None and context.invoked_with:
+            context.command = self.all_commands.get(
+                normalize_player_name(context.invoked_with).replace(" ", "")
+            )
+        return context
+
     async def setup_hook(self) -> None:
         initialize_database(self.database_path)
         await self.load_extension("src.cogs.game")
@@ -45,7 +65,10 @@ class MemiBot(commands.Bot):
         await self.load_extension("src.cogs.team")
         await self.load_extension("src.cogs.matches")
         await self.load_extension("src.cogs.admin")
-        LOGGER.info("Extensões do MEMI carregadas.")
+        from src.photos import sync_existing_photos
+
+        linked = sync_existing_photos(self.database_path)
+        LOGGER.info("Extensões do MEMI carregadas; %s fotos ligadas ao banco.", linked)
 
     async def on_command_error(
         self,
