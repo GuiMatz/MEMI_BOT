@@ -126,9 +126,7 @@ class LineupBuilderView(discord.ui.View):
         if self.selected_slot is not None:
             position = positions[self.selected_slot - 1]
             current = by_slot.get(self.selected_slot)
-            elsewhere = {
-                int(player["id"]): int(player["slot_order"]) for player in lineup
-            }
+            elsewhere = {int(player["id"]): int(player["slot_order"]) for player in lineup}
             players = list_owned_players(
                 self.owner.id,
                 self.database_path,
@@ -139,7 +137,9 @@ class LineupBuilderView(discord.ui.View):
             options = []
             for player in players:
                 description = player["club_name"] or "Passe livre"
-                if int(player["id"]) in elsewhere and int(player["id"]) != (current or {}).get("id"):
+                if int(player["id"]) in elsewhere and int(player["id"]) != (current or {}).get(
+                    "id"
+                ):
                     description = "já escalado em outra vaga (muda de lugar)"
                 options.append(
                     discord.SelectOption(
@@ -169,10 +169,14 @@ class LineupBuilderView(discord.ui.View):
                 )
             self.add_item(picker)
 
-        auto = discord.ui.Button(label="Escalar automático", emoji="🪄", style=discord.ButtonStyle.primary, row=3)
+        auto = discord.ui.Button(
+            label="Escalar automático", emoji="🪄", style=discord.ButtonStyle.primary, row=3
+        )
         auto.callback = self._on_auto
         self.add_item(auto)
-        done = discord.ui.Button(label="Concluir", emoji="✅", style=discord.ButtonStyle.success, row=3)
+        done = discord.ui.Button(
+            label="Concluir", emoji="✅", style=discord.ButtonStyle.success, row=3
+        )
         done.callback = self._on_done
         self.add_item(done)
 
@@ -181,12 +185,14 @@ class LineupBuilderView(discord.ui.View):
         embed = discord.Embed(
             title=f"✏️ Escalação · {team['team_name']}",
             description=(
-                (f"{self.notice}\n\n" if self.notice else "")
-                + "1. Escolha a **formação**\n"
+                (f"{self.notice}\n\n" if self.notice else "") + "1. Escolha a **formação**\n"
                 "2. Clique na **posição**\n"
                 "3. Escolha o **jogador** (ordenados por overall)\n"
-                + ("\n✅ Time completo! Pronto para `mm!amistoso`." if complete
-                   else f"\n{len(lineup)}/11 titulares escalados.")
+                + (
+                    "\n✅ Time completo! Pronto para `mm!amistoso`."
+                    if complete
+                    else f"\n{len(lineup)}/11 titulares escalados."
+                )
             ),
             color=discord.Color.from_str(team["color"]),
         )
@@ -204,9 +210,7 @@ class LineupBuilderView(discord.ui.View):
 
     async def _on_formation(self, interaction: discord.Interaction) -> None:
         value = interaction.data["values"][0]
-        dropped = set_formation(
-            self.owner.id, value, self.database_path, drop_incompatible=True
-        )
+        dropped = set_formation(self.owner.id, value, self.database_path, drop_incompatible=True)
         self.selected_slot = None
         self.notice = f"Formação **{value}**." + (
             f" {dropped} titular(es) sem vaga saíram." if dropped else ""
@@ -405,9 +409,7 @@ class TeamCog(commands.Cog):
         parts = query.split(maxsplit=1)
         removing = normalize_player_name(parts[0]) in {"remover", "tirar"}
         if removing and len(parts) != 2:
-            await context.reply(
-                "Diga quem sai: `mm!escalar remover <nome>`.", mention_author=False
-            )
+            await context.reply("Diga quem sai: `mm!escalar remover <nome>`.", mention_author=False)
             return
         search = parts[1] if removing else query
         pool = (
@@ -476,7 +478,9 @@ class TeamCog(commands.Cog):
                                 "Escale primeiro com `mm!escalar`."
                             )
                         names = ", ".join(candidate["name"] for candidate in candidates[:5])
-                        raise TeamError(f"Mais de um titular combina com **{value[:60]}**: {names}.")
+                        raise TeamError(
+                            f"Mais de um titular combina com **{value[:60]}**: {names}."
+                        )
                     set_team_role(
                         context.author.id, TACTIC_ROLES[op], int(player["id"]), self.database_path
                     )

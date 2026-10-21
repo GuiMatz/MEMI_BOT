@@ -33,10 +33,7 @@ def _same_person(first: dict[str, Any], second: dict[str, Any]) -> bool:
 def find_duplicates(database_path: str | Path = DATABASE_PATH) -> list[dict[str, Any]]:
     """Grupos de duplicados; o primeiro jogador de cada grupo é o que fica."""
     with connect(database_path) as connection:
-        rows = [
-            dict(row)
-            for row in connection.execute(
-                f"""
+        rows = [dict(row) for row in connection.execute(f"""
                 SELECT p.id, COALESCE(NULLIF(p.display_name, ''), p.name) AS name,
                        p.name AS raw_name, p.birth_date, p.club_name, p.nationality,
                        p.photo_path, {GAME_OVERALL_SQL} AS overall,
@@ -44,9 +41,7 @@ def find_duplicates(database_path: str | Path = DATABASE_PATH) -> list[dict[str,
                 FROM players AS p
                 LEFT JOIN player_ownership AS o ON o.player_id = p.id
                 WHERE COALESCE(p.overall_source, '') NOT IN ('Cartola', 'Lenda')
-                """
-            )
-        ]
+                """)]
     by_name: dict[str, list[dict[str, Any]]] = {}
     for row in rows:
         by_name.setdefault(normalize_player_name(row["raw_name"]), []).append(row)
@@ -97,7 +92,9 @@ def remove_duplicates(database_path: str | Path = DATABASE_PATH) -> dict[str, in
                 continue
             keep, *drop = group["players"]
             keep_id = int(keep["id"])
-            owner = next((player["owner_id"] for player in group["players"] if player["owner_id"]), None)
+            owner = next(
+                (player["owner_id"] for player in group["players"] if player["owner_id"]), None
+            )
             for player in drop:
                 drop_id = int(player["id"])
                 if owner and player["owner_id"] == owner and not keep["owner_id"]:
@@ -152,7 +149,9 @@ def remove_duplicates(database_path: str | Path = DATABASE_PATH) -> dict[str, in
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--database", type=Path, default=DATABASE_PATH)
     parser.add_argument("--apply", action="store_true", help="remove de fato os duplicados")
     args = parser.parse_args()

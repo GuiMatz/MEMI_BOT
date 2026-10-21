@@ -114,9 +114,7 @@ def main() -> None:
     load_dotenv(ROOT / ".env")
     token = os.getenv("DISCORD_BOT_TOKEN")
     if not token:
-        raise SystemExit(
-            "Configure DISCORD_BOT_TOKEN no arquivo .env antes de iniciar o bot."
-        )
+        raise SystemExit("Configure DISCORD_BOT_TOKEN no arquivo .env antes de iniciar o bot.")
     bot = create_bot()
     try:
         bot.run(token, log_handler=None)
@@ -124,9 +122,7 @@ def main() -> None:
         LOGGER.error("O Discord recusou o token configurado.")
         raise SystemExit(1) from error
     except discord.PrivilegedIntentsRequired as error:
-        LOGGER.error(
-            "Ative Message Content Intent na página de configuração do bot Discord."
-        )
+        LOGGER.error("Ative Message Content Intent na página de configuração do bot Discord.")
         raise SystemExit(1) from error
 
 

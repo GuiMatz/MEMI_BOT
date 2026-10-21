@@ -100,7 +100,8 @@ class CardPagerView(discord.ui.View):
         lines = self.list_lines or []
         embed = discord.Embed(
             title=self.title,
-            description="\n".join(lines[:40])[:4000] + (f"\n… e mais {len(lines) - 40}" if len(lines) > 40 else ""),
+            description="\n".join(lines[:40])[:4000]
+            + (f"\n… e mais {len(lines) - 40}" if len(lines) > 40 else ""),
             color=discord.Color.green(),
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)

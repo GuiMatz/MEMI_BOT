@@ -138,9 +138,7 @@ def _import_clubs(connection, clubs_path: str | Path) -> int:
     required = {"club_id", "name", "domestic_competition_id"}
     missing = required.difference(clubs.columns)
     if missing:
-        raise ValueError(
-            f"Colunas ausentes em clubs.csv.gz: {', '.join(sorted(missing))}"
-        )
+        raise ValueError(f"Colunas ausentes em clubs.csv.gz: {', '.join(sorted(missing))}")
 
     imported = 0
     for row in clubs.to_dict(orient="records"):
@@ -172,13 +170,9 @@ def _import_clubs(connection, clubs_path: str | Path) -> int:
             (transfermarkt_id,),
         ).fetchone()["id"]
 
-        coach_id = _upsert_coach(
-            connection, club_id, _identifier(row.get("coach_name"))
-        )
+        coach_id = _upsert_coach(connection, club_id, _identifier(row.get("coach_name")))
         if coach_id is not None:
-            connection.execute(
-                "UPDATE clubs SET coach_id = ? WHERE id = ?", (coach_id, club_id)
-            )
+            connection.execute("UPDATE clubs SET coach_id = ? WHERE id = ?", (coach_id, club_id))
         imported += 1
     return imported
 
@@ -309,9 +303,7 @@ def _club_lookup(connection) -> dict[str, str]:
     }
 
 
-def _iter_players(
-    players_path: str | Path, limit: int | None
-) -> Iterable[dict[str, Any]]:
+def _iter_players(players_path: str | Path, limit: int | None) -> Iterable[dict[str, Any]]:
     chunksize = 5000
     rows_read = 0
     with pd.read_csv(
@@ -345,8 +337,7 @@ def import_transfermarkt(
     unknown = sorted(set(categories["sub_position"]).difference(POSITION_MAP))
     if unknown:
         raise ValueError(
-            "Há subposições sem mapeamento; revise antes de importar: "
-            + ", ".join(unknown)
+            "Há subposições sem mapeamento; revise antes de importar: " + ", ".join(unknown)
         )
 
     initialize_database(database_path)

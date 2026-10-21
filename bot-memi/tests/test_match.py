@@ -49,18 +49,12 @@ class PlayerMatchingTests(unittest.TestCase):
             "2000-01-02",
             "Sao Paulo",
         )
-        candidate_count = find_matches(
-            self.database_path, self.review_path, threshold=70
-        )
+        candidate_count = find_matches(self.database_path, self.review_path, threshold=70)
 
         self.assertEqual(candidate_count, 1)
         with connect(self.database_path) as connection:
-            self.assertEqual(
-                connection.execute("SELECT COUNT(*) FROM players").fetchone()[0], 2
-            )
-            candidate = connection.execute(
-                "SELECT * FROM player_match_candidates"
-            ).fetchone()
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM players").fetchone()[0], 2)
+            candidate = connection.execute("SELECT * FROM player_match_candidates").fetchone()
             self.assertEqual(candidate["status"], "pending")
             self.assertEqual(
                 {candidate["player_a_id"], candidate["player_b_id"]},
@@ -74,30 +68,20 @@ class PlayerMatchingTests(unittest.TestCase):
         self.assertEqual(row["name_a"], "João Silva")
 
     def test_mismatching_birth_dates_are_not_candidates(self):
-        self._insert_player(
-            "transfermarkt", "tm-2", "Alex Silva", "2000-01-02", "Clube A"
-        )
+        self._insert_player("transfermarkt", "tm-2", "Alex Silva", "2000-01-02", "Clube A")
         self._insert_player("ea_fc24", "ea-2", "Alex Silva", "2001-01-02", "Clube A")
-        self.assertEqual(
-            find_matches(self.database_path, self.review_path, threshold=50), 0
-        )
+        self.assertEqual(find_matches(self.database_path, self.review_path, threshold=50), 0)
 
     def test_matching_birth_date_is_required_even_when_club_matches(self):
         self._insert_player("transfermarkt", "tm-3", "Alex Silva", None, "Clube A")
         self._insert_player("ea_fc25", "ea-3", "Alex Silva", None, "Clube A")
-        self.assertEqual(
-            find_matches(self.database_path, self.review_path, threshold=50), 0
-        )
+        self.assertEqual(find_matches(self.database_path, self.review_path, threshold=50), 0)
 
     def test_club_does_not_affect_match_candidates_or_order(self):
-        self._insert_player(
-            "transfermarkt", "tm-4", "Alex Silva", "2000-01-02", "Clube A"
-        )
+        self._insert_player("transfermarkt", "tm-4", "Alex Silva", "2000-01-02", "Clube A")
         self._insert_player("ea_fc25", "ea-4", "Alex Silva", "2000-01-02", "Clube B")
         self._insert_player("ea_fc25", "ea-5", "Alex Silva", "2000-01-02", "Clube A")
-        self.assertEqual(
-            find_matches(self.database_path, self.review_path, threshold=50), 2
-        )
+        self.assertEqual(find_matches(self.database_path, self.review_path, threshold=50), 2)
         with self.review_path.open(encoding="utf-8-sig", newline="") as file:
             rows = list(csv.DictReader(file))
         self.assertEqual([row["player_b_id"] for row in rows], ["2", "3"])

@@ -54,15 +54,11 @@ class OverallTests(unittest.TestCase):
             )
 
         result = recalculate_overalls(self.database_path)
-        self.assertEqual(
-            result, {"manual": 1, "ea_preserved": 0, "estimated": 2, "skipped": 0}
-        )
+        self.assertEqual(result, {"manual": 1, "ea_preserved": 0, "estimated": 2, "skipped": 0})
         with connect(self.database_path) as connection:
             rows = {
                 row["name"]: (row["overall"], row["overall_source"])
-                for row in connection.execute(
-                    "SELECT name, overall, overall_source FROM players"
-                )
+                for row in connection.execute("SELECT name, overall, overall_source FROM players")
             }
         self.assertEqual(rows["EA"], (91, "manual"))
         self.assertEqual(rows["Ajustado"], (88, "market_log"))
@@ -80,9 +76,7 @@ class OverallTests(unittest.TestCase):
         result = recalculate_overalls(self.database_path)
         self.assertEqual(result["ea_preserved"], 1)
         with connect(self.database_path) as connection:
-            row = connection.execute(
-                "SELECT overall, overall_source FROM players"
-            ).fetchone()
+            row = connection.execute("SELECT overall, overall_source FROM players").fetchone()
         self.assertEqual((row["overall"], row["overall_source"]), (86, "ea_fc24"))
 
 

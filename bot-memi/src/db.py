@@ -399,8 +399,7 @@ def initialize_database(database_path: str | Path = DATABASE_PATH) -> None:
         connection.execute("PRAGMA foreign_keys = OFF")
         connection.executescript(SCHEMA)
         source_columns = {
-            row["name"]
-            for row in connection.execute("PRAGMA table_info(player_sources)")
+            row["name"] for row in connection.execute("PRAGMA table_info(player_sources)")
         }
         source_migrations = {
             "source_club_name": "TEXT",
@@ -414,9 +413,7 @@ def initialize_database(database_path: str | Path = DATABASE_PATH) -> None:
                 connection.execute(
                     f"ALTER TABLE player_sources ADD COLUMN {_identifier(column)} {definition}"
                 )
-        player_columns = {
-            row["name"] for row in connection.execute("PRAGMA table_info(players)")
-        }
+        player_columns = {row["name"] for row in connection.execute("PRAGMA table_info(players)")}
         player_migrations = {
             "overall_edition": "TEXT",
             "season_last_active": "INTEGER",
@@ -424,9 +421,7 @@ def initialize_database(database_path: str | Path = DATABASE_PATH) -> None:
                 "TEXT NOT NULL DEFAULT 'unknown' "
                 "CHECK (activity_status IN ('active', 'inactive', 'unknown'))"
             ),
-            "phase2_candidate": (
-                "INTEGER NOT NULL DEFAULT 1 CHECK (phase2_candidate IN (0, 1))"
-            ),
+            "phase2_candidate": ("INTEGER NOT NULL DEFAULT 1 CHECK (phase2_candidate IN (0, 1))"),
             "needs_position_review": (
                 "INTEGER NOT NULL DEFAULT 0 " "CHECK (needs_position_review IN (0, 1))"
             ),
@@ -440,16 +435,11 @@ def initialize_database(database_path: str | Path = DATABASE_PATH) -> None:
             row["name"] for row in connection.execute("PRAGMA table_info(game_users)")
         }
         if "last_claim_at" not in game_user_columns:
-            connection.execute(
-                "ALTER TABLE game_users ADD COLUMN last_claim_at TEXT"
-            )
+            connection.execute("ALTER TABLE game_users ADD COLUMN last_claim_at TEXT")
         if "last_daily_at" not in game_user_columns:
-            connection.execute(
-                "ALTER TABLE game_users ADD COLUMN last_daily_at TEXT"
-            )
+            connection.execute("ALTER TABLE game_users ADD COLUMN last_daily_at TEXT")
         trade_columns = {
-            row["name"]
-            for row in connection.execute("PRAGMA table_info(trade_offers)")
+            row["name"] for row in connection.execute("PRAGMA table_info(trade_offers)")
         }
         for column in ("proposer_confirmed", "recipient_confirmed"):
             if column not in trade_columns:
@@ -459,9 +449,7 @@ def initialize_database(database_path: str | Path = DATABASE_PATH) -> None:
                 )
 
         _migrate_roll_cycle_limit(connection)
-        team_columns = {
-            row["name"] for row in connection.execute("PRAGMA table_info(game_teams)")
-        }
+        team_columns = {row["name"] for row in connection.execute("PRAGMA table_info(game_teams)")}
         for column in ("coach_name", "stadium_name", "kit_path", "favorite_league"):
             if column not in team_columns:
                 connection.execute(f"ALTER TABLE game_teams ADD COLUMN {_identifier(column)} TEXT")
@@ -470,8 +458,7 @@ def initialize_database(database_path: str | Path = DATABASE_PATH) -> None:
         ).fetchone()["sql"]
         if "duplicate_bonus" not in upgrade_sql:
             connection.execute("ALTER TABLE user_upgrades RENAME TO user_upgrades_v10")
-            connection.execute(
-                """CREATE TABLE user_upgrades (
+            connection.execute("""CREATE TABLE user_upgrades (
                     discord_user_id TEXT NOT NULL REFERENCES game_users(discord_user_id)
                         ON DELETE CASCADE,
                     upgrade_key TEXT NOT NULL CHECK (
@@ -482,19 +469,13 @@ def initialize_database(database_path: str | Path = DATABASE_PATH) -> None:
                     roll_tokens INTEGER NOT NULL DEFAULT 0 CHECK (roll_tokens >= 0),
                     crate_pity INTEGER NOT NULL DEFAULT 0 CHECK (crate_pity BETWEEN 0 AND 99),
                     PRIMARY KEY (discord_user_id, upgrade_key)
-                )"""
-            )
-            connection.execute(
-                """INSERT INTO user_upgrades
+                )""")
+            connection.execute("""INSERT INTO user_upgrades
                    SELECT discord_user_id, upgrade_key, level, roll_tokens, crate_pity
-                   FROM user_upgrades_v10"""
-            )
+                   FROM user_upgrades_v10""")
             connection.execute("DROP TABLE user_upgrades_v10")
         fixture_columns = {
-            row["name"]
-            for row in connection.execute(
-                "PRAGMA table_info(championship_fixtures)"
-            )
+            row["name"] for row in connection.execute("PRAGMA table_info(championship_fixtures)")
         }
         if "winner_user_id" not in fixture_columns:
             connection.execute(
@@ -502,9 +483,7 @@ def initialize_database(database_path: str | Path = DATABASE_PATH) -> None:
                 "REFERENCES game_users(discord_user_id)"
             )
 
-        player_columns = {
-            row["name"] for row in connection.execute("PRAGMA table_info(players)")
-        }
+        player_columns = {row["name"] for row in connection.execute("PRAGMA table_info(players)")}
         if "club_id" in player_columns:
             _migrate_players_without_club_foreign_key(connection, player_columns)
         _migrate_player_overall_100(connection)
@@ -569,37 +548,45 @@ def _migrate_player_overall_100(connection: sqlite3.Connection) -> None:
             updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
     """)
-    columns = [
-        row["name"]
-        for row in connection.execute("PRAGMA table_info(players_v10)")
-    ]
+    columns = [row["name"] for row in connection.execute("PRAGMA table_info(players_v10)")]
     transferable = [
         column
         for column in (
-            "id", "name", "display_name", "tm_player_id", "birth_date",
-            "nationality", "club_name", "original_position", "game_position",
-            "overall", "overall_source", "overall_edition", "market_value_eur",
-            "season_last_active", "activity_status", "phase2_candidate",
-            "needs_position_review", "photo_url", "photo_path", "created_at",
+            "id",
+            "name",
+            "display_name",
+            "tm_player_id",
+            "birth_date",
+            "nationality",
+            "club_name",
+            "original_position",
+            "game_position",
+            "overall",
+            "overall_source",
+            "overall_edition",
+            "market_value_eur",
+            "season_last_active",
+            "activity_status",
+            "phase2_candidate",
+            "needs_position_review",
+            "photo_url",
+            "photo_path",
+            "created_at",
             "updated_at",
         )
         if column in columns
     ]
     names = ", ".join(transferable)
-    connection.execute(
-        f"INSERT INTO players ({names}) SELECT {names} FROM players_v10"
-    )
+    connection.execute(f"INSERT INTO players ({names}) SELECT {names} FROM players_v10")
     connection.execute("DROP TABLE players_v10")
 
 
 def _migrate_roll_cycle_limit(connection: sqlite3.Connection) -> None:
     """Allow purchased rolls while preserving usage in existing cycles."""
-    row = connection.execute(
-        """
+    row = connection.execute("""
         SELECT sql FROM sqlite_master
         WHERE type = 'table' AND name = 'roll_cycles'
-        """
-    ).fetchone()
+        """).fetchone()
     if row is None or "BETWEEN 1 AND 10" not in row["sql"]:
         return
     connection.execute("ALTER TABLE roll_cycles RENAME TO roll_cycles_v8")
@@ -625,9 +612,7 @@ def _migrate_players_without_club_foreign_key(
     """Recria players com clube textual e IDs de origem, preservando dependências."""
     if "players_v6" in {
         row["name"]
-        for row in connection.execute(
-            "SELECT name FROM sqlite_master WHERE type = 'table'"
-        )
+        for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
     }:
         raise sqlite3.OperationalError(
             "A tabela temporária players_v6 já existe; verifique a migração interrompida."
@@ -721,12 +706,7 @@ def normalize_player_name(name: str | None) -> str:
 
 def refresh_display_names(connection: sqlite3.Connection) -> None:
     """Mantém o nome exibido limpo; detalhes ficam disponíveis nos resultados."""
-    players = [
-        dict(row)
-        for row in connection.execute(
-            "SELECT id, name FROM players ORDER BY id"
-        )
-    ]
+    players = [dict(row) for row in connection.execute("SELECT id, name FROM players ORDER BY id")]
 
     connection.executemany(
         "UPDATE players SET display_name = ? WHERE id = ?",

@@ -90,9 +90,7 @@ def _player_sources(connection) -> list[PlayerSource]:
     return result
 
 
-def _candidate_pairs(
-    players: list[PlayerSource], threshold: float
-) -> list[dict[str, object]]:
+def _candidate_pairs(players: list[PlayerSource], threshold: float) -> list[dict[str, object]]:
     by_source: dict[str, list[PlayerSource]] = defaultdict(list)
     for player in players:
         by_source[player.source].append(player)

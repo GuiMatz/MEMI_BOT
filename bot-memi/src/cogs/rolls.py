@@ -36,9 +36,7 @@ class RollOfferView(discord.ui.View):
         button = discord.ui.Button(
             label="Resgatar Memilets" if duplicate_reward else "Reivindicar",
             style=(
-                discord.ButtonStyle.primary
-                if duplicate_reward
-                else discord.ButtonStyle.success
+                discord.ButtonStyle.primary if duplicate_reward else discord.ButtonStyle.success
             ),
             emoji="🪙" if duplicate_reward else None,
         )
@@ -83,10 +81,7 @@ class RollOfferView(discord.ui.View):
             "not_found": "Essa oportunidade de claim não está mais disponível.",
         }
         if result.status == "cooldown" and result.retry_at:
-            message = (
-                "Seu próximo claim libera às "
-                f"**{brasilia_time(result.retry_at)}**."
-            )
+            message = "Seu próximo claim libera às " f"**{brasilia_time(result.retry_at)}**."
         else:
             message = messages.get(
                 result.status,
@@ -133,9 +128,7 @@ class RollsCog(commands.Cog):
         embed.description = (
             f"**{overall}** · {rarity_label(overall)} · {player['game_position']} · {club}"
         )
-        embed.set_footer(
-            text=f"Rolls restantes neste ciclo: {result.rolls_remaining}"
-        )
+        embed.set_footer(text=f"Rolls restantes neste ciclo: {result.rolls_remaining}")
 
         view = None
         if result.kind == "unowned":

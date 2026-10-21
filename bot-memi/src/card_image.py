@@ -58,9 +58,20 @@ def render_player_card(player: dict[str, Any]) -> BytesIO:
     # Selo de overall e posição no canto da foto.
     draw.rounded_rectangle((44, 44, 184, 214), 20, fill=(10, 14, 20, 225), outline=color, width=4)
     draw.text((114, 112), str(overall or "—"), font=_font(76, True), fill="white", anchor="mm")
-    draw.text((114, 182), str(player.get("game_position") or "—"), font=_font(30, True), fill=color, anchor="mm")
+    draw.text(
+        (114, 182),
+        str(player.get("game_position") or "—"),
+        font=_font(30, True),
+        fill=color,
+        anchor="mm",
+    )
 
-    name = _fit(draw, str(player.get("name") or player.get("display_name") or "—"), _font(48, True), WIDTH - 60)
+    name = _fit(
+        draw,
+        str(player.get("name") or player.get("display_name") or "—"),
+        _font(48, True),
+        WIDTH - 60,
+    )
     draw.text((WIDTH // 2, 700), name, font=_font(48, True), fill="white", anchor="mm")
     club = _fit(draw, str(player.get("club_name") or "Passe livre"), _font(28), WIDTH - 80)
     draw.text((WIDTH // 2, 752), club, font=_font(28), fill=(185, 195, 210), anchor="mm")

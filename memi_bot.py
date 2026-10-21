@@ -3697,7 +3697,10 @@ AJUDA_JOGO = [
             ("mm!scout <nome>", "ficha com foto de jogador, técnico, estádio, clube ou item"),
             ("mm!top [categoria]", "catálogo: jogadores, cartola, técnicos, uniformes, mascotes…"),
             ("mm!left", "quanto ainda está livre em cada série (livres/total)"),
-            ("mm!elenco [@pessoa] [filtro]", "uma carta por página; filtros: posição, overall, clube"),
+            (
+                "mm!elenco [@pessoa] [filtro]",
+                "uma carta por página; filtros: posição, overall, clube",
+            ),
             ("mm!wish / mm!starwish <jogador>", "adiciona/remove wish; sem jogador, lista"),
             ("mm!wishlist / mm!wl", "suas wishes, com slots usados/máximo no topo"),
         ],
@@ -3717,8 +3720,14 @@ AJUDA_JOGO = [
         "⚽ FUT.AE · Time e partidas",
         [
             ("mm!escalar", "monta o time clicando na posição e escolhendo o jogador"),
-            ("mm!time [campo valor]", "perfil e imagem do time; `mm!time liga <nome>` define a liga favorita"),
-            ("mm!tatica capitao|falta|penalti <nome>", "cobradores e capitão pelo nome; também formação e estilo"),
+            (
+                "mm!time [campo valor]",
+                "perfil e imagem do time; `mm!time liga <nome>` define a liga favorita",
+            ),
+            (
+                "mm!tatica capitao|falta|penalti <nome>",
+                "cobradores e capitão pelo nome; também formação e estilo",
+            ),
             ("mm!amistoso @pessoa", "partida narrada minuto a minuto"),
             ("mm!campeonato inscrever", "inscreve seu time no campeonato diário"),
             ("mm!campeonato iniciar", "joga o campeonato; final empatada vai para os pênaltis"),
@@ -3882,7 +3891,9 @@ class MeMiBot(commands.Bot):
         try:
             relatorio = await asyncio.to_thread(prepare_game_data, GAME_DATABASE_PATH)
         except Exception:
-            logging.exception("Não consegui sincronizar a enciclopédia, os escudos e as fotos do FUT.AE.")
+            logging.exception(
+                "Não consegui sincronizar a enciclopédia, os escudos e as fotos do FUT.AE."
+            )
         else:
             logging.info("FUT.AE sincronizado: %s", relatorio)
 

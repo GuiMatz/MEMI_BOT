@@ -38,9 +38,7 @@ class ApiFootballClient:
     ) -> tuple[list[dict[str, Any]], int]:
         """Busca uma página e exige o cabeçalho de cota em cada resposta."""
         if self.remaining_requests is not None and self.remaining_requests <= 0:
-            raise RuntimeError(
-                "Cota diária API-Football esgotada; coleta interrompida."
-            )
+            raise RuntimeError("Cota diária API-Football esgotada; coleta interrompida.")
         if self.remaining_requests is not None:
             self.remaining_requests -= 1
             self.quota_date = datetime.now(timezone.utc).date().isoformat()
@@ -70,10 +68,7 @@ class ApiFootballClient:
         if date_header:
             try:
                 self.quota_date = (
-                    parsedate_to_datetime(date_header)
-                    .astimezone(timezone.utc)
-                    .date()
-                    .isoformat()
+                    parsedate_to_datetime(date_header).astimezone(timezone.utc).date().isoformat()
                 )
             except (TypeError, ValueError, OverflowError) as error:
                 raise RuntimeError("Data inválida na resposta API-Football.") from error
@@ -114,12 +109,7 @@ def _load_checkpoint(connection, source: str) -> dict[str, int]:
         raise RuntimeError(f"Checkpoint inválido para {source}.") from error
     page = checkpoint.get("page")
     offset = checkpoint.get("offset")
-    if (
-        not isinstance(page, int)
-        or page < 1
-        or not isinstance(offset, int)
-        or offset < 0
-    ):
+    if not isinstance(page, int) or page < 1 or not isinstance(offset, int) or offset < 0:
         raise RuntimeError(f"Checkpoint inválido para {source}.")
     return {"page": page, "offset": offset}
 
@@ -348,9 +338,7 @@ def import_league_players(
 
     while True:
         if client.remaining_requests is not None and client.remaining_requests <= 0:
-            raise RuntimeError(
-                "Cota diária API-Football esgotada; coleta interrompida."
-            )
+            raise RuntimeError("Cota diária API-Football esgotada; coleta interrompida.")
         try:
             entries, total_pages = client.players_page(league_id, season, page)
         finally:
@@ -396,11 +384,7 @@ def import_league_players(
             page_count += 1
 
             rows_processed = start_offset + len(available)
-            if (
-                limit is not None
-                and players_count >= limit
-                and rows_processed < len(entries)
-            ):
+            if limit is not None and players_count >= limit and rows_processed < len(entries):
                 _save_checkpoint(connection, key, page, rows_processed)
                 return {
                     "players": players_count,
@@ -432,9 +416,7 @@ def import_league_players(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--league", type=int, required=True, help="ID da liga na API")
-    parser.add_argument(
-        "--season", type=int, required=True, help="temporada autorizada"
-    )
+    parser.add_argument("--season", type=int, required=True, help="temporada autorizada")
     parser.add_argument("--database", type=Path, default=DATABASE_PATH)
     parser.add_argument(
         "--current-season",

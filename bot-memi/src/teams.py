@@ -169,8 +169,7 @@ def catalog_name(field: str, value: str, database_path: str | Path = DATABASE_PA
     tokens = wanted.split()
     with connect(database_path) as connection:
         names = [
-            row["name"]
-            for row in connection.execute(f"SELECT {name_sql} AS name FROM {table}")
+            row["name"] for row in connection.execute(f"SELECT {name_sql} AS name FROM {table}")
         ]
 
     def matches(name: str) -> bool:
@@ -199,9 +198,7 @@ def resolve_local_asset(path: str | Path) -> Path:
         candidate = base / candidate
     resolved = candidate.resolve()
     if base not in resolved.parents or not resolved.is_file():
-        raise TeamError(
-            "A imagem precisa existir dentro de `data/assets/brasfoot/`."
-        )
+        raise TeamError("A imagem precisa existir dentro de `data/assets/brasfoot/`.")
     if resolved.suffix.casefold() not in {".png", ".jpg", ".jpeg", ".webp"}:
         raise TeamError("A imagem precisa ser PNG, JPG ou WEBP.")
     return resolved
@@ -217,9 +214,7 @@ def set_formation(
     """Troca a formação; devolve quantos titulares saíram por falta de vaga."""
     normalized = formation.strip()
     if normalized not in FORMATIONS:
-        raise TeamError(
-            "Formação inválida. Escolha uma: " + ", ".join(FORMATIONS) + "."
-        )
+        raise TeamError("Formação inválida. Escolha uma: " + ", ".join(FORMATIONS) + ".")
     user_id = str(discord_user_id)
     with connect(database_path) as connection:
         team = connection.execute(
@@ -235,9 +230,7 @@ def set_formation(
             """,
             (user_id,),
         ).fetchall()
-        current_counts = Counter(
-            {row["position"]: int(row["amount"]) for row in lineup}
-        )
+        current_counts = Counter({row["position"]: int(row["amount"]) for row in lineup})
         allowed_counts = Counter(FORMATIONS[normalized])
         if not drop_incompatible and any(
             current_counts[position] > allowed_counts[position] for position in current_counts
@@ -365,9 +358,7 @@ def scale_player(
             None,
         )
         if slot_order is None:
-            raise TeamError(
-                f"A formação {team['formation']} não tem vaga para mais um {position}."
-            )
+            raise TeamError(f"A formação {team['formation']} não tem vaga para mais um {position}.")
         connection.execute(
             """
             INSERT INTO team_lineups (discord_user_id, slot_order, player_id, position)
@@ -488,8 +479,8 @@ def get_team_statistics(
         if fixture["is_final"] and fixture["winner_user_id"]:
             outcome = "V" if fixture["winner_user_id"] == user_id else "D"
         else:
-            outcome = "V" if own_goals > opponent_goals else (
-                "D" if own_goals < opponent_goals else "E"
+            outcome = (
+                "V" if own_goals > opponent_goals else ("D" if own_goals < opponent_goals else "E")
             )
         form.append(outcome)
         events = json.loads(fixture["events_json"] or "{}")

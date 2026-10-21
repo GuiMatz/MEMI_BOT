@@ -34,57 +34,167 @@ SINGLE_NAME_MIN_RAW = 80
 LEGEND_OVERALLS = {
     99: ("Pelé", "Diego Maradona", "Lionel Messi", "Cristiano Ronaldo"),
     98: (
-        "Alfredo Di Stéfano", "Franz Beckenbauer", "Zinedine Zidane", "Ronaldo Fenômeno",
-        "Johan Cruyff", "Ferenc Puskás",
+        "Alfredo Di Stéfano",
+        "Franz Beckenbauer",
+        "Zinedine Zidane",
+        "Ronaldo Fenômeno",
+        "Johan Cruyff",
+        "Ferenc Puskás",
     ),
     97: (
-        "Paolo Maldini", "Michel Platini", "Garrincha", "Eusébio", "Lev Yashin",
-        "Ronaldinho Gaúcho", "Gerd Müller", "Marco van Basten", "Zico", "Franco Baresi",
-        "Xavi Hernández", "Andrés Iniesta", "George Best",
+        "Paolo Maldini",
+        "Michel Platini",
+        "Garrincha",
+        "Eusébio",
+        "Lev Yashin",
+        "Ronaldinho Gaúcho",
+        "Gerd Müller",
+        "Marco van Basten",
+        "Zico",
+        "Franco Baresi",
+        "Xavi Hernández",
+        "Andrés Iniesta",
+        "George Best",
     ),
     96: (
-        "Thierry Henry", "Romário", "Roberto Baggio", "Bobby Charlton", "Kaká", "Cafu",
-        "Roberto Carlos", "Gianluigi Buffon", "Lothar Matthäus", "Andrea Pirlo", "Luís Figo",
-        "Rivaldo", "Karl-Heinz Rummenigge", "Zlatan Ibrahimović", "Robert Lewandowski",
-        "Luka Modrić", "Iker Casillas", "Manuel Neuer", "Fabio Cannavaro", "Sócrates",
-        "Bobby Moore", "Kevin De Bruyne", "Neymar",
+        "Thierry Henry",
+        "Romário",
+        "Roberto Baggio",
+        "Bobby Charlton",
+        "Kaká",
+        "Cafu",
+        "Roberto Carlos",
+        "Gianluigi Buffon",
+        "Lothar Matthäus",
+        "Andrea Pirlo",
+        "Luís Figo",
+        "Rivaldo",
+        "Karl-Heinz Rummenigge",
+        "Zlatan Ibrahimović",
+        "Robert Lewandowski",
+        "Luka Modrić",
+        "Iker Casillas",
+        "Manuel Neuer",
+        "Fabio Cannavaro",
+        "Sócrates",
+        "Bobby Moore",
+        "Kevin De Bruyne",
+        "Neymar",
     ),
     95: (
-        "Raúl González", "Steven Gerrard", "Frank Lampard", "Wayne Rooney",
-        "Andriy Shevchenko", "Gabriel Batistuta", "Alessandro Del Piero", "Francesco Totti",
-        "Clarence Seedorf", "Ruud Gullit", "Frank Rijkaard", "Dennis Bergkamp",
-        "Hristo Stoichkov", "Roberto Rivellino", "Jairzinho", "Didi", "Nilton Santos",
-        "Carlos Alberto Torres", "Philipp Lahm", "Sergio Ramos", "Carles Puyol",
-        "Alessandro Nesta", "Virgil van Dijk", "Oliver Kahn", "Dino Zoff", "Gordon Banks",
-        "Peter Schmeichel", "Toni Kroos", "Paul Scholes", "Mohamed Salah", "Harry Kane",
-        "Karim Benzema", "Luis Suárez", "Samuel Eto'o", "Didier Drogba", "Arjen Robben",
-        "Franck Ribéry", "Eden Hazard", "Juan Román Riquelme", "Pavel Nedvěd",
-        "Michael Laudrup", "Ryan Giggs", "Javier Zanetti", "Daniel Passarella",
-        "Mario Kempes", "Elías Figueroa", "Gaetano Scirea", "Giacinto Facchetti",
-        "Sandro Mazzola", "Gianni Rivera", "Fritz Walter", "Uwe Seeler", "Kenny Dalglish",
-        "Eric Cantona", "Paolo Rossi",
+        "Raúl González",
+        "Steven Gerrard",
+        "Frank Lampard",
+        "Wayne Rooney",
+        "Andriy Shevchenko",
+        "Gabriel Batistuta",
+        "Alessandro Del Piero",
+        "Francesco Totti",
+        "Clarence Seedorf",
+        "Ruud Gullit",
+        "Frank Rijkaard",
+        "Dennis Bergkamp",
+        "Hristo Stoichkov",
+        "Roberto Rivellino",
+        "Jairzinho",
+        "Didi",
+        "Nilton Santos",
+        "Carlos Alberto Torres",
+        "Philipp Lahm",
+        "Sergio Ramos",
+        "Carles Puyol",
+        "Alessandro Nesta",
+        "Virgil van Dijk",
+        "Oliver Kahn",
+        "Dino Zoff",
+        "Gordon Banks",
+        "Peter Schmeichel",
+        "Toni Kroos",
+        "Paul Scholes",
+        "Mohamed Salah",
+        "Harry Kane",
+        "Karim Benzema",
+        "Luis Suárez",
+        "Samuel Eto'o",
+        "Didier Drogba",
+        "Arjen Robben",
+        "Franck Ribéry",
+        "Eden Hazard",
+        "Juan Román Riquelme",
+        "Pavel Nedvěd",
+        "Michael Laudrup",
+        "Ryan Giggs",
+        "Javier Zanetti",
+        "Daniel Passarella",
+        "Mario Kempes",
+        "Elías Figueroa",
+        "Gaetano Scirea",
+        "Giacinto Facchetti",
+        "Sandro Mazzola",
+        "Gianni Rivera",
+        "Fritz Walter",
+        "Uwe Seeler",
+        "Kenny Dalglish",
+        "Eric Cantona",
+        "Paolo Rossi",
     ),
 }
 DEFAULT_LEGEND_OVERALL = 92
 
 COUNTRIES_EN = {
-    "Alemanha": "Germany", "Argentina": "Argentina", "Argélia": "Algeria",
-    "Austrália": "Australia", "Brasil": "Brazil", "Bulgária": "Bulgaria",
-    "Bélgica": "Belgium", "Bósnia": "Bosnia-Herzegovina", "Camarões": "Cameroon",
-    "Chile": "Chile", "Colômbia": "Colombia", "Coreia do Sul": "Korea, South",
-    "Costa Rica": "Costa Rica", "Costa do Marfim": "Cote d'Ivoire", "Croácia": "Croatia",
-    "Dinamarca": "Denmark", "Egito": "Egypt", "Escócia": "Scotland",
-    "Eslovênia": "Slovenia", "Espanha": "Spain", "Finlândia": "Finland",
-    "França": "France", "Gana": "Ghana", "Grécia": "Greece", "Holanda": "Netherlands",
-    "Hungria": "Hungary", "Inglaterra": "England", "Irlanda": "Ireland",
-    "Irlanda do Norte": "Northern Ireland", "Irã": "Iran", "Itália": "Italy",
-    "Japão": "Japan", "Libéria": "Liberia", "Montenegro": "Montenegro",
-    "México": "Mexico", "Nigéria": "Nigeria", "Noruega": "Norway",
-    "Paraguai": "Paraguay", "País de Gales": "Wales", "Peru": "Peru",
-    "Polônia": "Poland", "Portugal": "Portugal", "República Tcheca": "Czech Republic",
-    "Romênia": "Romania", "Rússia": "Russia", "Senegal": "Senegal", "Suécia": "Sweden",
-    "Suíça": "Switzerland", "Sérvia": "Serbia", "Turquia": "Türkiye",
-    "Ucrânia": "Ukraine", "Uruguai": "Uruguay", "Áustria": "Austria",
+    "Alemanha": "Germany",
+    "Argentina": "Argentina",
+    "Argélia": "Algeria",
+    "Austrália": "Australia",
+    "Brasil": "Brazil",
+    "Bulgária": "Bulgaria",
+    "Bélgica": "Belgium",
+    "Bósnia": "Bosnia-Herzegovina",
+    "Camarões": "Cameroon",
+    "Chile": "Chile",
+    "Colômbia": "Colombia",
+    "Coreia do Sul": "Korea, South",
+    "Costa Rica": "Costa Rica",
+    "Costa do Marfim": "Cote d'Ivoire",
+    "Croácia": "Croatia",
+    "Dinamarca": "Denmark",
+    "Egito": "Egypt",
+    "Escócia": "Scotland",
+    "Eslovênia": "Slovenia",
+    "Espanha": "Spain",
+    "Finlândia": "Finland",
+    "França": "France",
+    "Gana": "Ghana",
+    "Grécia": "Greece",
+    "Holanda": "Netherlands",
+    "Hungria": "Hungary",
+    "Inglaterra": "England",
+    "Irlanda": "Ireland",
+    "Irlanda do Norte": "Northern Ireland",
+    "Irã": "Iran",
+    "Itália": "Italy",
+    "Japão": "Japan",
+    "Libéria": "Liberia",
+    "Montenegro": "Montenegro",
+    "México": "Mexico",
+    "Nigéria": "Nigeria",
+    "Noruega": "Norway",
+    "Paraguai": "Paraguay",
+    "País de Gales": "Wales",
+    "Peru": "Peru",
+    "Polônia": "Poland",
+    "Portugal": "Portugal",
+    "República Tcheca": "Czech Republic",
+    "Romênia": "Romania",
+    "Rússia": "Russia",
+    "Senegal": "Senegal",
+    "Suécia": "Sweden",
+    "Suíça": "Switzerland",
+    "Sérvia": "Serbia",
+    "Turquia": "Türkiye",
+    "Ucrânia": "Ukraine",
+    "Uruguai": "Uruguay",
+    "Áustria": "Austria",
 }
 # Grafias alternativas que as fontes usam para o mesmo país.
 COUNTRY_ALIASES = {
@@ -120,7 +230,9 @@ def _slug(name: str) -> str:
     return normalize_player_name(name).replace(" ", "-")
 
 
-def _seed_simple(connection, table: str, items: list[dict[str, str]], columns: dict[str, str]) -> int:
+def _seed_simple(
+    connection, table: str, items: list[dict[str, str]], columns: dict[str, str]
+) -> int:
     """Insere os itens cujo nome (e dono, nos mascotes) ainda não existe na tabela.
 
     `columns` liga cada chave do JSON à coluna do banco.
@@ -163,12 +275,10 @@ def _seed_legends(connection, legends: list[dict[str, str]]) -> dict[str, int]:
         )
     }
     by_name: dict[str, list[dict[str, Any]]] = {}
-    for row in connection.execute(
-        """
+    for row in connection.execute("""
         SELECT id, name, nationality, overall, overall_source
         FROM players WHERE COALESCE(overall_source, '') NOT IN ('Cartola', 'Lenda')
-        """
-    ):
+        """):
         by_name.setdefault(normalize_player_name(row["name"]), []).append(dict(row))
 
     for legend in legends:
@@ -179,12 +289,14 @@ def _seed_legends(connection, legends: list[dict[str, str]]) -> dict[str, int]:
             key = normalize_player_name(legend["name"])
             countries = _country_keys(legend["country"])
             candidates = [
-                player for player in by_name.get(key, [])
+                player
+                for player in by_name.get(key, [])
                 if normalize_player_name(player["nationality"]) in countries
             ]
             if " " not in key:
                 candidates = [
-                    player for player in candidates
+                    player
+                    for player in candidates
                     if (player["overall"] or 0) >= SINGLE_NAME_MIN_RAW
                 ]
             if len(candidates) == 1:
@@ -239,14 +351,18 @@ def seed_encyclopedia(database_path: str | Path = DATABASE_PATH) -> dict[str, in
                 connection, "coaches", data["coaches"], {"name": "name", "country": "nationality"}
             ),
             "stadiums": _seed_simple(
-                connection, "stadiums", data["stadiums"],
+                connection,
+                "stadiums",
+                data["stadiums"],
                 {"name": "name", "city": "city", "country": "country"},
             ),
             "leagues": _seed_simple(
                 connection, "leagues", data["leagues"], {"name": "name", "country": "country"}
             ),
             "mascots": _seed_simple(
-                connection, "mascots", data["mascots"],
+                connection,
+                "mascots",
+                data["mascots"],
                 {"name": "name", "owner": "owner", "country": "country"},
             ),
         }
@@ -268,7 +384,9 @@ def prepare_game_data(database_path: str | Path = DATABASE_PATH) -> dict[str, in
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--database", type=Path, default=DATABASE_PATH)
     args = parser.parse_args()
     initialize_database(args.database)

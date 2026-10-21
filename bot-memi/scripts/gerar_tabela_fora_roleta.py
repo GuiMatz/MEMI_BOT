@@ -37,10 +37,7 @@ def exclusion_reason(row: dict[str, object]) -> str:
 def generate_table(database_path: Path, output_path: Path) -> int:
     initialize_database(database_path)
     with connect(database_path) as connection:
-        rows = [
-            dict(row)
-            for row in connection.execute(
-                f"""
+        rows = [dict(row) for row in connection.execute(f"""
                 SELECT id, name, display_name, club_name, game_position, overall,
                        activity_status, phase2_candidate, needs_position_review,
                        photo_path
@@ -51,9 +48,7 @@ def generate_table(database_path: Path, output_path: Path) -> int:
                     overall DESC,
                     display_name COLLATE NOCASE,
                     id
-                """
-            )
-        ]
+                """)]
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fieldnames = (

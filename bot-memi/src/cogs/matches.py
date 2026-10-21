@@ -88,7 +88,9 @@ class MatchesCog(commands.Cog):
         operation = normalize_player_name(operation) if operation else None
         if operation == "inscrever":
             if context.guild is None:
-                await context.reply("O campeonato só funciona em um servidor.", mention_author=False)
+                await context.reply(
+                    "O campeonato só funciona em um servidor.", mention_author=False
+                )
                 return
             try:
                 register_team(
@@ -108,7 +110,9 @@ class MatchesCog(commands.Cog):
 
         if operation == "iniciar":
             if context.guild is None:
-                await context.reply("O campeonato só funciona em um servidor.", mention_author=False)
+                await context.reply(
+                    "O campeonato só funciona em um servidor.", mention_author=False
+                )
                 return
             if not context.author.guild_permissions.manage_guild:
                 await context.reply(
@@ -124,9 +128,7 @@ class MatchesCog(commands.Cog):
             except (ChampionshipError, TeamError) as error:
                 await context.reply(str(error), mention_author=False)
                 return
-            messages = self._split_message(
-                self._format_championship(table, include_final=False)
-            )
+            messages = self._split_message(self._format_championship(table, include_final=False))
             await context.reply(messages[0], mention_author=False)
             for message in messages[1:]:
                 await context.send(message)
@@ -219,8 +221,7 @@ class MatchesCog(commands.Cog):
         )
         if table is None:
             await context.reply(
-                "Ainda não há campeonato hoje. Inscreva seu time com "
-                "`mm!campeonato inscrever`.",
+                "Ainda não há campeonato hoje. Inscreva seu time com " "`mm!campeonato inscrever`.",
                 mention_author=False,
             )
             return
@@ -232,15 +233,10 @@ class MatchesCog(commands.Cog):
     @tasks.loop(time=time(hour=19, minute=0, tzinfo=CHAMPIONSHIP_TIMEZONE))
     async def daily_scheduler(self) -> None:
         with connect(self.database_path) as connection:
-            settings = [
-                dict(row)
-                for row in connection.execute(
-                    """
+            settings = [dict(row) for row in connection.execute("""
                     SELECT guild_id, channel_id FROM championship_settings
                     WHERE enabled = 1
-                    """
-                )
-            ]
+                    """)]
         for setting in settings:
             try:
                 result = play_championship(
@@ -325,10 +321,7 @@ class MatchesCog(commands.Cog):
 
     @staticmethod
     def _format_championship(table: dict, *, include_final: bool = True) -> str:
-        names = {
-            team["discord_user_id"]: team["team_name"]
-            for team in table["entries"]
-        }
+        names = {team["discord_user_id"]: team["team_name"] for team in table["entries"]}
         lines = [
             f"**{index}. {team['team_name']}** — "
             f"{team['points']} pts · {team['wins']}V "
@@ -338,9 +331,7 @@ class MatchesCog(commands.Cog):
         ]
         if not lines:
             lines = ["Nenhum time inscrito."]
-        group_fixtures = [
-            fixture for fixture in table["fixtures"] if not fixture["is_final"]
-        ]
+        group_fixtures = [fixture for fixture in table["fixtures"] if not fixture["is_final"]]
         if group_fixtures:
             lines.extend(["", "**Jogos da fase todos-contra-todos:**"])
             lines.extend(
@@ -366,8 +357,7 @@ class MatchesCog(commands.Cog):
             lines.extend(
                 [
                     "",
-                    f"**Final:** {home} {final['home_goals']} × "
-                    f"{final['away_goals']} {away}",
+                    f"**Final:** {home} {final['home_goals']} × " f"{final['away_goals']} {away}",
                 ]
             )
             if final["winner_user_id"]:

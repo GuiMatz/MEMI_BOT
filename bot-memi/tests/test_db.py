@@ -21,9 +21,7 @@ class DatabaseSchemaTests(unittest.TestCase):
         with connect(self.database_path) as connection:
             tables = {
                 row["name"]
-                for row in connection.execute(
-                    "SELECT name FROM sqlite_master WHERE type = 'table'"
-                )
+                for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
             }
             self.assertTrue(
                 {
@@ -82,14 +80,12 @@ class DatabaseSchemaTests(unittest.TestCase):
                 "INSERT INTO players (name) VALUES (?)", ("Jogador de teste",)
             ).lastrowid
             connection.execute(
-                "INSERT INTO player_sources (source, source_id, player_id) "
-                "VALUES (?, ?, ?)",
+                "INSERT INTO player_sources (source, source_id, player_id) " "VALUES (?, ?, ?)",
                 ("transfermarkt", "123", player_id),
             )
             with self.assertRaises(sqlite3.IntegrityError):
                 connection.execute(
-                    "INSERT INTO player_sources (source, source_id, player_id) "
-                    "VALUES (?, ?, ?)",
+                    "INSERT INTO player_sources (source, source_id, player_id) " "VALUES (?, ?, ?)",
                     ("transfermarkt", "123", player_id),
                 )
 
@@ -116,15 +112,13 @@ class DatabaseSchemaTests(unittest.TestCase):
         initialize_database(self.database_path)
         with connect(self.database_path) as connection:
             columns = {
-                row["name"]
-                for row in connection.execute("PRAGMA table_info(player_sources)")
+                row["name"] for row in connection.execute("PRAGMA table_info(player_sources)")
             }
             player_columns = {
                 row["name"] for row in connection.execute("PRAGMA table_info(players)")
             }
             versions = {
-                row["version"]
-                for row in connection.execute("SELECT version FROM schema_version")
+                row["version"] for row in connection.execute("SELECT version FROM schema_version")
             }
             self.assertTrue(
                 {
@@ -167,17 +161,13 @@ class DatabaseSchemaTests(unittest.TestCase):
                 )
                 """)
             connection.execute(
-                "INSERT INTO game_users (discord_user_id, display_name) "
-                "VALUES ('123', 'Pessoa')"
+                "INSERT INTO game_users (discord_user_id, display_name) " "VALUES ('123', 'Pessoa')"
             )
 
         initialize_database(self.database_path)
 
         with connect(self.database_path) as connection:
-            columns = {
-                row["name"]
-                for row in connection.execute("PRAGMA table_info(game_users)")
-            }
+            columns = {row["name"] for row in connection.execute("PRAGMA table_info(game_users)")}
             self.assertIn("last_claim_at", columns)
             self.assertEqual(
                 connection.execute(
@@ -186,8 +176,7 @@ class DatabaseSchemaTests(unittest.TestCase):
                 "Pessoa",
             )
             versions = {
-                row["version"]
-                for row in connection.execute("SELECT version FROM schema_version")
+                row["version"] for row in connection.execute("SELECT version FROM schema_version")
             }
             self.assertEqual(versions, set(range(1, 13)))
 
@@ -253,9 +242,7 @@ class DatabaseSchemaTests(unittest.TestCase):
         initialize_database(self.database_path)
 
         with connect(self.database_path) as connection:
-            columns = {
-                row["name"] for row in connection.execute("PRAGMA table_info(players)")
-            }
+            columns = {row["name"] for row in connection.execute("PRAGMA table_info(players)")}
             player = connection.execute("SELECT * FROM players WHERE id = 7").fetchone()
             adjustment = connection.execute(
                 "SELECT overall FROM overall_adjustments WHERE player_id = 7"
@@ -265,9 +252,7 @@ class DatabaseSchemaTests(unittest.TestCase):
             self.assertEqual(player["club_name"], "Clube Teste")
             self.assertEqual(player["display_name"], "Jogador")
             self.assertEqual(adjustment["overall"], 75)
-            self.assertEqual(
-                connection.execute("PRAGMA foreign_key_check").fetchall(), []
-            )
+            self.assertEqual(connection.execute("PRAGMA foreign_key_check").fetchall(), [])
             self.assertEqual(
                 connection.execute(
                     "SELECT COUNT(*) FROM player_sources WHERE player_id = ?",
@@ -277,8 +262,8 @@ class DatabaseSchemaTests(unittest.TestCase):
             )
 
     def test_schema_v8_preserves_roll_usage_when_expanding_limit(self):
-            with connect(self.database_path) as connection:
-                connection.executescript("""
+        with connect(self.database_path) as connection:
+            connection.executescript("""
                     CREATE TABLE schema_version (
                         version INTEGER PRIMARY KEY,
                         applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -306,29 +291,27 @@ class DatabaseSchemaTests(unittest.TestCase):
                     VALUES ('123', '2026-10-18T12:10:00+00:00', 10);
                     """)
 
-            initialize_database(self.database_path)
+        initialize_database(self.database_path)
 
-            with connect(self.database_path) as connection:
-                self.assertIn(
-                    "rolls_used > 0",
-                    connection.execute(
-                        "SELECT sql FROM sqlite_master WHERE name = 'roll_cycles'"
-                    ).fetchone()["sql"],
-                )
-                self.assertEqual(
-                    connection.execute(
-                        "SELECT rolls_used FROM roll_cycles WHERE discord_user_id = '123'"
-                    ).fetchone()["rolls_used"],
-                    10,
-                )
-                columns = {
-                    row["name"] for row in connection.execute("PRAGMA table_info(game_users)")
-                }
-                self.assertIn("last_daily_at", columns)
-                self.assertEqual(
-                    connection.execute("PRAGMA foreign_key_check").fetchall(),
-                    [],
-                )
+        with connect(self.database_path) as connection:
+            self.assertIn(
+                "rolls_used > 0",
+                connection.execute(
+                    "SELECT sql FROM sqlite_master WHERE name = 'roll_cycles'"
+                ).fetchone()["sql"],
+            )
+            self.assertEqual(
+                connection.execute(
+                    "SELECT rolls_used FROM roll_cycles WHERE discord_user_id = '123'"
+                ).fetchone()["rolls_used"],
+                10,
+            )
+            columns = {row["name"] for row in connection.execute("PRAGMA table_info(game_users)")}
+            self.assertIn("last_daily_at", columns)
+            self.assertEqual(
+                connection.execute("PRAGMA foreign_key_check").fetchall(),
+                [],
+            )
 
     def test_transfermarkt_player_id_is_unique(self):
         initialize_database(self.database_path)

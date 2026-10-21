@@ -98,8 +98,7 @@ class DismissConfirmationView(discord.ui.View):
             return
         await interaction.response.edit_message(
             content=(
-                f"Jogador **{self.player_name}** liberado. "
-                f"Você recebeu **{refund} Memilets**."
+                f"Jogador **{self.player_name}** liberado. " f"Você recebeu **{refund} Memilets**."
             ),
             view=None,
         )
@@ -133,8 +132,7 @@ class EconomyCog(commands.Cog):
             )
             return
         await context.reply(
-            f"🎁 Você recebeu **{reward.amount} Memilets** "
-            f"(máx: **{reward.cap}**).",
+            f"🎁 Você recebeu **{reward.amount} Memilets** " f"(máx: **{reward.cap}**).",
             mention_author=False,
         )
 
@@ -168,7 +166,9 @@ class EconomyCog(commands.Cog):
             )
             balance = get_wallet(context.author.id, self.database_path)["memilets"]
             embed.set_footer(
-                text=f"Saldo: {balance:,} Memilets · Star Wish extra só sai em crate.".replace(",", ".")
+                text=f"Saldo: {balance:,} Memilets · Star Wish extra só sai em crate.".replace(
+                    ",", "."
+                )
             )
             await context.reply(embed=embed, mention_author=False)
             return
@@ -250,9 +250,7 @@ class EconomyCog(commands.Cog):
             await confirm(lambda **kwargs: context.reply(mention_author=False, **kwargs), player)
             return
         if not candidates:
-            await context.reply(
-                f"Não achei **{query[:60]}** no seu elenco.", mention_author=False
-            )
+            await context.reply(f"Não achei **{query[:60]}** no seu elenco.", mention_author=False)
             return
 
         async def chosen(interaction: discord.Interaction, picked: dict) -> None:
@@ -294,7 +292,9 @@ class EconomyCog(commands.Cog):
         ]
         embed = discord.Embed(
             title=f"Wishlist de {context.author.display_name}",
-            description=header + "\n\n" + ("\n".join(lines) or "Nenhuma wish ainda. Use `mm!wish <nome>`."),
+            description=header
+            + "\n\n"
+            + ("\n".join(lines) or "Nenhuma wish ainda. Use `mm!wish <nome>`."),
             color=discord.Color.gold(),
         )
         embed.set_footer(text="⭐ = Star Wish · mm!wish <nome> adiciona ou remove")
@@ -358,7 +358,8 @@ class EconomyCog(commands.Cog):
     ) -> None:
         header = self._wish_header(context.author.id, context.author.display_name)
         wishes = [
-            wish for wish in list_wishes(context.author.id, self.database_path)
+            wish
+            for wish in list_wishes(context.author.id, self.database_path)
             if wish["wish_type"] == wish_type
         ]
         label = "Star Wishes" if wish_type == "star" else "Wishes"

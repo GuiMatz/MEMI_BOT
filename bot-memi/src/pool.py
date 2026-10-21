@@ -28,9 +28,7 @@ def get_roleta_pool(
     if limit is not None:
         query += " LIMIT ?"
     with connect(database_path) as connection:
-        rows = connection.execute(
-            query, (limit,) if limit is not None else ()
-        ).fetchall()
+        rows = connection.execute(query, (limit,) if limit is not None else ()).fetchall()
         return [dict(row) for row in rows]
 
 

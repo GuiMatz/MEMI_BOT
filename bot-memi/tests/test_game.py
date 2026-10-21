@@ -66,7 +66,11 @@ class GameAccountTests(unittest.TestCase):
         self.assertTrue(claim_player(player_id, 123, self.database_path))
 
         root = Path(self.temporary_directory.name)
-        for folder, name in (("teams/camisas", "a.png"), ("teams/camisas", "b.png"), ("teams/escudos", "c.png")):
+        for folder, name in (
+            ("teams/camisas", "a.png"),
+            ("teams/camisas", "b.png"),
+            ("teams/escudos", "c.png"),
+        ):
             path = root / "data" / "assets" / "brasfoot" / folder / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(b"x")
@@ -97,7 +101,6 @@ class GameAccountTests(unittest.TestCase):
             [player["name"] for player in players],
             ["Jogador alto", "Jogador baixo"],
         )
-
 
     def test_player_search_ignores_accents_and_roster_requires_ownership(self):
         player_id = self.add_player(

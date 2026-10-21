@@ -204,12 +204,10 @@ class RollTests(unittest.TestCase):
         self.add_player()
         register_user(100, "Pessoa", self.database_path)
         with connect(self.database_path) as connection:
-            connection.execute(
-                """
+            connection.execute("""
                 INSERT INTO user_upgrades (discord_user_id, upgrade_key, level)
                 VALUES ('100', 'rolls', 1)
-                """
-            )
+                """)
         for index in range(11):
             result = roll_player(
                 100,
@@ -227,13 +225,11 @@ class RollTests(unittest.TestCase):
         self.add_player()
         register_user(100, "Pessoa", self.database_path)
         with connect(self.database_path) as connection:
-            connection.execute(
-                """
+            connection.execute("""
                 INSERT INTO user_upgrades
                     (discord_user_id, upgrade_key, roll_tokens)
                 VALUES ('100', 'rolls', 1)
-                """
-            )
+                """)
         for index in range(10):
             roll_player(
                 100,
@@ -252,12 +248,10 @@ class RollTests(unittest.TestCase):
         self.assertEqual(final_roll.rolls_remaining, 0)
         with connect(self.database_path) as connection:
             self.assertEqual(
-                connection.execute(
-                    """
+                connection.execute("""
                     SELECT roll_tokens FROM user_upgrades
                     WHERE discord_user_id = '100' AND upgrade_key = 'rolls'
-                    """
-                ).fetchone()["roll_tokens"],
+                    """).fetchone()["roll_tokens"],
                 0,
             )
 

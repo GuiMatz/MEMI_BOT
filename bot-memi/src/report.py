@@ -35,8 +35,7 @@ def build_report(database_path: str | Path = DATABASE_PATH) -> dict[str, Any]:
                 FROM player_sources GROUP BY source ORDER BY source
                 """)}
         positions = {
-            row["position"] or "(não mapeada)": row["total"]
-            for row in connection.execute("""
+            row["position"] or "(não mapeada)": row["total"] for row in connection.execute("""
                 SELECT game_position AS position, COUNT(*) AS total
                 FROM players GROUP BY game_position ORDER BY game_position
                 """)
@@ -144,9 +143,7 @@ def build_report(database_path: str | Path = DATABASE_PATH) -> dict[str, Any]:
         birth_date = str(row["birth_date"])[:10]
         if normalized_name and birth_date:
             duplicate_name_births[(normalized_name, birth_date)] += 1
-    duplicate_name_birth_groups = sum(
-        count > 1 for count in duplicate_name_births.values()
-    )
+    duplicate_name_birth_groups = sum(count > 1 for count in duplicate_name_births.values())
     duplicate_name_birth_players = sum(
         count - 1 for count in duplicate_name_births.values() if count > 1
     )
@@ -187,13 +184,9 @@ def print_report(report: dict[str, Any]) -> None:
             print(f"  {source}: {count:,}")
     else:
         print("  (nenhuma fonte importada)")
+    print("Jogadores confirmados em mais de uma fonte: " f"{report['cross_source_players']:,}")
     print(
-        "Jogadores confirmados em mais de uma fonte: "
-        f"{report['cross_source_players']:,}"
-    )
-    print(
-        "Candidatos de cruzamento pendentes de revisão: "
-        f"{report['pending_match_candidates']:,}"
+        "Candidatos de cruzamento pendentes de revisão: " f"{report['pending_match_candidates']:,}"
     )
     print(
         "Importação EA: "
@@ -212,9 +205,7 @@ def print_report(report: dict[str, Any]) -> None:
     for position, count in report["positions"].items():
         print(f"  {position}: {count:,}")
     print(f"Sem posição de jogo: {report['players_without_position']:,}")
-    print(
-        "Jogadores marcados para revisão de posição: " f"{report['position_review']:,}"
-    )
+    print("Jogadores marcados para revisão de posição: " f"{report['position_review']:,}")
     print("Jogadores por faixa de overall:")
     for band, count in report["overall_bands"].items():
         print(f"  {band}: {count:,}")

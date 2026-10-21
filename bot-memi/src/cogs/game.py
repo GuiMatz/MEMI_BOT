@@ -67,7 +67,7 @@ class PagedView(discord.ui.View):
     def __init__(self, title: str, lines: list[str], *, color=None, footer: str = ""):
         super().__init__(timeout=300)
         self.title = title
-        self.pages = [lines[index:index + PAGE_SIZE] for index in range(0, len(lines), PAGE_SIZE)]
+        self.pages = [lines[index : index + PAGE_SIZE] for index in range(0, len(lines), PAGE_SIZE)]
         self.pages = self.pages or [[]]
         self.color = color or discord.Color.gold()
         self.footer = footer
@@ -210,9 +210,7 @@ GENERAL_HELP_PAGES = (
     (
         "**FUT.AE — comandos do jogo**\n"
         "Use `mm!fut.ae` para abrir diretamente esta página.\n\n"
-        + "\n\n".join(
-            f"{name}\n{value}" for name, value in FUTAE_SECTIONS
-        )
+        + "\n\n".join(f"{name}\n{value}" for name, value in FUTAE_SECTIONS)
     ),
 )
 
@@ -255,9 +253,7 @@ class GameCog(commands.Cog):
         ]
         cartola_free, cartola_total = counts["cartola"]
         if cartola_total:
-            lines.append(
-                f"🟠 Cartola: **{_thousands(cartola_free)}/{_thousands(cartola_total)}**"
-            )
+            lines.append(f"🟠 Cartola: **{_thousands(cartola_free)}/{_thousands(cartola_total)}**")
         embed = discord.Embed(
             title="📦 Ainda livres no FUT.AE",
             description="\n".join(lines) or "Nenhum jogador elegível no pool.",
@@ -313,9 +309,7 @@ class GameCog(commands.Cog):
             else None
         )
         kwargs = {"file": file} if file else {}
-        await context.reply(
-            content=content, embed=embed, view=view, mention_author=False, **kwargs
-        )
+        await context.reply(content=content, embed=embed, view=view, mention_author=False, **kwargs)
 
     @commands.command(name="top")
     async def top_players(
@@ -378,7 +372,9 @@ class GameCog(commands.Cog):
                     filters["min_overall"] = rating
                     filters["max_overall"] = rating
             elif category:
-                filters["club_query" if category.group(1).casefold() == "clube" else "league_query"] = category.group(2)
+                filters[
+                    "club_query" if category.group(1).casefold() == "clube" else "league_query"
+                ] = category.group(2)
             else:
                 await context.reply(
                     "Filtro inválido. Use `posicao CA`, `overall >= 80`, "
@@ -442,12 +438,8 @@ class GameCog(commands.Cog):
             ),
             inline=True,
         )
-        embed.add_field(
-            name="⏱️ Claim", value=_timestamp(status.claim_available_at), inline=True
-        )
-        embed.add_field(
-            name="🎁 Daily", value=_timestamp(status.daily_available_at), inline=True
-        )
+        embed.add_field(name="⏱️ Claim", value=_timestamp(status.claim_available_at), inline=True)
+        embed.add_field(name="🎁 Daily", value=_timestamp(status.daily_available_at), inline=True)
         embed.add_field(
             name="📦 Crates",
             value=f"Garantia {status.crate_pity}/50",

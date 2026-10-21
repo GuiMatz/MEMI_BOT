@@ -13,7 +13,9 @@ class RollImageTests(unittest.TestCase):
         image_file = roll_image_file({})
 
         try:
-            expected = ("silhueta.jpg", "JPEG") if PLACEHOLDER_PATH.is_file() else ("silhueta.png", "PNG")
+            expected = (
+                ("silhueta.jpg", "JPEG") if PLACEHOLDER_PATH.is_file() else ("silhueta.png", "PNG")
+            )
             self.assertEqual(image_file.filename, expected[0])
             image_file.fp.seek(0)
             with Image.open(image_file.fp) as image:

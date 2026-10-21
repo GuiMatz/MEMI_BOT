@@ -21,8 +21,13 @@ TEST_RATINGS = [80, 75, 90, 77, 60, 50]
 def _test_lineup(overall: int, prefix: str) -> list[dict]:
     positions = ["GOL", "ZAG", "ZAG", "LE", "LD", "MC", "MC", "MEI", "PE", "PD", "CA"]
     return [
-        {"id": index + 1, "name": f"{prefix} {position}", "display_name": f"{prefix} {position}",
-         "position": position, "overall": overall}
+        {
+            "id": index + 1,
+            "name": f"{prefix} {position}",
+            "display_name": f"{prefix} {position}",
+            "position": position,
+            "overall": overall,
+        }
         for index, position in enumerate(positions)
     ]
 
@@ -80,8 +85,9 @@ class AdminCog(commands.Cog):
 
     async def cog_check(self, context: commands.Context) -> bool:
         if context.author.id != self.owner_id:
-            await context.reply("Este comando é exclusivo da conta administrativa do MEMI.",
-                                mention_author=False)
+            await context.reply(
+                "Este comando é exclusivo da conta administrativa do MEMI.", mention_author=False
+            )
             return False
         return True
 
@@ -115,15 +121,19 @@ class AdminCog(commands.Cog):
             await context.reply("Informe entre 2 e 30 times.", mention_author=False)
             return
         rng = random.SystemRandom()
-        ratings = {f"Teste {index + 1}": TEST_RATINGS[index % len(TEST_RATINGS)] for index in range(teams)}
+        ratings = {
+            f"Teste {index + 1}": TEST_RATINGS[index % len(TEST_RATINGS)] for index in range(teams)
+        }
         table = {name: {"pts": 0, "gf": 0, "ga": 0} for name in ratings}
         names = list(ratings)
         results = []
         for home_index, home in enumerate(names):
-            for away in names[home_index + 1:]:
+            for away in names[home_index + 1 :]:
                 result = simulate_match(
-                    home, _test_lineup(ratings[home], "H"),
-                    away, _test_lineup(ratings[away], "A"),
+                    home,
+                    _test_lineup(ratings[home], "H"),
+                    away,
+                    _test_lineup(ratings[away], "A"),
                     rng=rng,
                 )
                 results.append(f"{home} {result.home_goals} × {result.away_goals} {away}")
@@ -133,10 +143,17 @@ class AdminCog(commands.Cog):
                 ):
                     table[name]["gf"] += scored
                     table[name]["ga"] += conceded
-                    table[name]["pts"] += 3 if scored > conceded else (1 if scored == conceded else 0)
+                    table[name]["pts"] += (
+                        3 if scored > conceded else (1 if scored == conceded else 0)
+                    )
         ranking = sorted(
             table.items(),
-            key=lambda item: (-item[1]["pts"], -(item[1]["gf"] - item[1]["ga"]), -item[1]["gf"], item[0]),
+            key=lambda item: (
+                -item[1]["pts"],
+                -(item[1]["gf"] - item[1]["ga"]),
+                -item[1]["gf"],
+                item[0],
+            ),
         )
         description = "\n".join(
             f"`{index}.` {name} ({ratings[name]}) — **{row['pts']} pts** · SG {row['gf'] - row['ga']}"

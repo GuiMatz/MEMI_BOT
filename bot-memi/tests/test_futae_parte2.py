@@ -95,7 +95,9 @@ class EncyclopediaTests(Case):
             }
         self.assertEqual(rows[neymar]["overall_source"], "Lenda")
         self.assertEqual(rows[common]["overall"], 55)
-        legend_marcos = next(row for row in rows.values() if row["display_name"] == "Marcos (Lenda)")
+        legend_marcos = next(
+            row for row in rows.values() if row["display_name"] == "Marcos (Lenda)"
+        )
         self.assertEqual(legend_marcos["overall_source"], "Lenda")
         self.assertEqual(find_duplicates(self.database_path), [])
 
@@ -106,7 +108,9 @@ class EncyclopediaTests(Case):
         self.assertIn("Urubu (Flamengo)", [entry["name"] for entry in mascots])
         kinds = {item["kind"] for item in search_catalog("maracana", self.database_path)}
         self.assertIn("Estádio", kinds)
-        self.assertIn("Técnico", {item["kind"] for item in search_catalog("guardiola", self.database_path)})
+        self.assertIn(
+            "Técnico", {item["kind"] for item in search_catalog("guardiola", self.database_path)}
+        )
 
 
 class PoolTests(Case):
@@ -124,8 +128,11 @@ class PoolTests(Case):
     def test_roll_can_draw_a_player_without_overall(self):
         self.add_player("Sem nota", overall=None, activity_status="unknown", phase2_candidate=1)
         result = roll_player(
-            1, "Pessoa", self.database_path,
-            now=datetime(2026, 10, 20, 15, 5, tzinfo=timezone.utc), rng=random.Random(1),
+            1,
+            "Pessoa",
+            self.database_path,
+            now=datetime(2026, 10, 20, 15, 5, tzinfo=timezone.utc),
+            rng=random.Random(1),
         )
         self.assertEqual(result.player["name"], "Sem nota")
         self.assertEqual(result.effective_overall, 60)
@@ -136,8 +143,18 @@ class ResolvePlayerTests(unittest.TestCase):
         {"id": 1, "name": "Khvicha Kvaratskhelia", "overall": 88},
         {"id": 2, "name": "Memi", "overall": 70},
         {"id": 3, "name": "Memis Silva", "overall": 75},
-        {"id": 4, "name": "João Pedro", "display_name": "João Pedro (Chelsea · 2001)", "overall": 80},
-        {"id": 5, "name": "João Pedro", "display_name": "João Pedro (Brighton · 2002)", "overall": 78},
+        {
+            "id": 4,
+            "name": "João Pedro",
+            "display_name": "João Pedro (Chelsea · 2001)",
+            "overall": 80,
+        },
+        {
+            "id": 5,
+            "name": "João Pedro",
+            "display_name": "João Pedro (Brighton · 2002)",
+            "overall": 78,
+        },
     ]
 
     def test_exact_name_wins_even_with_partial_matches(self):
@@ -178,7 +195,9 @@ class LogoAndLeagueTests(Case):
         register_user(1, "Pessoa", self.database_path)
         ensure_team(1, "Pessoa", self.database_path)
         set_team_field(1, "favorite_league", "brasileirao serie a", self.database_path)
-        self.assertEqual(get_team(1, self.database_path)["favorite_league"], "Campeonato Brasileiro Série A")
+        self.assertEqual(
+            get_team(1, self.database_path)["favorite_league"], "Campeonato Brasileiro Série A"
+        )
         with self.assertRaises(TeamError):
             set_team_field(1, "favorite_league", "liga inventada", self.database_path)
 

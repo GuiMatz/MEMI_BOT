@@ -96,9 +96,7 @@ class TradesCog(commands.Cog):
                 await context.reply(message, mention_author=False)
                 return
             await context.reply(
-                "✅ Troca concluída."
-                if status == "accepted"
-                else "Oferta de troca recusada.",
+                "✅ Troca concluída." if status == "accepted" else "Oferta de troca recusada.",
                 mention_author=False,
             )
             return
@@ -115,7 +113,9 @@ class TradesCog(commands.Cog):
             await context.reply("Não é possível trocar com um bot.", mention_author=False)
             return
         text = re.sub(r"<@!?\d+>", " ", arguments).strip()
-        coins = re.search(r"((?:\s+\d+){1,2})\s*$", text) if " por " in f" {text.casefold()} " else None
+        coins = (
+            re.search(r"((?:\s+\d+){1,2})\s*$", text) if " por " in f" {text.casefold()} " else None
+        )
         amounts = [int(value) for value in coins.group(1).split()] if coins else []
         if coins:
             text = text[: coins.start()].strip()

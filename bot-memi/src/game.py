@@ -24,8 +24,7 @@ IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".avif", ".j
 def get_collection_left(database_path=DATABASE_PATH) -> dict[str, Any]:
     """Conta o que ainda está livre, no total e por série de raridade."""
     with connect(database_path) as connection:
-        rows = connection.execute(
-            f"""
+        rows = connection.execute(f"""
             SELECT rarity_index({GAME_OVERALL_SQL}) AS tier,
                    COALESCE(p.overall_source, '') = 'Cartola' AS cartola,
                    COUNT(*) AS total,
@@ -34,13 +33,10 @@ def get_collection_left(database_path=DATABASE_PATH) -> dict[str, Any]:
             LEFT JOIN player_ownership AS o ON o.player_id = p.id
             WHERE {POOL_SQL}
             GROUP BY tier, cartola
-            """
-        ).fetchall()
+            """).fetchall()
         used_paths = {
             str(path)
-            for row in connection.execute(
-                "SELECT logo_path, kit_path FROM game_teams"
-            )
+            for row in connection.execute("SELECT logo_path, kit_path FROM game_teams")
             for path in (row["logo_path"], row["kit_path"])
             if path
         }
@@ -168,15 +164,13 @@ def list_owned_players(
         clauses.append("normalize_player_name(p.club_name) LIKE ?")
         parameters.append(f"%{normalize_player_name(club_query)}%")
     if league_query:
-        clauses.append(
-            """
+        clauses.append("""
             EXISTS (
                 SELECT 1 FROM player_sources AS ps
                 WHERE ps.player_id = p.id
                   AND normalize_player_name(ps.source_league_name) LIKE ?
             )
-            """
-        )
+            """)
         parameters.append(f"%{normalize_player_name(league_query)}%")
     parameters.append(limit)
     with connect(database_path) as connection:
@@ -309,46 +303,148 @@ def get_top_players(
 
 # Palavras que só descrevem o arquivo e não fazem parte do nome exibido.
 _ASSET_NOISE = {
-    "logo", "logos", "escudo", "escudos", "emblema", "emblemas", "mascote",
-    "mascotes", "mascot", "mascots", "cartola", "cartolafc", "badge", "crest",
-    "png", "jpg", "svg", "webp", "icon", "icone", "oficial", "official", "vetor",
-    "vector", "hd", "img", "image", "imagem", "camisa", "uniforme", "kit",
-    "novo", "nova", "new", "final", "copy", "copia",
+    "logo",
+    "logos",
+    "escudo",
+    "escudos",
+    "emblema",
+    "emblemas",
+    "mascote",
+    "mascotes",
+    "mascot",
+    "mascots",
+    "cartola",
+    "cartolafc",
+    "badge",
+    "crest",
+    "png",
+    "jpg",
+    "svg",
+    "webp",
+    "icon",
+    "icone",
+    "oficial",
+    "official",
+    "vetor",
+    "vector",
+    "hd",
+    "img",
+    "image",
+    "imagem",
+    "camisa",
+    "uniforme",
+    "kit",
+    "novo",
+    "nova",
+    "new",
+    "final",
+    "copy",
+    "copia",
 }
 _LOWERCASE_WORDS = {"de", "da", "do", "das", "dos", "e"}
 _NUMERIC_TOKEN = re.compile(r"(?:v?\d+|\d+x\d+|\(\d+\))", re.I)
 _WORD_SEPARATOR = re.compile(r"[\s_\-.]+")
 _CAMEL_CASE = re.compile(r"(?<=[a-zà-ÿ])(?=[A-Z])")
 _STATES = {
-    "ac", "al", "am", "ap", "ba", "ce", "df", "es", "go", "ma", "mg", "ms", "mt", "pa",
-    "pb", "pe", "pi", "pr", "rj", "rn", "ro", "rr", "rs", "sc", "se", "sp", "to",
+    "ac",
+    "al",
+    "am",
+    "ap",
+    "ba",
+    "ce",
+    "df",
+    "es",
+    "go",
+    "ma",
+    "mg",
+    "ms",
+    "mt",
+    "pa",
+    "pb",
+    "pe",
+    "pi",
+    "pr",
+    "rj",
+    "rn",
+    "ro",
+    "rr",
+    "rs",
+    "sc",
+    "se",
+    "sp",
+    "to",
 }
 # Nome oficial dos clubes brasileiros, pela grafia compacta (sem espaço nem acento).
 KNOWN_TEAMS = {
-    "saopaulo": "São Paulo", "spfc": "São Paulo", "gremio": "Grêmio",
-    "atleticomg": "Atlético-MG", "atleticomineiro": "Atlético-MG", "galo": "Atlético-MG",
-    "atleticopr": "Athletico-PR", "athleticopr": "Athletico-PR",
-    "athleticoparanaense": "Athletico-PR", "atleticoparanaense": "Athletico-PR",
-    "atleticogo": "Atlético-GO", "atleticogoianiense": "Atlético-GO",
-    "americamg": "América-MG", "americamineiro": "América-MG",
-    "vitoria": "Vitória", "ceara": "Ceará", "criciuma": "Criciúma", "cuiaba": "Cuiabá",
-    "goias": "Goiás", "avai": "Avaí", "parana": "Paraná", "nautico": "Náutico",
-    "bragantino": "Red Bull Bragantino", "redbullbragantino": "Red Bull Bragantino",
-    "rbbragantino": "Red Bull Bragantino", "vasco": "Vasco da Gama",
-    "vascodagama": "Vasco da Gama", "botafogosp": "Botafogo-SP",
-    "operario": "Operário-PR", "operariopr": "Operário-PR", "ferroviaria": "Ferroviária",
-    "pontepreta": "Ponte Preta", "voltaredonda": "Volta Redonda", "vilanova": "Vila Nova",
-    "saobernardo": "São Bernardo", "novorizontino": "Novorizontino", "crb": "CRB",
-    "csa": "CSA", "abc": "ABC", "sport": "Sport", "sportrecife": "Sport",
-    "internacional": "Internacional", "inter": "Internacional", "flamengo": "Flamengo",
-    "fluminense": "Fluminense", "corinthians": "Corinthians", "palmeiras": "Palmeiras",
-    "santos": "Santos", "cruzeiro": "Cruzeiro", "fortaleza": "Fortaleza", "bahia": "Bahia",
-    "juventude": "Juventude", "mirassol": "Mirassol", "chapecoense": "Chapecoense",
-    "coritiba": "Coritiba", "guarani": "Guarani", "remo": "Remo", "paysandu": "Paysandu",
-    "amazonas": "Amazonas", "botafogo": "Botafogo", "santacruz": "Santa Cruz",
-    "brusque": "Brusque", "londrina": "Londrina", "tombense": "Tombense",
-    "ituano": "Ituano", "figueirense": "Figueirense", "joinville": "Joinville",
-    "shakhtar": "Shakhtar Donetsk", "shakhtardonetsk": "Shakhtar Donetsk",
+    "saopaulo": "São Paulo",
+    "spfc": "São Paulo",
+    "gremio": "Grêmio",
+    "atleticomg": "Atlético-MG",
+    "atleticomineiro": "Atlético-MG",
+    "galo": "Atlético-MG",
+    "atleticopr": "Athletico-PR",
+    "athleticopr": "Athletico-PR",
+    "athleticoparanaense": "Athletico-PR",
+    "atleticoparanaense": "Athletico-PR",
+    "atleticogo": "Atlético-GO",
+    "atleticogoianiense": "Atlético-GO",
+    "americamg": "América-MG",
+    "americamineiro": "América-MG",
+    "vitoria": "Vitória",
+    "ceara": "Ceará",
+    "criciuma": "Criciúma",
+    "cuiaba": "Cuiabá",
+    "goias": "Goiás",
+    "avai": "Avaí",
+    "parana": "Paraná",
+    "nautico": "Náutico",
+    "bragantino": "Red Bull Bragantino",
+    "redbullbragantino": "Red Bull Bragantino",
+    "rbbragantino": "Red Bull Bragantino",
+    "vasco": "Vasco da Gama",
+    "vascodagama": "Vasco da Gama",
+    "botafogosp": "Botafogo-SP",
+    "operario": "Operário-PR",
+    "operariopr": "Operário-PR",
+    "ferroviaria": "Ferroviária",
+    "pontepreta": "Ponte Preta",
+    "voltaredonda": "Volta Redonda",
+    "vilanova": "Vila Nova",
+    "saobernardo": "São Bernardo",
+    "novorizontino": "Novorizontino",
+    "crb": "CRB",
+    "csa": "CSA",
+    "abc": "ABC",
+    "sport": "Sport",
+    "sportrecife": "Sport",
+    "internacional": "Internacional",
+    "inter": "Internacional",
+    "flamengo": "Flamengo",
+    "fluminense": "Fluminense",
+    "corinthians": "Corinthians",
+    "palmeiras": "Palmeiras",
+    "santos": "Santos",
+    "cruzeiro": "Cruzeiro",
+    "fortaleza": "Fortaleza",
+    "bahia": "Bahia",
+    "juventude": "Juventude",
+    "mirassol": "Mirassol",
+    "chapecoense": "Chapecoense",
+    "coritiba": "Coritiba",
+    "guarani": "Guarani",
+    "remo": "Remo",
+    "paysandu": "Paysandu",
+    "amazonas": "Amazonas",
+    "botafogo": "Botafogo",
+    "santacruz": "Santa Cruz",
+    "brusque": "Brusque",
+    "londrina": "Londrina",
+    "tombense": "Tombense",
+    "ituano": "Ituano",
+    "figueirense": "Figueirense",
+    "joinville": "Joinville",
+    "shakhtar": "Shakhtar Donetsk",
+    "shakhtardonetsk": "Shakhtar Donetsk",
     "shaktardonetsk": "Shakhtar Donetsk",
 }
 
@@ -361,12 +457,16 @@ def pretty_asset_name(stem: str) -> str:
         for part in _CAMEL_CASE.split(word)
         if part
     ]
-    words = [
-        word
-        for word in raw_words
-        if normalize_player_name(word) not in _ASSET_NOISE
-        and not _NUMERIC_TOKEN.fullmatch(word)
-    ] or raw_words or [stem]
+    words = (
+        [
+            word
+            for word in raw_words
+            if normalize_player_name(word) not in _ASSET_NOISE
+            and not _NUMERIC_TOKEN.fullmatch(word)
+        ]
+        or raw_words
+        or [stem]
+    )
     compact = normalize_player_name("".join(words)).replace(" ", "")
     if compact in KNOWN_TEAMS:
         return KNOWN_TEAMS[compact]
@@ -477,7 +577,8 @@ def get_catalog_entries(
         entries = [{"name": row["name"]} for row in rows]
         known = {normalize_player_name(entry["name"]) for entry in entries}
         entries += [
-            entry for entry in list_assets("mascote")
+            entry
+            for entry in list_assets("mascote")
             if normalize_player_name(entry["name"]) not in known
         ]
         return entries[offset : offset + limit], len(entries)
@@ -593,9 +694,7 @@ def claim_player(
                 (player_id, str(discord_user_id)),
             )
     except sqlite3.IntegrityError as error:
-        if "player_ownership.player_id" in str(error) or "UNIQUE constraint" in str(
-            error
-        ):
+        if "player_ownership.player_id" in str(error) or "UNIQUE constraint" in str(error):
             return False
         raise
     return True
@@ -603,9 +702,42 @@ def claim_player(
 
 # Siglas e palavras genéricas ignoradas ao comparar o nome do arquivo com o clube.
 _CLUB_AFFIXES = {
-    "fc", "cf", "sc", "fk", "ac", "afc", "cd", "club", "clube", "futebol", "football",
-    "calcio", "sv", "ec", "se", "cr", "sl", "ca", "sk", "nk", "bk", "ss", "as", "us",
-    "rc", "rcd", "ud", "sd", "de", "da", "do", "the", "1", "fbc", "cfc", "ssc",
+    "fc",
+    "cf",
+    "sc",
+    "fk",
+    "ac",
+    "afc",
+    "cd",
+    "club",
+    "clube",
+    "futebol",
+    "football",
+    "calcio",
+    "sv",
+    "ec",
+    "se",
+    "cr",
+    "sl",
+    "ca",
+    "sk",
+    "nk",
+    "bk",
+    "ss",
+    "as",
+    "us",
+    "rc",
+    "rcd",
+    "ud",
+    "sd",
+    "de",
+    "da",
+    "do",
+    "the",
+    "1",
+    "fbc",
+    "cfc",
+    "ssc",
 }
 
 

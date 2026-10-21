@@ -88,9 +88,7 @@ class EAImportTests(unittest.TestCase):
             review_path=review_path,
         )
         with connect(self.database_path) as connection:
-            self.assertEqual(
-                connection.execute("SELECT COUNT(*) FROM players").fetchone()[0], 1
-            )
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM players").fetchone()[0], 1)
             self.assertEqual(
                 connection.execute("SELECT COUNT(*) FROM player_sources").fetchone()[0],
                 1,
@@ -102,13 +100,11 @@ class EAImportTests(unittest.TestCase):
         frame.to_csv(fc24_path, index=False)
         import_ea([self.fc25_path, fc24_path], self.database_path, limit=1)
         with connect(self.database_path) as connection:
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM players").fetchone()[0], 1)
             self.assertEqual(
-                connection.execute("SELECT COUNT(*) FROM players").fetchone()[0], 1
-            )
-            self.assertEqual(
-                connection.execute(
-                    "SELECT COUNT(DISTINCT source) FROM player_sources"
-                ).fetchone()[0],
+                connection.execute("SELECT COUNT(DISTINCT source) FROM player_sources").fetchone()[
+                    0
+                ],
                 2,
             )
 
@@ -249,9 +245,7 @@ class EAImportTests(unittest.TestCase):
         self.assertEqual(result[path.name]["matched"], 1)
         self.assertEqual(result[path.name]["new_players"], 0)
         with connect(self.database_path) as connection:
-            self.assertEqual(
-                connection.execute("SELECT COUNT(*) FROM players").fetchone()[0], 1
-            )
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM players").fetchone()[0], 1)
 
     def test_ambiguous_match_is_written_to_review_and_not_inserted(self):
         from src.db import initialize_database
@@ -276,12 +270,8 @@ class EAImportTests(unittest.TestCase):
         )
         self.assertEqual(result[self.fc25_path.name]["ambiguous"], 1)
         with connect(self.database_path) as connection:
-            self.assertEqual(
-                connection.execute("SELECT COUNT(*) FROM players").fetchone()[0], 2
-            )
-        self.assertIn(
-            "multiple_identity_matches", review_path.read_text(encoding="utf-8-sig")
-        )
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM players").fetchone()[0], 2)
+        self.assertIn("multiple_identity_matches", review_path.read_text(encoding="utf-8-sig"))
 
     def test_brazilian_ea_only_player_is_excluded(self):
         path = self.root / "FC27_brazil.csv"
@@ -306,9 +296,7 @@ class EAImportTests(unittest.TestCase):
         )
         self.assertEqual(result[path.name]["brazil_excluded"], 1)
         with connect(self.database_path) as connection:
-            self.assertEqual(
-                connection.execute("SELECT COUNT(*) FROM players").fetchone()[0], 0
-            )
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM players").fetchone()[0], 0)
 
     def test_women_are_excluded_by_default_and_can_be_included(self):
         path = self.root / "FC27_gender.csv"
@@ -345,9 +333,7 @@ class EAImportTests(unittest.TestCase):
         self.assertEqual(result[path.name]["players"], 1)
         self.assertEqual(result[path.name]["women_excluded"], 1)
         with connect(self.database_path) as connection:
-            names = [
-                row["name"] for row in connection.execute("SELECT name FROM players")
-            ]
+            names = [row["name"] for row in connection.execute("SELECT name FROM players")]
         self.assertEqual(names, ["Male Player"])
 
         include_database = self.root / "include-women.sqlite"
@@ -361,9 +347,7 @@ class EAImportTests(unittest.TestCase):
         self.assertEqual(included[path.name]["players"], 2)
         self.assertEqual(included[path.name]["women_excluded"], 0)
         with connect(include_database) as connection:
-            self.assertEqual(
-                connection.execute("SELECT COUNT(*) FROM players").fetchone()[0], 2
-            )
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM players").fetchone()[0], 2)
 
     def test_male_gender_overrides_female_club_name(self):
         path = self.root / "FC27_male_gender.csv"
@@ -498,9 +482,7 @@ class EAImportTests(unittest.TestCase):
         self.assertIsNotNone(result["correlation"])
         self.assertTrue(review_path.is_file())
         with connect(self.database_path) as connection:
-            self.assertEqual(
-                connection.execute("SELECT COUNT(*) FROM players").fetchone()[0], 4
-            )
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM players").fetchone()[0], 4)
             self.assertEqual(
                 connection.execute("SELECT COUNT(*) FROM player_sources").fetchone()[0],
                 4,
