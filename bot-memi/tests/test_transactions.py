@@ -54,12 +54,8 @@ class TransactionTests(unittest.TestCase):
         offered_id = self.add_owned_player(100, "Oferta")
         requested_id = self.add_owned_player(200, "Pedido")
         with connect(self.database_path) as connection:
-            connection.execute(
-                "UPDATE game_users SET memilets = 500 WHERE discord_user_id = '100'"
-            )
-            connection.execute(
-                "UPDATE game_users SET memilets = 300 WHERE discord_user_id = '200'"
-            )
+            connection.execute("UPDATE game_users SET memilets = 500 WHERE discord_user_id = '100'")
+            connection.execute("UPDATE game_users SET memilets = 300 WHERE discord_user_id = '200'")
         offer_id = create_trade(
             100,
             "Pessoa A",
@@ -97,8 +93,15 @@ class TransactionTests(unittest.TestCase):
         offered_id = self.add_owned_player(100, "Oferta")
         requested_id = self.add_owned_player(200, "Pedido")
         offer_id = create_trade(
-            100, "Pessoa A", 200, "Pessoa B",
-            offered_id, requested_id, 0, 0, self.database_path,
+            100,
+            "Pessoa A",
+            200,
+            "Pessoa B",
+            offered_id,
+            requested_id,
+            0,
+            0,
+            self.database_path,
         )
         with self.assertRaises(TransactionError):
             settle_trade(offer_id, 100, True, self.database_path)
@@ -107,17 +110,20 @@ class TransactionTests(unittest.TestCase):
         offered_id = self.add_owned_player(100, "Oferta")
         requested_id = self.add_owned_player(200, "Pedido")
         with connect(self.database_path) as connection:
-            connection.execute(
-                "UPDATE game_users SET memilets = 100 WHERE discord_user_id = '100'"
-            )
+            connection.execute("UPDATE game_users SET memilets = 100 WHERE discord_user_id = '100'")
         offer_id = create_trade(
-            100, "Pessoa A", 200, "Pessoa B",
-            offered_id, requested_id, 100, 0, self.database_path,
+            100,
+            "Pessoa A",
+            200,
+            "Pessoa B",
+            offered_id,
+            requested_id,
+            100,
+            0,
+            self.database_path,
         )
         with connect(self.database_path) as connection:
-            connection.execute(
-                "UPDATE game_users SET memilets = 0 WHERE discord_user_id = '100'"
-            )
+            connection.execute("UPDATE game_users SET memilets = 0 WHERE discord_user_id = '100'")
         with self.assertRaises(TransactionError):
             settle_trade(offer_id, 200, True, self.database_path)
         with connect(self.database_path) as connection:

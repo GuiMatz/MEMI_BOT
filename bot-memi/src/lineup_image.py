@@ -26,8 +26,15 @@ DEPTH = {"ZAG": 0, "LE": 1, "LD": 1, "MC": 2, "MEI": 3, "PE": 4, "PD": 4, "CA": 
 SIDE = {"LE": 0, "PE": 0, "LD": 2, "PD": 2}
 # Cor do selo de overall por série de raridade (mesma ordem de RARITY_TIERS).
 TIER_COLORS = (
-    (150, 150, 150), (60, 170, 90), (60, 120, 210), (150, 80, 200), (230, 130, 40),
-    (210, 50, 50), (240, 200, 60), (90, 220, 230), (255, 215, 0),
+    (150, 150, 150),
+    (60, 170, 90),
+    (60, 120, 210),
+    (150, 80, 200),
+    (230, 130, 40),
+    (210, 50, 50),
+    (240, 200, 60),
+    (90, 220, 230),
+    (255, 215, 0),
 )
 
 
@@ -59,7 +66,7 @@ def slot_coordinates(formation: str) -> dict[int, tuple[int, int]]:
     coordinates = {1: (WIDTH // 2, bottom - 120)}
     cursor = 0
     for line_index, count in enumerate(lines):
-        members = outfield[cursor:cursor + count]
+        members = outfield[cursor : cursor + count]
         cursor += count
         members.sort(key=lambda slot: (SIDE.get(positions[slot - 1], 1), slot))
         if len(lines) == 1:
@@ -84,7 +91,9 @@ def _draw_pitch(image: Image.Image) -> None:
     draw.rectangle(PITCH, outline=LINE, width=4)
     middle = (top + bottom) // 2
     draw.line((left, middle, right, middle), fill=LINE, width=3)
-    draw.ellipse((WIDTH // 2 - 90, middle - 90, WIDTH // 2 + 90, middle + 90), outline=LINE, width=3)
+    draw.ellipse(
+        (WIDTH // 2 - 90, middle - 90, WIDTH // 2 + 90, middle + 90), outline=LINE, width=3
+    )
     for y0, y1 in ((top, top + 150), (bottom - 150, bottom)):
         draw.rectangle((WIDTH // 2 - 190, y0, WIDTH // 2 + 190, y1), outline=LINE, width=3)
     for y0, y1 in ((top, top + 55), (bottom - 55, bottom)):
@@ -109,10 +118,23 @@ def _avatar(player: dict[str, Any], color: tuple[int, int, int]) -> Image.Image:
         draw = ImageDraw.Draw(tile)
         c = size // 2
         draw.polygon(
-            [(c - 22, 24), (c - 44, 40), (c - 34, 56), (c - 26, 50), (c - 24, 84),
-             (c + 24, 84), (c + 26, 50), (c + 34, 56), (c + 44, 40), (c + 22, 24),
-             (c + 10, 30), (c - 10, 30)],
-            fill=color, outline=(255, 255, 255), width=2,
+            [
+                (c - 22, 24),
+                (c - 44, 40),
+                (c - 34, 56),
+                (c - 26, 50),
+                (c - 24, 84),
+                (c + 24, 84),
+                (c + 26, 50),
+                (c + 34, 56),
+                (c + 44, 40),
+                (c + 22, 24),
+                (c + 10, 30),
+                (c - 10, 30),
+            ],
+            fill=color,
+            outline=(255, 255, 255),
+            width=2,
         )
     result = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     result.paste(tile, (0, 0), mask)
@@ -138,7 +160,9 @@ def render_lineup(
     draw = ImageDraw.Draw(image)
     color = _rgb(team.get("color") or "#2E8B57")
 
-    ratings = [int(player["effective_overall"]) for player in players if player.get("effective_overall")]
+    ratings = [
+        int(player["effective_overall"]) for player in players if player.get("effective_overall")
+    ]
     average = round(sum(ratings) / len(ratings)) if ratings else 0
     draw.rectangle((0, 0, WIDTH, 130), fill=(12, 16, 22))
     draw.rectangle((0, 124, WIDTH, 130), fill=color)
@@ -150,7 +174,12 @@ def render_lineup(
             logo.thumbnail((90, 90))
             image.alpha_composite(logo, (40, 18))
             logo_x = 145
-    draw.text((logo_x, 22), str(team.get("team_name") or "Meu time")[:28], font=_font(44, True), fill="white")
+    draw.text(
+        (logo_x, 22),
+        str(team.get("team_name") or "Meu time")[:28],
+        font=_font(44, True),
+        fill="white",
+    )
     draw.text(
         (logo_x, 78),
         f"{formation}  ·  {len(players)}/11 titulares",
@@ -168,7 +197,12 @@ def render_lineup(
         player = by_slot.get(slot)
         if player is None:
             radius = AVATAR // 2
-            draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=(20, 70, 42), outline=LINE, width=3)
+            draw.ellipse(
+                (x - radius, y - radius, x + radius, y + radius),
+                fill=(20, 70, 42),
+                outline=LINE,
+                width=3,
+            )
             draw.text((x, y), "+", font=_font(44, True), fill=LINE, anchor="mm")
             _centered(draw, (x, y + radius + 8), position, _font(24, True), fill=LINE)
             continue
@@ -181,13 +215,21 @@ def render_lineup(
         draw.rounded_rectangle(
             (x + 14, y - 60, x + 14 + badge_width, y - 22), 10, fill=badge, outline="white", width=2
         )
-        draw.text((x + 14 + badge_width / 2, y - 41), str(rating), font=badge_font, fill="white", anchor="mm")
+        draw.text(
+            (x + 14 + badge_width / 2, y - 41),
+            str(rating),
+            font=badge_font,
+            fill="white",
+            anchor="mm",
+        )
         font = _font(20, True)
         name = _fit(draw, str(player.get("name") or player.get("display_name")), font, widths[slot])
         box = draw.textbbox((0, 0), name, font=font)
         half = (box[2] - box[0]) / 2 + 10
         draw.rounded_rectangle(
-            (x - half, y + AVATAR // 2 + 4, x + half, y + AVATAR // 2 + 36), 8, fill=(10, 14, 20, 230)
+            (x - half, y + AVATAR // 2 + 4, x + half, y + AVATAR // 2 + 36),
+            8,
+            fill=(10, 14, 20, 230),
         )
         _centered(draw, (x, y + AVATAR // 2 + 7), name, font)
         _centered(draw, (x, y + AVATAR // 2 + 38), position, _font(18, True), fill=LINE)
@@ -202,8 +244,11 @@ def _label_widths(coordinates: dict[int, tuple[int, int]]) -> dict[int, float]:
     """Largura máxima do nome de cada vaga, para não encostar no vizinho da linha."""
     widths = {}
     for slot, (x, y) in coordinates.items():
-        neighbours = [abs(x - other_x) for other, (other_x, other_y) in coordinates.items()
-                      if other != slot and abs(other_y - y) < 60]
+        neighbours = [
+            abs(x - other_x)
+            for other, (other_x, other_y) in coordinates.items()
+            if other != slot and abs(other_y - y) < 60
+        ]
         widths[slot] = min([*neighbours, 260]) - 24
     return widths
 
@@ -221,7 +266,6 @@ def _rgb(value: str) -> tuple[int, int, int]:
     if len(normalized) != 6:
         return (46, 139, 87)
     try:
-        return tuple(int(normalized[index:index + 2], 16) for index in (0, 2, 4))
+        return tuple(int(normalized[index : index + 2], 16) for index in (0, 2, 4))
     except ValueError:
         return (46, 139, 87)
-

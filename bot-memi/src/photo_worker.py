@@ -105,8 +105,7 @@ def collect_forever(
             retry_attempt += 1
             delay = _retry_delay(retry_attempt, retry_delay_seconds)
             LOGGER.warning(
-                "Lote após o ID %s travou (%s). Tentativa automática %s; "
-                "nova tentativa em %ss.",
+                "Lote após o ID %s travou (%s). Tentativa automática %s; " "nova tentativa em %ss.",
                 last_id,
                 error,
                 retry_attempt,
@@ -134,9 +133,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--database", type=Path, default=DATABASE_PATH)
     parser.add_argument("--photo-root", type=Path, default=PHOTO_ROOT)
-    parser.add_argument(
-        "--checkpoint", type=Path, default=DEFAULT_CHECKPOINT
-    )
+    parser.add_argument("--checkpoint", type=Path, default=DEFAULT_CHECKPOINT)
     parser.add_argument("--batch-size", type=int, default=DEFAULT_BATCH_SIZE)
     parser.add_argument("--interval", type=int, default=DEFAULT_INTERVAL_SECONDS)
     parser.add_argument(

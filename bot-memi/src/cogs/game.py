@@ -10,16 +10,16 @@ from discord.ext import commands
 
 from src.db import DATABASE_PATH
 from src.economy import get_account_status
+from src.cogs.common import CardPagerView, card_embed, card_file
 from src.game import (
+    find_player,
     get_catalog_entries,
     get_collection_left,
     list_owned_players,
     register_user,
     search_catalog,
-    search_players,
 )
-from src.ratings import rarity_label
-from src.roll_images import find_image, image_file, roll_image_file
+from src.roll_images import find_image, image_file
 
 PAGE_SIZE = 20
 TOP_CATEGORIES = (
@@ -40,31 +40,9 @@ def _timestamp(moment: datetime | None, ready: str = "**disponível agora**") ->
     return f"<t:{unix}:R> (<t:{unix}:t>)"
 
 
-def player_embed(player: dict) -> tuple[discord.Embed, discord.File]:
-    """Ficha do jogador com a foto local (ou silhueta) anexada."""
-    overall = player.get("effective_overall") or player.get("overall")
-    name = player.get("display_name") or player["name"]
-    embed = discord.Embed(
-        title=name,
-        description=f"# {overall or '—'}\n{rarity_label(overall)}",
-        color=discord.Color.gold() if (overall or 0) >= 90 else discord.Color.blurple(),
-    )
-    embed.add_field(name="Posição", value=player.get("game_position") or "—", inline=True)
-    embed.add_field(name="Clube", value=player.get("club_name") or "Passe livre", inline=True)
-    if player.get("nationality"):
-        embed.add_field(name="País", value=player["nationality"], inline=True)
-    owner = player.get("owner_name")
-    embed.add_field(
-        name="Dono",
-        value=f"🔒 {owner}" if owner else "🟢 Livre para claim",
-        inline=True,
-    )
-    if player.get("balls"):
-        embed.add_field(name="Bolas", value=f"⚽ {player['balls']}/10", inline=True)
-    image = roll_image_file(player)
-    embed.set_thumbnail(url=f"attachment://{image.filename}")
-    embed.set_footer(text=f"ID {player['id']} · use o ID em wish, escalar e troca")
-    return embed, image
+async def player_embed(player: dict) -> tuple[discord.Embed, discord.File]:
+    """Ficha do jogador com a carta vertical (foto grande) e o dono, se houver."""
+    return card_embed(player, footer="mm!wish <nome> para desejar"), await card_file(player)
 
 
 def catalog_embed(item: dict) -> tuple[discord.Embed, discord.File | None]:
@@ -89,7 +67,7 @@ class PagedView(discord.ui.View):
     def __init__(self, title: str, lines: list[str], *, color=None, footer: str = ""):
         super().__init__(timeout=300)
         self.title = title
-        self.pages = [lines[index:index + PAGE_SIZE] for index in range(0, len(lines), PAGE_SIZE)]
+        self.pages = [lines[index : index + PAGE_SIZE] for index in range(0, len(lines), PAGE_SIZE)]
         self.pages = self.pages or [[]]
         self.color = color or discord.Color.gold()
         self.footer = footer
@@ -163,7 +141,7 @@ class ScoutSelect(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction) -> None:
         result = self.results[int(self.values[0])]
         if result["type"] == "player":
-            embed, file = player_embed(result["data"])
+            embed, file = await player_embed(result["data"])
         else:
             embed, file = catalog_embed(result["data"])
         await interaction.response.edit_message(
@@ -183,12 +161,12 @@ class ScoutView(discord.ui.View):
 FUTAE_SECTIONS = (
     (
         "🎲 Coleção",
-        "`mm!roll` — rola um jogador e abre o claim\n"
+        "`mm!roll` — rola um jogador (renova a cada hora cheia, horário de Brasília)\n"
         "`mm!tu` — seus timers: rolls, claim e daily\n"
         "`mm!scout <nome>` — ficha com foto de jogador, técnico, estádio, clube, uniforme…\n"
         "`mm!top [categoria]` — catálogo por overall ou nome\n"
         "`mm!left` — quanto ainda está livre em cada série\n"
-        "`mm!elenco [@pessoa] [filtro]` — consulta um elenco",
+        "`mm!elenco [@pessoa] [filtro]` — uma carta por página, como no Mudae",
     ),
     (
         "🪙 Economia",
@@ -200,10 +178,10 @@ FUTAE_SECTIONS = (
     ),
     (
         "⚽ Time e partidas",
-        "`mm!time` — perfil e imagem da escalação\n"
+        "`mm!time` — perfil e imagem do time (`mm!time liga <nome>`)\n"
         "`mm!escalar` — monta o time clicando em cada posição\n"
-        "`mm!tatica` — formação, estilo e cobradores\n"
-        "`mm!troca` / `mm!demitir` — negocia ou libera jogadores\n"
+        "`mm!tatica capitao|falta|penalti <nome>` — capitão e cobradores\n"
+        "`mm!troca @pessoa <seu> por <dela>` / `mm!demitir <nome>`\n"
         "`mm!amistoso @pessoa` — partida narrada minuto a minuto\n"
         "`mm!campeonato` — campeonato diário com final e pênaltis",
     ),
@@ -211,28 +189,28 @@ FUTAE_SECTIONS = (
 
 GENERAL_HELP_PAGES = (
     (
-        "**MEMI BOT — comandos gerais**\n"
-        "`mm!ajuda` / `mm!help` / `mm!comandos` — este menu\n"
-        "`mm!changelog` — novidades e alterações do bot\n"
-        "`mm!perfil` — seu perfil e progresso\n"
-        "`mm!nivel` — nível, XP e patente\n"
-        "`mm!rank` — ranking da comunidade\n"
-        "`mm!resumo` — resumo da sua conta\n"
-        "`mm!config` — configurações pessoais\n"
-        "`mm!ec` / `mm!embedcolor` — define a cor dos embeds\n\n"
-        "**Mudae e comunidade**\n"
-        "`mm!mudae` — funções do rastreador Mudae\n"
-        "`mm!tags` — suas tags e patentes\n"
-        "`mm!give` — concede itens permitidos\n"
-        "`mm!insignias` — suas insígnias\n"
-        "`mm!sobre` — informações sobre o MeMi BOT"
+        # Mesmos comandos da página 1 do mm!ajuda do memi_bot.py (sem os de admin).
+        "**🏆 Rankings**\n"
+        "`mm!tagarelas` — ranking de mensagens\n"
+        "`mm!levels` / `mm!lvl` — níveis, patentes e XP\n"
+        "`mm!hall` — vencedores dos meses anteriores\n\n"
+        "**🎵 Música**\n"
+        "`mm!musicas` — rankings de músicas, artistas e gêneros\n"
+        "`mm!aleatoria` — sorteia uma música\n"
+        "`mm!wrapped` — seu resumo dos últimos 12 meses\n\n"
+        "**🎎 Mudae**\n"
+        "`mm!mudae` — panorama do servidor\n"
+        "`mm!mudae ios` · `personagens` · `series` — rankings do Mudae\n\n"
+        "**👤 Perfil e personalização**\n"
+        "`mm!perfil` · `mm!cartao` · `mm!tags` — perfil, cartão e tags\n"
+        "`mm!favorita` · `mm!titulo` · `mm!frase` · `mm!ec` — edita seu perfil\n\n"
+        "**ℹ️ Sobre o bot**\n"
+        "`mm!changelog` — o que mudou em cada versão"
     ),
     (
         "**FUT.AE — comandos do jogo**\n"
         "Use `mm!fut.ae` para abrir diretamente esta página.\n\n"
-        + "\n\n".join(
-            f"{name}\n{value}" for name, value in FUTAE_SECTIONS
-        )
+        + "\n\n".join(f"{name}\n{value}" for name, value in FUTAE_SECTIONS)
     ),
 )
 
@@ -261,7 +239,9 @@ class GameCog(commands.Cog):
         )
         for name, value in FUTAE_SECTIONS:
             embed.add_field(name=name, value=value, inline=False)
-        embed.set_footer(text="Acentos são opcionais: mm!tática e mm!tatica funcionam.")
+        embed.set_footer(
+            text="Use nomes, não IDs: o ID só aparece quando há homônimos. Acentos são opcionais."
+        )
         await context.reply(embed=embed, mention_author=False)
 
     @commands.command(name="left", aliases=["livres", "restantes"])
@@ -273,9 +253,7 @@ class GameCog(commands.Cog):
         ]
         cartola_free, cartola_total = counts["cartola"]
         if cartola_total:
-            lines.append(
-                f"🟠 Cartola: **{_thousands(cartola_free)}/{_thousands(cartola_total)}**"
-            )
+            lines.append(f"🟠 Cartola: **{_thousands(cartola_free)}/{_thousands(cartola_total)}**")
         embed = discord.Embed(
             title="📦 Ainda livres no FUT.AE",
             description="\n".join(lines) or "Nenhum jogador elegível no pool.",
@@ -306,8 +284,9 @@ class GameCog(commands.Cog):
         *,
         query: str,
     ) -> None:
-        players = search_players(query, self.database_path, limit=15)
-        items = search_catalog(query, self.database_path, limit=10)
+        chosen, candidates = find_player(query, self.database_path, limit=15)
+        players = [chosen] if chosen else candidates
+        items = [] if chosen else search_catalog(query, self.database_path, limit=10)
         results = [{"type": "player", "data": player} for player in players]
         results += [{"type": "catalog", "data": item} for item in items]
         if not results:
@@ -319,7 +298,7 @@ class GameCog(commands.Cog):
 
         first = results[0]
         if first["type"] == "player":
-            embed, file = player_embed(first["data"])
+            embed, file = await player_embed(first["data"])
         else:
             embed, file = catalog_embed(first["data"])
         view = ScoutView(results) if len(results) > 1 else None
@@ -330,9 +309,7 @@ class GameCog(commands.Cog):
             else None
         )
         kwargs = {"file": file} if file else {}
-        await context.reply(
-            content=content, embed=embed, view=view, mention_author=False, **kwargs
-        )
+        await context.reply(content=content, embed=embed, view=view, mention_author=False, **kwargs)
 
     @commands.command(name="top")
     async def top_players(
@@ -395,7 +372,9 @@ class GameCog(commands.Cog):
                     filters["min_overall"] = rating
                     filters["max_overall"] = rating
             elif category:
-                filters["club_query" if category.group(1).casefold() == "clube" else "league_query"] = category.group(2)
+                filters[
+                    "club_query" if category.group(1).casefold() == "clube" else "league_query"
+                ] = category.group(2)
             else:
                 await context.reply(
                     "Filtro inválido. Use `posicao CA`, `overall >= 80`, "
@@ -422,17 +401,14 @@ class GameCog(commands.Cog):
             return
         lines = [
             f"`{index:>3}.` **{player['overall'] or '—'}** — {player['name']} "
-            f"({player['game_position'] or 'posição pendente'}) · ID `{player['id']}`"
+            f"({player['game_position'] or 'posição pendente'})"
             for index, player in enumerate(players, start=1)
         ]
-        footer = f"Filtro: {filter_text}" if filter_text else "ordenado por overall"
-        view = PagedView(
-            f"Elenco de {target.display_name} ({len(players)})",
-            lines,
-            color=discord.Color.green(),
-            footer=footer,
-        )
-        view.message = await context.reply(embed=view.embed(), view=view, mention_author=False)
+        title = f"Elenco de {target.display_name} ({len(players)})"
+        if filter_text:
+            title += f" · {filter_text}"
+        view = CardPagerView(players, title=title, list_lines=lines)
+        await view.send(lambda **kwargs: context.reply(mention_author=False, **kwargs))
 
     @commands.command(name="carteira", aliases=["saldo", "wallet", "bal"])
     async def wallet(self, context: commands.Context) -> None:
@@ -462,12 +438,8 @@ class GameCog(commands.Cog):
             ),
             inline=True,
         )
-        embed.add_field(
-            name="⏱️ Claim", value=_timestamp(status.claim_available_at), inline=True
-        )
-        embed.add_field(
-            name="🎁 Daily", value=_timestamp(status.daily_available_at), inline=True
-        )
+        embed.add_field(name="⏱️ Claim", value=_timestamp(status.claim_available_at), inline=True)
+        embed.add_field(name="🎁 Daily", value=_timestamp(status.daily_available_at), inline=True)
         embed.add_field(
             name="📦 Crates",
             value=f"Garantia {status.crate_pity}/50",

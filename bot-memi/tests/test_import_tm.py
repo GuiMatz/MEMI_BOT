@@ -109,16 +109,12 @@ class TransfermarktImportTests(unittest.TestCase):
             self.assertEqual(player["tm_player_id"], "p-1")
             self.assertEqual(player["club_name"], "Clube Teste")
             self.assertEqual(player["needs_position_review"], 0)
-            self.assertEqual(
-                connection.execute("SELECT COUNT(*) FROM players").fetchone()[0], 1
-            )
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM players").fetchone()[0], 1)
             self.assertEqual(
                 connection.execute("SELECT COUNT(*) FROM player_sources").fetchone()[0],
                 1,
             )
-            self.assertEqual(
-                connection.execute("SELECT COUNT(*) FROM clubs").fetchone()[0], 1
-            )
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM clubs").fetchone()[0], 1)
 
     def test_preserves_broad_position_when_sub_position_is_missing(self):
         result = import_transfermarkt(

@@ -109,13 +109,9 @@ def calculate_team_strength(players: Sequence[dict[str, Any]]) -> TeamStrength:
         totals[group].append(_effective_overall(player))
     if any(not values for values in totals.values()):
         raise TeamError("A escalação precisa preencher goleiro, defesa, meio e ataque.")
-    averages = {
-        group: sum(values) / len(values) for group, values in totals.items()
-    }
+    averages = {group: sum(values) / len(values) for group, values in totals.items()}
     attack = 0.60 * averages["A"] + 0.40 * averages["M"]
-    resistance = (
-        0.55 * averages["D"] + 0.30 * averages["M"] + 0.15 * averages["G"]
-    )
+    resistance = 0.55 * averages["D"] + 0.30 * averages["M"] + 0.15 * averages["G"]
     return TeamStrength(attack, resistance, averages)
 
 
@@ -128,8 +124,10 @@ def _scorer(players: Sequence[dict[str, Any]], rng: random.Random) -> dict[str, 
     weights = []
     for player in players:
         position = player["position"]
-        position_weight = 3.0 if POSITION_GROUPS[position] == "A" else (
-            1.0 if POSITION_GROUPS[position] == "M" else 0.15
+        position_weight = (
+            3.0
+            if POSITION_GROUPS[position] == "A"
+            else (1.0 if POSITION_GROUPS[position] == "M" else 0.15)
         )
         weights.append(_effective_overall(player) * position_weight)
     return rng.choices(players, weights=weights, k=1)[0]
@@ -141,14 +139,17 @@ def _assistant(
     rng: random.Random,
 ) -> dict[str, Any] | None:
     options = [
-        player for player in players
+        player
+        for player in players
         if player is not scorer and POSITION_GROUPS[player["position"]] != "G"
     ]
     if not options or rng.random() < 0.25:
         return None
     weights = [
-        2.0 if POSITION_GROUPS[player["position"]] == "M" else (
-            1.5 if POSITION_GROUPS[player["position"]] == "A" else 0.6
+        (
+            2.0
+            if POSITION_GROUPS[player["position"]] == "M"
+            else (1.5 if POSITION_GROUPS[player["position"]] == "A" else 0.6)
         )
         for player in options
     ]
@@ -222,9 +223,7 @@ def simulate_match(
         player: str | None = None,
     ) -> None:
         events.append(
-            MatchEvent(
-                minute, kind, text, side, score["home"], score["away"], stoppage, player
-            )
+            MatchEvent(minute, kind, text, side, score["home"], score["away"], stoppage, player)
         )
 
     add(1, 0, "kickoff", f"🟢 Rola a bola! {home_name} × {away_name}.")
@@ -239,7 +238,9 @@ def simulate_match(
     for minute, stoppage in timeline:
         if minute == "half":
             add(
-                HALF_LENGTH, first_stoppage, "halftime",
+                HALF_LENGTH,
+                first_stoppage,
+                "halftime",
                 f"⏸️ **Intervalo:** {home_name} {score['home']} × {score['away']} {away_name}.",
             )
             add(HALF_LENGTH + 1, 0, "second_half", "🔁 Bola rolando para o segundo tempo!")
@@ -251,9 +252,7 @@ def simulate_match(
                 shooter = _scorer(players, generator)
                 if generator.random() < CHANCE_CONVERSION:
                     score[side] += 1
-                    goals.append(
-                        Goal(minute, side, int(shooter["id"]), _name(shooter), stoppage)
-                    )
+                    goals.append(Goal(minute, side, int(shooter["id"]), _name(shooter), stoppage))
                     assistant = _assistant(players, shooter, generator)
                     text = generator.choice(GOAL_LINES).format(
                         team=team_name, scorer=_name(shooter)
@@ -264,12 +263,14 @@ def simulate_match(
                 else:
                     roll = generator.random()
                     lines, kind = (
-                        (SAVE_LINES, "save") if roll < 0.5
-                        else (POST_LINES, "post") if roll < 0.62
-                        else (MISS_LINES, "miss")
+                        (SAVE_LINES, "save")
+                        if roll < 0.5
+                        else (POST_LINES, "post") if roll < 0.62 else (MISS_LINES, "miss")
                     )
                     add(
-                        minute, stoppage, kind,
+                        minute,
+                        stoppage,
+                        kind,
                         generator.choice(lines).format(
                             shooter=_name(shooter),
                             keeper=_name(_goalkeeper(opponent)),
@@ -286,12 +287,16 @@ def simulate_match(
                     continue
                 booked.add(key)
                 add(
-                    minute, stoppage, "card",
+                    minute,
+                    stoppage,
+                    "card",
                     f"🟨 Cartão amarelo para {_name(fouler)} ({team_name}).",
                     side,
                 )
     add(
-        90, second_stoppage, "fulltime",
+        90,
+        second_stoppage,
+        "fulltime",
         f"🏁 **Fim de jogo:** {home_name} {score['home']} × {score['away']} {away_name}.",
     )
     return MatchResult(
@@ -398,8 +403,12 @@ def penalty_events(
     """Converte as cobranças em lances narráveis, no mesmo formato de `MatchEvent`."""
     events = [
         {
-            "minute": 90, "stoppage": 0, "kind": "penalties", "side": None,
-            "home_goals": 0, "away_goals": 0,
+            "minute": 90,
+            "stoppage": 0,
+            "kind": "penalties",
+            "side": None,
+            "home_goals": 0,
+            "away_goals": 0,
             "text": "🎯 **Empate! A decisão vai para os pênaltis.**",
         }
     ]
@@ -413,10 +422,13 @@ def penalty_events(
         )
         events.append(
             {
-                "minute": 90, "stoppage": 0, "kind": "penalty", "side": data["side"],
-                "home_goals": data["home_score"], "away_goals": data["away_score"],
+                "minute": 90,
+                "stoppage": 0,
+                "kind": "penalty",
+                "side": data["side"],
+                "home_goals": data["home_score"],
+                "away_goals": data["away_score"],
                 "text": f"{text} Pênaltis: {data['home_score']} × {data['away_score']}",
             }
         )
     return events
-

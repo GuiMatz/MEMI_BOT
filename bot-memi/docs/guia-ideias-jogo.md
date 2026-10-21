@@ -24,8 +24,8 @@ raros que jogadores comuns e não devem competir com a raridade dos craques.
 
 ## Rolagens, raridade e claims
 
-`mm!roll` oferece 10 rolls por ciclo de 30 minutos, renovados nos minutos `:10`
-e `:40` de cada hora (UTC).
+`mm!roll` oferece 10 rolls por ciclo de 1 hora, renovados na hora cheia
+(horário de Brasília, UTC-3).
 
 Em vez de sortear uniformemente do pool, a roleta escolhe primeiro uma faixa de
 overall pelas probabilidades abaixo e depois um jogador ativo elegível daquela

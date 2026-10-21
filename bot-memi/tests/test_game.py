@@ -66,7 +66,11 @@ class GameAccountTests(unittest.TestCase):
         self.assertTrue(claim_player(player_id, 123, self.database_path))
 
         root = Path(self.temporary_directory.name)
-        for folder, name in (("teams/camisas", "a.png"), ("teams/camisas", "b.png"), ("teams/escudos", "c.png")):
+        for folder, name in (
+            ("teams/camisas", "a.png"),
+            ("teams/camisas", "b.png"),
+            ("teams/escudos", "c.png"),
+        ):
             path = root / "data" / "assets" / "brasfoot" / folder / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(b"x")
@@ -97,7 +101,6 @@ class GameAccountTests(unittest.TestCase):
             [player["name"] for player in players],
             ["Jogador alto", "Jogador baixo"],
         )
-
 
     def test_player_search_ignores_accents_and_roster_requires_ownership(self):
         player_id = self.add_player(
@@ -169,10 +172,12 @@ class GameAccountTests(unittest.TestCase):
 
     def test_top_players_excludes_ineligible_records(self):
         self.add_player(name="Elegível", overall=90)
+        # Candidatos da fase 2 e atividade desconhecida também entram na roleta.
         self.add_player(
             name="Candidato",
-            overall=99,
+            overall=95,
             phase2_candidate=1,
+            activity_status="unknown",
         )
         self.add_player(
             name="Inativo",
@@ -187,7 +192,7 @@ class GameAccountTests(unittest.TestCase):
 
         self.assertEqual(
             [player["name"] for player in get_top_players(self.database_path)],
-            ["Elegível"],
+            ["Candidato", "Elegível"],
         )
 
 

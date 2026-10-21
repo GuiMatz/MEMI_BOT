@@ -86,9 +86,7 @@ async def narrate(
         await asyncio.sleep(pause * (2 if event["kind"] in SLOW_EVENTS else 1))
         shown.append(event)
         try:
-            await message.edit(
-                embed=match_embed(home_name, away_name, shown, title=title)
-            )
+            await message.edit(embed=match_embed(home_name, away_name, shown, title=title))
         except discord.HTTPException:
             # Uma edição perdida não pode interromper a partida.
             continue

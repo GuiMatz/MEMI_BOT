@@ -65,10 +65,10 @@ class MemiBot(commands.Bot):
         await self.load_extension("src.cogs.team")
         await self.load_extension("src.cogs.matches")
         await self.load_extension("src.cogs.admin")
-        from src.photos import sync_existing_photos
+        from src.encyclopedia import prepare_game_data
 
-        linked = sync_existing_photos(self.database_path)
-        LOGGER.info("Extensões do MEMI carregadas; %s fotos ligadas ao banco.", linked)
+        report = prepare_game_data(self.database_path)
+        LOGGER.info("Extensões do MEMI carregadas; dados sincronizados: %s", report)
 
     async def on_command_error(
         self,
@@ -114,9 +114,7 @@ def main() -> None:
     load_dotenv(ROOT / ".env")
     token = os.getenv("DISCORD_BOT_TOKEN")
     if not token:
-        raise SystemExit(
-            "Configure DISCORD_BOT_TOKEN no arquivo .env antes de iniciar o bot."
-        )
+        raise SystemExit("Configure DISCORD_BOT_TOKEN no arquivo .env antes de iniciar o bot.")
     bot = create_bot()
     try:
         bot.run(token, log_handler=None)
@@ -124,9 +122,7 @@ def main() -> None:
         LOGGER.error("O Discord recusou o token configurado.")
         raise SystemExit(1) from error
     except discord.PrivilegedIntentsRequired as error:
-        LOGGER.error(
-            "Ative Message Content Intent na página de configuração do bot Discord."
-        )
+        LOGGER.error("Ative Message Content Intent na página de configuração do bot Discord.")
         raise SystemExit(1) from error
 
 

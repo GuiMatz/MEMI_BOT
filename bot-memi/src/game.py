@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import re
 import sqlite3
+from pathlib import Path
 from typing import Any
 
 from src.db import DATABASE_PATH, GAME_POSITIONS, ROOT, connect, normalize_player_name
-from src.ratings import EFFECTIVE_OVERALL_SQL, GAME_OVERALL_SQL, RARITY_TIERS
+from src.ratings import EFFECTIVE_OVERALL_SQL, GAME_OVERALL_SQL, POOL_SQL, RARITY_TIERS
 
 CATALOG_ASSET_DIRECTORIES = {
     "uniformes": (
@@ -17,32 +18,25 @@ CATALOG_ASSET_DIRECTORIES = {
     ),
     "logos": ("teams/escudos",),
 }
-IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".avif", ".jfif", ".bmp"}
 
 
 def get_collection_left(database_path=DATABASE_PATH) -> dict[str, Any]:
     """Conta o que ainda está livre, no total e por série de raridade."""
     with connect(database_path) as connection:
-        rows = connection.execute(
-            f"""
+        rows = connection.execute(f"""
             SELECT rarity_index({GAME_OVERALL_SQL}) AS tier,
                    COALESCE(p.overall_source, '') = 'Cartola' AS cartola,
                    COUNT(*) AS total,
                    SUM(o.player_id IS NULL) AS remaining
             FROM players AS p
             LEFT JOIN player_ownership AS o ON o.player_id = p.id
-            WHERE p.activity_status = 'active'
-              AND p.phase2_candidate = 0
-              AND p.overall IS NOT NULL
-              AND p.game_position IS NOT NULL
+            WHERE {POOL_SQL}
             GROUP BY tier, cartola
-            """
-        ).fetchall()
+            """).fetchall()
         used_paths = {
             str(path)
-            for row in connection.execute(
-                "SELECT logo_path, kit_path FROM game_teams"
-            )
+            for row in connection.execute("SELECT logo_path, kit_path FROM game_teams")
             for path in (row["logo_path"], row["kit_path"])
             if path
         }
@@ -170,15 +164,13 @@ def list_owned_players(
         clauses.append("normalize_player_name(p.club_name) LIKE ?")
         parameters.append(f"%{normalize_player_name(club_query)}%")
     if league_query:
-        clauses.append(
-            """
+        clauses.append("""
             EXISTS (
                 SELECT 1 FROM player_sources AS ps
                 WHERE ps.player_id = p.id
                   AND normalize_player_name(ps.source_league_name) LIKE ?
             )
-            """
-        )
+            """)
         parameters.append(f"%{normalize_player_name(league_query)}%")
     parameters.append(limit)
     with connect(database_path) as connection:
@@ -272,9 +264,7 @@ def list_players_by_team_or_series(
                    COALESCE(ps.source_league_name, '') AS league_name
             FROM players AS p
             LEFT JOIN player_sources AS ps ON ps.player_id = p.id
-            WHERE p.activity_status = 'active'
-              AND p.phase2_candidate = 0
-              AND p.overall IS NOT NULL
+            WHERE {POOL_SQL}
               AND (
                   normalize_player_name(p.club_name) LIKE ?
                   OR normalize_player_name(ps.source_league_name) LIKE ?
@@ -302,10 +292,7 @@ def get_top_players(
                    {EFFECTIVE_OVERALL_SQL} AS overall
             FROM players AS p
             LEFT JOIN player_balls AS b ON b.player_id = p.id
-            WHERE p.activity_status = 'active'
-              AND p.phase2_candidate = 0
-              AND p.overall IS NOT NULL
-              AND p.game_position IS NOT NULL
+            WHERE {POOL_SQL}
             ORDER BY overall DESC, name, p.id
             LIMIT ?
             """,
@@ -316,31 +303,180 @@ def get_top_players(
 
 # Palavras que só descrevem o arquivo e não fazem parte do nome exibido.
 _ASSET_NOISE = {
-    "logo", "logos", "escudo", "escudos", "emblema", "emblemas", "mascote",
-    "mascotes", "mascot", "mascots", "cartola", "cartolafc", "badge", "crest",
-    "png", "jpg", "svg", "webp", "icon", "icone", "oficial", "official", "vetor",
-    "vector", "hd", "img", "image", "imagem", "camisa", "uniforme", "kit",
-    "novo", "nova", "new", "final", "copy", "copia",
+    "logo",
+    "logos",
+    "escudo",
+    "escudos",
+    "emblema",
+    "emblemas",
+    "mascote",
+    "mascotes",
+    "mascot",
+    "mascots",
+    "cartola",
+    "cartolafc",
+    "badge",
+    "crest",
+    "png",
+    "jpg",
+    "svg",
+    "webp",
+    "icon",
+    "icone",
+    "oficial",
+    "official",
+    "vetor",
+    "vector",
+    "hd",
+    "img",
+    "image",
+    "imagem",
+    "camisa",
+    "uniforme",
+    "kit",
+    "novo",
+    "nova",
+    "new",
+    "final",
+    "copy",
+    "copia",
 }
 _LOWERCASE_WORDS = {"de", "da", "do", "das", "dos", "e"}
 _NUMERIC_TOKEN = re.compile(r"(?:v?\d+|\d+x\d+|\(\d+\))", re.I)
 _WORD_SEPARATOR = re.compile(r"[\s_\-.]+")
+_CAMEL_CASE = re.compile(r"(?<=[a-zà-ÿ])(?=[A-Z])")
+_STATES = {
+    "ac",
+    "al",
+    "am",
+    "ap",
+    "ba",
+    "ce",
+    "df",
+    "es",
+    "go",
+    "ma",
+    "mg",
+    "ms",
+    "mt",
+    "pa",
+    "pb",
+    "pe",
+    "pi",
+    "pr",
+    "rj",
+    "rn",
+    "ro",
+    "rr",
+    "rs",
+    "sc",
+    "se",
+    "sp",
+    "to",
+}
+# Nome oficial dos clubes brasileiros, pela grafia compacta (sem espaço nem acento).
+KNOWN_TEAMS = {
+    "saopaulo": "São Paulo",
+    "spfc": "São Paulo",
+    "gremio": "Grêmio",
+    "atleticomg": "Atlético-MG",
+    "atleticomineiro": "Atlético-MG",
+    "galo": "Atlético-MG",
+    "atleticopr": "Athletico-PR",
+    "athleticopr": "Athletico-PR",
+    "athleticoparanaense": "Athletico-PR",
+    "atleticoparanaense": "Athletico-PR",
+    "atleticogo": "Atlético-GO",
+    "atleticogoianiense": "Atlético-GO",
+    "americamg": "América-MG",
+    "americamineiro": "América-MG",
+    "vitoria": "Vitória",
+    "ceara": "Ceará",
+    "criciuma": "Criciúma",
+    "cuiaba": "Cuiabá",
+    "goias": "Goiás",
+    "avai": "Avaí",
+    "parana": "Paraná",
+    "nautico": "Náutico",
+    "bragantino": "Red Bull Bragantino",
+    "redbullbragantino": "Red Bull Bragantino",
+    "rbbragantino": "Red Bull Bragantino",
+    "vasco": "Vasco da Gama",
+    "vascodagama": "Vasco da Gama",
+    "botafogosp": "Botafogo-SP",
+    "operario": "Operário-PR",
+    "operariopr": "Operário-PR",
+    "ferroviaria": "Ferroviária",
+    "pontepreta": "Ponte Preta",
+    "voltaredonda": "Volta Redonda",
+    "vilanova": "Vila Nova",
+    "saobernardo": "São Bernardo",
+    "novorizontino": "Novorizontino",
+    "crb": "CRB",
+    "csa": "CSA",
+    "abc": "ABC",
+    "sport": "Sport",
+    "sportrecife": "Sport",
+    "internacional": "Internacional",
+    "inter": "Internacional",
+    "flamengo": "Flamengo",
+    "fluminense": "Fluminense",
+    "corinthians": "Corinthians",
+    "palmeiras": "Palmeiras",
+    "santos": "Santos",
+    "cruzeiro": "Cruzeiro",
+    "fortaleza": "Fortaleza",
+    "bahia": "Bahia",
+    "juventude": "Juventude",
+    "mirassol": "Mirassol",
+    "chapecoense": "Chapecoense",
+    "coritiba": "Coritiba",
+    "guarani": "Guarani",
+    "remo": "Remo",
+    "paysandu": "Paysandu",
+    "amazonas": "Amazonas",
+    "botafogo": "Botafogo",
+    "santacruz": "Santa Cruz",
+    "brusque": "Brusque",
+    "londrina": "Londrina",
+    "tombense": "Tombense",
+    "ituano": "Ituano",
+    "figueirense": "Figueirense",
+    "joinville": "Joinville",
+    "shakhtar": "Shakhtar Donetsk",
+    "shakhtardonetsk": "Shakhtar Donetsk",
+    "shaktardonetsk": "Shakhtar Donetsk",
+}
 
 
 def pretty_asset_name(stem: str) -> str:
-    """Transforma `flamengo_logo_2024-v2` em `Flamengo`."""
-    raw_words = [word for word in _WORD_SEPARATOR.split(stem.strip()) if word]
-    words = [
-        word
-        for word in raw_words
-        if normalize_player_name(word) not in _ASSET_NOISE
-        and not _NUMERIC_TOKEN.fullmatch(word)
-    ] or raw_words or [stem]
+    """Transforma `flamengo_logo_2024-v2` em `Flamengo` e `SaoPaulo` em `São Paulo`."""
+    raw_words = [
+        part
+        for word in _WORD_SEPARATOR.split(stem.strip())
+        for part in _CAMEL_CASE.split(word)
+        if part
+    ]
+    words = (
+        [
+            word
+            for word in raw_words
+            if normalize_player_name(word) not in _ASSET_NOISE
+            and not _NUMERIC_TOKEN.fullmatch(word)
+        ]
+        or raw_words
+        or [stem]
+    )
+    compact = normalize_player_name("".join(words)).replace(" ", "")
+    if compact in KNOWN_TEAMS:
+        return KNOWN_TEAMS[compact]
     pretty = []
     for index, word in enumerate(words):
         lowered = word.casefold()
         if index and lowered in _LOWERCASE_WORDS:
             pretty.append(lowered)
+        elif index and lowered in _STATES:
+            pretty.append(word.upper())
         elif word.isupper() and len(word) <= 3:
             pretty.append(word)
         else:
@@ -405,16 +541,13 @@ def get_catalog_entries(
     if normalized in {"jogador", "jogadores", "player", "players"}:
         with connect(database_path) as connection:
             total = connection.execute(
-                """SELECT COUNT(*) AS total FROM players
-                   WHERE activity_status = 'active' AND phase2_candidate = 0
-                     AND overall IS NOT NULL AND game_position IS NOT NULL"""
+                f"SELECT COUNT(*) AS total FROM players AS p WHERE {POOL_SQL}"
             ).fetchone()["total"]
             rows = connection.execute(
                 f"""SELECT p.id, COALESCE(NULLIF(p.display_name, ''), p.name) AS name,
                           {GAME_OVERALL_SQL} AS overall, p.game_position
                    FROM players AS p
-                   WHERE p.activity_status = 'active' AND p.phase2_candidate = 0
-                     AND p.overall IS NOT NULL AND p.game_position IS NOT NULL
+                   WHERE {POOL_SQL}
                    ORDER BY overall DESC, name COLLATE NOCASE, p.id
                    LIMIT ? OFFSET ?""",
                 (limit, offset),
@@ -435,11 +568,24 @@ def get_catalog_entries(
         entries.extend(list_assets("mascote"))
         return entries[offset : offset + limit], len(entries)
 
+    if normalized in {"mascote", "mascotes"}:
+        with connect(database_path) as connection:
+            rows = connection.execute(
+                """SELECT name || COALESCE(' (' || owner || ')', '') AS name FROM mascots
+                   ORDER BY name COLLATE NOCASE"""
+            ).fetchall()
+        entries = [{"name": row["name"]} for row in rows]
+        known = {normalize_player_name(entry["name"]) for entry in entries}
+        entries += [
+            entry
+            for entry in list_assets("mascote")
+            if normalize_player_name(entry["name"]) not in known
+        ]
+        return entries[offset : offset + limit], len(entries)
+
     asset_categories = {
         "uniforme": "uniforme",
         "uniformes": "uniforme",
-        "mascote": "mascote",
-        "mascotes": "mascote",
         "emblema": "emblema",
         "emblemas": "emblema",
         "logo": "logo_cartola",
@@ -470,12 +616,13 @@ def get_catalog_entries(
     return entries[offset : offset + limit], len(entries)
 
 
-# Tabelas que o mm!scout pesquisa além dos jogadores: (tabela, coluna da imagem).
+# Tabelas que o mm!scout pesquisa além dos jogadores: (tabela, nome exibido, imagem).
 SCOUT_TABLES = {
-    "Técnico": ("coaches", "photo_path"),
-    "Estádio": ("stadiums", "photo_path"),
-    "Clube": ("clubs", "logo_path"),
-    "Liga": ("leagues", None),
+    "Técnico": ("coaches", "name", "photo_path"),
+    "Estádio": ("stadiums", "name", "photo_path"),
+    "Clube": ("clubs", "name", "logo_path"),
+    "Liga": ("leagues", "name", "NULL"),
+    "Mascote": ("mascots", "name || COALESCE(' (' || owner || ')', '')", "image_path"),
 }
 
 
@@ -490,12 +637,11 @@ def search_catalog(
         return []
     results: list[dict[str, Any]] = []
     with connect(database_path) as connection:
-        for label, (table, image_column) in SCOUT_TABLES.items():
-            image = f"{image_column}" if image_column else "NULL"
+        for label, (table, name_sql, image_sql) in SCOUT_TABLES.items():
             rows = connection.execute(
                 f"""
-                SELECT id, name, {image} AS image_path FROM {table}
-                WHERE normalize_player_name(name) LIKE ?
+                SELECT id, {name_sql} AS name, {image_sql} AS image_path FROM {table}
+                WHERE normalize_player_name({name_sql}) LIKE ?
                 ORDER BY name COLLATE NOCASE
                 LIMIT ?
                 """,
@@ -548,9 +694,147 @@ def claim_player(
                 (player_id, str(discord_user_id)),
             )
     except sqlite3.IntegrityError as error:
-        if "player_ownership.player_id" in str(error) or "UNIQUE constraint" in str(
-            error
-        ):
+        if "player_ownership.player_id" in str(error) or "UNIQUE constraint" in str(error):
             return False
         raise
     return True
+
+
+# Siglas e palavras genéricas ignoradas ao comparar o nome do arquivo com o clube.
+_CLUB_AFFIXES = {
+    "fc",
+    "cf",
+    "sc",
+    "fk",
+    "ac",
+    "afc",
+    "cd",
+    "club",
+    "clube",
+    "futebol",
+    "football",
+    "calcio",
+    "sv",
+    "ec",
+    "se",
+    "cr",
+    "sl",
+    "ca",
+    "sk",
+    "nk",
+    "bk",
+    "ss",
+    "as",
+    "us",
+    "rc",
+    "rcd",
+    "ud",
+    "sd",
+    "de",
+    "da",
+    "do",
+    "the",
+    "1",
+    "fbc",
+    "cfc",
+    "ssc",
+}
+
+
+def _club_key(name: str) -> str:
+    words = normalize_player_name(name).split()
+    core = [word for word in words if word not in _CLUB_AFFIXES]
+    return " ".join(core or words)
+
+
+def sync_club_logos(database_path=DATABASE_PATH) -> dict[str, int]:
+    """Liga cada escudo/logo local a um clube; clubes que faltam no banco são criados.
+
+    Assim times que só existem na pasta de logos (ex.: Shakhtar Donetsk) aparecem no
+    `mm!scout` e no `mm!top clubes`.
+    """
+    report = {"linked": 0, "created": 0}
+    entries = list_assets("emblema") + list_assets("logo_cartola")
+    if not entries:
+        return report
+    with connect(database_path) as connection:
+        clubs: dict[str, list[dict[str, Any]]] = {}
+        for row in connection.execute("SELECT id, name, logo_path FROM clubs"):
+            clubs.setdefault(_club_key(row["name"]), []).append(dict(row))
+        for entry in entries:
+            path = Path(entry["path"]).as_posix()
+            matches = clubs.get(_club_key(entry["name"]), [])
+            if len(matches) == 1:
+                club = matches[0]
+                if not club["logo_path"]:
+                    connection.execute(
+                        "UPDATE clubs SET logo_path = ? WHERE id = ?", (path, club["id"])
+                    )
+                    club["logo_path"] = path
+                    report["linked"] += 1
+                continue
+            if matches:
+                continue  # nome ambíguo: melhor não adivinhar
+            club_id = connection.execute(
+                "INSERT INTO clubs (name, logo_path) VALUES (?, ?)", (entry["name"], path)
+            ).lastrowid
+            clubs[_club_key(entry["name"])] = [
+                {"id": club_id, "name": entry["name"], "logo_path": path}
+            ]
+            report["created"] += 1
+    return report
+
+
+def resolve_player(
+    query: str,
+    players: list[dict[str, Any]],
+) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
+    """Escolhe o jogador pelo nome; o ID só é necessário quando há homônimos.
+
+    Ordem: ID exato, nome exato (sem acento), apelido contido no nome
+    (`kvara` acha Kvaratskhelia) e iniciais das palavras. Devolve `(jogador, [])`
+    quando só um serve, ou `(None, candidatos)` para a pessoa escolher.
+    """
+    text = query.strip()
+    if not text:
+        return None, []
+    if text.isdigit():
+        found = [player for player in players if int(player["id"]) == int(text)]
+        return (found[0], []) if found else (None, [])
+    wanted = normalize_player_name(text)
+
+    def names(player: dict[str, Any]) -> list[str]:
+        return [
+            normalize_player_name(str(player.get(key) or ""))
+            for key in ("name", "display_name")
+            if player.get(key)
+        ]
+
+    exact = [player for player in players if wanted in names(player)]
+    if len(exact) == 1:
+        return exact[0], []
+    if exact:
+        return None, exact
+    tokens = wanted.split()
+    partial = [
+        player
+        for player in players
+        if any(
+            wanted in name
+            or all(any(word.startswith(token) for word in name.split()) for token in tokens)
+            for name in names(player)
+        )
+    ]
+    if len(partial) == 1:
+        return partial[0], []
+    partial.sort(key=lambda player: -(player.get("overall") or 0))
+    return None, partial
+
+
+def find_player(
+    query: str,
+    database_path=DATABASE_PATH,
+    limit: int = 25,
+) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
+    """`resolve_player` sobre o banco inteiro (wish, scout…)."""
+    return resolve_player(query, search_players(query, database_path, limit=limit))

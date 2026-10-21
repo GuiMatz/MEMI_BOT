@@ -181,8 +181,13 @@ class LineupTests(DatabaseCase):
                 self.assertEqual(sorted(coordinates), list(range(1, 12)))
                 self.assertEqual(len(set(coordinates.values())), 11)
                 players = [
-                    {"slot_order": slot, "position": position, "id": slot,
-                     "name": f"Jogador {slot}", "effective_overall": 80}
+                    {
+                        "slot_order": slot,
+                        "position": position,
+                        "id": slot,
+                        "name": f"Jogador {slot}",
+                        "effective_overall": 80,
+                    }
                     for slot, position in enumerate(positions, start=1)
                     if slot % 3
                 ]
@@ -225,7 +230,10 @@ class CatalogTests(DatabaseCase):
     def test_asset_names_are_standardized(self):
         self.assertEqual(pretty_asset_name("flamengo_logo_2024-v2"), "Flamengo")
         self.assertEqual(pretty_asset_name("vasco-da-gama"), "Vasco da Gama")
-        self.assertEqual(pretty_asset_name("escudo_atletico-MG_60x60"), "Atletico MG")
+        self.assertEqual(pretty_asset_name("escudo_atletico-MG_60x60"), "Atlético-MG")
+        self.assertEqual(pretty_asset_name("SaoPaulo"), "São Paulo")
+        self.assertEqual(pretty_asset_name("shaktar_donetsk"), "Shakhtar Donetsk")
+        self.assertEqual(pretty_asset_name("Manchester-City"), "Manchester City")
 
     def test_cartola_top_uses_team_and_mascot_names(self):
         root = Path(self.tempdir.name)
@@ -239,7 +247,9 @@ class CatalogTests(DatabaseCase):
             found = search_catalog("flamengo", self.database_path)
         self.assertEqual(total, 3)
         self.assertEqual(entries[0]["overall"], 90)
-        self.assertEqual([entry["name"] for entry in entries[1:]], ["Flamengo", "Flamengo (Mascote)"])
+        self.assertEqual(
+            [entry["name"] for entry in entries[1:]], ["Flamengo", "Flamengo (Mascote)"]
+        )
         self.assertEqual({item["kind"] for item in found}, {"Logo Cartola", "Mascote"})
 
     def test_scout_returns_game_overall_owner_and_photo(self):

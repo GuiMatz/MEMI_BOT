@@ -388,7 +388,7 @@ Validação ao vivo que falta realizar no seu servidor:
 17. Conferir `mm!tagarelas` (só pessoas) e `mm!tagarelas bots`, `mm!give @pessoa Papagaio da
     Call` e os atalhos (`mm!tg`, `mm!lvl`, `mm!p`, `mm!c`, `mm!cl`).
 
-A cópia do código original está em `original/memi_bot_original.py` neste repositório.
+O código original continua no histórico do Git: `git show 0e944c0:original/memi_bot_original.py`.
 Para reverter uma migração, pare o bot e restaure juntos o código antigo e o banco do
 backup anterior; não substitua um banco enquanto o bot estiver rodando.
 

@@ -18,13 +18,14 @@ from src.economy import (
     add_wish,
     buy_upgrade,
     claim_daily,
+    get_account_status,
     get_upgrade_cost,
     get_upgrade_levels,
     list_wishes,
     open_crate,
 )
-from src.game import get_wallet, register_user, search_players
-from src.game import list_owned_players
+from src.cogs.common import PlayerChoiceView, ambiguity_text
+from src.game import find_player, get_wallet, list_owned_players, register_user, resolve_player
 from src.transactions import TransactionError, dismiss_player
 
 UPGRADE_ALIASES = {
@@ -97,8 +98,7 @@ class DismissConfirmationView(discord.ui.View):
             return
         await interaction.response.edit_message(
             content=(
-                f"Jogador **{self.player_name}** liberado. "
-                f"Você recebeu **{refund} Memilets**."
+                f"Jogador **{self.player_name}** liberado. " f"Você recebeu **{refund} Memilets**."
             ),
             view=None,
         )
@@ -132,8 +132,7 @@ class EconomyCog(commands.Cog):
             )
             return
         await context.reply(
-            f"🎁 Você recebeu **{reward.amount} Memilets** "
-            f"(máx: **{reward.cap}**).",
+            f"🎁 Você recebeu **{reward.amount} Memilets** " f"(máx: **{reward.cap}**).",
             mention_author=False,
         )
 
@@ -167,7 +166,9 @@ class EconomyCog(commands.Cog):
             )
             balance = get_wallet(context.author.id, self.database_path)["memilets"]
             embed.set_footer(
-                text=f"Saldo: {balance:,} Memilets · Star Wish extra só sai em crate.".replace(",", ".")
+                text=f"Saldo: {balance:,} Memilets · Star Wish extra só sai em crate.".replace(
+                    ",", "."
+                )
             )
             await context.reply(embed=embed, mention_author=False)
             return
@@ -236,40 +237,28 @@ class EconomyCog(commands.Cog):
 
     @commands.command(name="demitir")
     async def dismiss(self, context: commands.Context, *, query: str) -> None:
-        try:
-            player_id = int(query.strip())
-        except ValueError:
-            owned = list_owned_players(
-                context.author.id,
-                self.database_path,
-                limit=1000,
+        owned = list_owned_players(context.author.id, self.database_path, limit=5000)
+        player, candidates = resolve_player(query, owned)
+
+        async def confirm(send, chosen: dict) -> None:
+            view = DismissConfirmationView(
+                context.author.id, int(chosen["id"]), self.database_path, chosen["name"]
             )
-            matches = [
-                player for player in owned
-                if normalize_player_name(query) in normalize_player_name(player["name"])
-            ]
-            if len(matches) != 1:
-                await context.reply(
-                    "Informe o ID de um jogador do seu elenco ou refine o nome.",
-                    mention_author=False,
-                )
-                return
-            player_id = int(matches[0]["id"])
-        player = next(
-            (item for item in list_owned_players(
-                context.author.id, self.database_path, limit=1000
-            ) if int(item["id"]) == player_id),
-            None,
-        )
-        if player is None:
-            await context.reply("Esse jogador não pertence ao seu elenco.", mention_author=False)
+            await send(content=f"Confirma a demissão de **{chosen['name']}**?", view=view)
+
+        if player is not None:
+            await confirm(lambda **kwargs: context.reply(mention_author=False, **kwargs), player)
             return
-        view = DismissConfirmationView(
-            context.author.id, player_id, self.database_path, player["name"]
-        )
+        if not candidates:
+            await context.reply(f"Não achei **{query[:60]}** no seu elenco.", mention_author=False)
+            return
+
+        async def chosen(interaction: discord.Interaction, picked: dict) -> None:
+            await confirm(interaction.response.edit_message, picked)
+
         await context.reply(
-            f"Confirma a demissão de **{player['name']}**?",
-            view=view,
+            ambiguity_text(query, candidates),
+            view=PlayerChoiceView(context.author.id, candidates, chosen),
             mention_author=False,
         )
 
@@ -285,24 +274,30 @@ class EconomyCog(commands.Cog):
             return
         await self._toggle_wish(context, query, "normal")
 
+    def _wish_header(self, user_id: int, display_name: str) -> str:
+        status = get_account_status(user_id, display_name, self.database_path)
+        return (
+            f"💫 Wishes: **{status.wishes}/{status.wish_capacity}** · "
+            f"⭐ Star Wishes: **{status.star_wishes}/{status.star_wish_capacity}**"
+        )
+
     @commands.command(name="wishlist", aliases=["wl"])
     async def wishlist(self, context: commands.Context) -> None:
+        header = self._wish_header(context.author.id, context.author.display_name)
         wishes = list_wishes(context.author.id, self.database_path)
-        if not wishes:
-            await context.reply("Você ainda não tem wishes.", mention_author=False)
-            return
         lines = [
-            f"{'⭐ ' if wish['wish_type'] == 'star' else ''}• "
-            f"`{wish['player_id']}` {wish['name']} — "
-            f"{wish['club_name'] or 'clube desconhecido'}"
+            f"{'⭐' if wish['wish_type'] == 'star' else '•'} {wish['name']} — "
+            f"{wish['club_name'] or 'Passe livre'}"
             for wish in wishes
         ]
         embed = discord.Embed(
             title=f"Wishlist de {context.author.display_name}",
-            description="\n".join(lines),
+            description=header
+            + "\n\n"
+            + ("\n".join(lines) or "Nenhuma wish ainda. Use `mm!wish <nome>`."),
             color=discord.Color.gold(),
         )
-        embed.set_footer(text="⭐ = Star Wish")
+        embed.set_footer(text="⭐ = Star Wish · mm!wish <nome> adiciona ou remove")
         await context.reply(embed=embed, mention_author=False)
 
     @commands.command(name="starwish", aliases=["sw"])
@@ -323,58 +318,59 @@ class EconomyCog(commands.Cog):
         query: str,
         wish_type: str,
     ) -> None:
-        players = search_players(query, self.database_path, limit=5)
-        if not players:
-            await context.reply("Não encontrei esse jogador.", mention_author=False)
+        player, candidates = find_player(query, self.database_path)
+        if player is not None:
+            message = self._apply_wish(context.author.id, player, wish_type)
+            await context.reply(message, mention_author=False)
             return
-        if len(players) > 1:
-            lines = "\n".join(
-                f"`{player['id']}` {player['display_name'] or player['name']} — "
-                f"{player['club_name'] or 'clube desconhecido'}"
-                for player in players
-            )
-            await context.reply(
-                "Encontrei vários jogadores. Tente usar o ID:\n" + lines,
-                mention_author=False,
-            )
+        if not candidates:
+            await context.reply(ambiguity_text(query, []), mention_author=False)
             return
-        player = players[0]
-        result = add_wish(
-            context.author.id,
-            player["id"],
-            wish_type,
-            self.database_path,
+
+        async def chosen(interaction: discord.Interaction, picked: dict) -> None:
+            await interaction.response.edit_message(
+                content=self._apply_wish(context.author.id, picked, wish_type), view=None
+            )
+
+        await context.reply(
+            ambiguity_text(query, candidates),
+            view=PlayerChoiceView(context.author.id, candidates, chosen),
+            mention_author=False,
         )
+
+    def _apply_wish(self, user_id: int, player: dict, wish_type: str) -> str:
+        name = player.get("display_name") or player["name"]
         kind_label = "Star Wish" if wish_type == "star" else "wish"
+        try:
+            result = add_wish(user_id, player["id"], wish_type, self.database_path)
+        except EconomyError as error:
+            return str(error)
         if result == "removed":
-            message = f"Removi **{player['display_name'] or player['name']}** da sua {kind_label}."
-        elif result == "updated":
-            message = f"Atualizei **{player['display_name'] or player['name']}** para {kind_label}."
-        else:
-            message = f"Adicionei **{player['display_name'] or player['name']}** à sua {kind_label}."
-        await context.reply(message, mention_author=False)
+            return f"Removi **{name}** da sua {kind_label}."
+        if result == "updated":
+            return f"Atualizei **{name}** para {kind_label}."
+        return f"{'⭐' if wish_type == 'star' else '💫'} Adicionei **{name}** à sua {kind_label}."
 
     async def _show_wishes(
         self,
         context: commands.Context,
         wish_type: str,
     ) -> None:
+        header = self._wish_header(context.author.id, context.author.display_name)
         wishes = [
-            wish for wish in list_wishes(context.author.id, self.database_path)
+            wish
+            for wish in list_wishes(context.author.id, self.database_path)
             if wish["wish_type"] == wish_type
         ]
-        if not wishes:
-            await context.reply("Você ainda não tem wishes desse tipo.", mention_author=False)
-            return
-        label = "Star Wish" if wish_type == "star" else "Wishes"
+        label = "Star Wishes" if wish_type == "star" else "Wishes"
         lines = [
-            f"{'⭐ ' if wish_type == 'star' else ''}• `{wish['player_id']}` {wish['name']} — "
-            f"{wish['club_name'] or 'clube desconhecido'}"
+            f"{'⭐' if wish_type == 'star' else '•'} {wish['name']} — "
+            f"{wish['club_name'] or 'Passe livre'}"
             for wish in wishes
         ]
         embed = discord.Embed(
             title=f"{label} de {context.author.display_name}",
-            description="\n".join(lines),
+            description=header + "\n\n" + ("\n".join(lines) or "Nenhuma ainda."),
             color=discord.Color.gold() if wish_type == "star" else discord.Color.blurple(),
         )
         await context.reply(embed=embed, mention_author=False)

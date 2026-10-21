@@ -84,14 +84,9 @@ class PhotoCollector:
 
     def _sportsdb_image_url(self, entity: str, name: str) -> str | None:
         if not self.thesportsdb_key:
-            raise ValueError(
-                "Para buscar imagens ausentes, configure THESPORTSDB_API_KEY no .env."
-            )
+            raise ValueError("Para buscar imagens ausentes, configure THESPORTSDB_API_KEY no .env.")
         config = ENTITIES[entity]
-        url = (
-            f"{THESPORTSDB_BASE}/{quote(self.thesportsdb_key, safe='')}/"
-            f"{config['endpoint']}"
-        )
+        url = f"{THESPORTSDB_BASE}/{quote(self.thesportsdb_key, safe='')}/" f"{config['endpoint']}"
         try:
             response = self.session.get(
                 url,
@@ -99,13 +94,9 @@ class PhotoCollector:
                 timeout=TIMEOUT,
             )
         except requests.RequestException as error:
-            raise RuntimeError(
-                f"Falha ao consultar TheSportsDB para {entity}."
-            ) from error
+            raise RuntimeError(f"Falha ao consultar TheSportsDB para {entity}.") from error
         if response.status_code >= 400:
-            raise RuntimeError(
-                f"TheSportsDB respondeu HTTP {response.status_code} para {entity}."
-            )
+            raise RuntimeError(f"TheSportsDB respondeu HTTP {response.status_code} para {entity}.")
         try:
             payload = response.json()
         except ValueError as error:
@@ -113,10 +104,7 @@ class PhotoCollector:
 
         expected_name = _normalize_name(name)
         for result in payload.get(config["search_key"]) or []:
-            if (
-                _normalize_name(str(result.get(config["result_name"]) or ""))
-                != expected_name
-            ):
+            if _normalize_name(str(result.get(config["result_name"]) or "")) != expected_name:
                 continue
             for key in config["result_url"]:
                 image_url = result.get(key)
@@ -139,12 +127,9 @@ class PhotoCollector:
                 raise ImageNotFound
             if response.status_code >= 400:
                 raise RuntimeError(
-                    f"HTTP {response.status_code} ao baixar imagem de "
-                    f"{entity} {entity_id}."
+                    f"HTTP {response.status_code} ao baixar imagem de " f"{entity} {entity_id}."
                 )
-            content_type = (
-                response.headers.get("Content-Type", "").split(";")[0].lower()
-            )
+            content_type = response.headers.get("Content-Type", "").split(";")[0].lower()
             extension = IMAGE_EXTENSIONS.get(content_type)
             if extension is None:
                 raise ImageNotFound
@@ -164,9 +149,7 @@ class PhotoCollector:
                             continue
                         total += len(chunk)
                         if total > MAX_IMAGE_BYTES:
-                            raise ValueError(
-                                f"Imagem excede 10 MB para {entity} {entity_id}."
-                            )
+                            raise ValueError(f"Imagem excede 10 MB para {entity} {entity_id}.")
                         file.write(chunk)
                 if total == 0:
                     raise ImageNotFound
@@ -194,13 +177,16 @@ class PhotoCollector:
         if entity not in ENTITIES:
             raise ValueError(f"Entidade de imagem não suportada: {entity}")
         config = ENTITIES[entity]
-        rows = connection.execute(f"""
+        rows = connection.execute(
+            f"""
             SELECT id, {config['name']} AS name, {config['url']} AS image_url,
                    {config['path']} AS image_path
             FROM {entity}
             WHERE {config['path']} IS NULL AND id > ?
             ORDER BY id
-            """, (after_id,)).fetchall()
+            """,
+            (after_id,),
+        ).fetchall()
         result = {"downloaded": 0, "missing": 0, "already_present": 0}
         processed = 0
         for row in rows:
@@ -209,9 +195,7 @@ class PhotoCollector:
             processed += 1
             existing_files = list((self.photo_root / entity).glob(f"{row['id']}.*"))
             existing_files = [
-                path
-                for path in existing_files
-                if path.is_file() and not path.name.endswith(".tmp")
+                path for path in existing_files if path.is_file() and not path.name.endswith(".tmp")
             ]
             if existing_files:
                 existing_path = existing_files[0].relative_to(self.photo_root)
@@ -302,9 +286,7 @@ def collect_photos(
     if use_thesportsdb and not (thesportsdb_key or os.getenv("THESPORTSDB_API_KEY")):
         load_dotenv(ROOT / ".env")
         if not os.getenv("THESPORTSDB_API_KEY"):
-            raise ValueError(
-                "Para buscar imagens ausentes, configure THESPORTSDB_API_KEY no .env."
-            )
+            raise ValueError("Para buscar imagens ausentes, configure THESPORTSDB_API_KEY no .env.")
     initialize_database(database_path)
     collector = PhotoCollector(photo_root, session, thesportsdb_key)
     with connect(database_path) as connection:
@@ -318,9 +300,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--database", type=Path, default=DATABASE_PATH)
     parser.add_argument("--photo-root", type=Path, default=PHOTO_ROOT)
-    parser.add_argument(
-        "--limit", type=int, help="limita registros por tipo de entidade"
-    )
+    parser.add_argument("--limit", type=int, help="limita registros por tipo de entidade")
     parser.add_argument(
         "--thesportsdb",
         action="store_true",
@@ -337,9 +317,7 @@ def main() -> None:
     except (ValueError, RuntimeError, OSError) as error:
         parser.error(str(error))
     for entity, counts in result.items():
-        print(
-            f"{entity}: " + ", ".join(f"{key}={value}" for key, value in counts.items())
-        )
+        print(f"{entity}: " + ", ".join(f"{key}={value}" for key, value in counts.items()))
 
 
 if __name__ == "__main__":

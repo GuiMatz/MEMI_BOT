@@ -132,8 +132,7 @@ def _edition(value: Any, path: Path) -> str | None:
 
 def _columns(path: Path) -> dict[str, str]:
     available = {
-        str(column).strip().lower(): str(column)
-        for column in pd.read_csv(path, nrows=0).columns
+        str(column).strip().lower(): str(column) for column in pd.read_csv(path, nrows=0).columns
     }
     selected: dict[str, str] = {}
     for field, aliases in COLUMN_ALIASES.items():
@@ -147,9 +146,7 @@ def _columns(path: Path) -> dict[str, str]:
         else:
             selected["name"] = ""
     missing = {"player_id", "name", "position", "overall"}.difference(selected)
-    if not selected.get("name") and not (
-        "first_name" in selected and "last_name" in selected
-    ):
+    if not selected.get("name") and not ("first_name" in selected and "last_name" in selected):
         missing.add("name (or first_name + last_name)")
     if missing:
         raise ValueError(
@@ -165,9 +162,7 @@ def _position_tokens(value: Any) -> list[str]:
     if cleaned is None:
         return []
     return [
-        token.strip().upper()
-        for token in re.split(r"[,;/|\s]+", str(cleaned))
-        if token.strip()
+        token.strip().upper() for token in re.split(r"[,;/|\s]+", str(cleaned)) if token.strip()
     ]
 
 
@@ -187,9 +182,7 @@ def inspect_positions(paths: list[Path]) -> dict[str, list[str]]:
                 continue
             values: set[str] = set()
             for chunk in pd.read_csv(path, usecols=[column], chunksize=5000):
-                values.update(
-                    chunk[column].dropna().astype(str).map(str.strip).tolist()
-                )
+                values.update(chunk[column].dropna().astype(str).map(str.strip).tolist())
             result[f"{path} [{column}]"] = sorted(values)
     return result
 
@@ -222,9 +215,7 @@ def inspect_gender_exclusions(paths: list[Path]) -> list[dict[str, Any]]:
     for path in paths:
         columns = _columns(path)
         relevant_fields = ("gender", "league", "club")
-        selected = {
-            field: columns[field] for field in relevant_fields if field in columns
-        }
+        selected = {field: columns[field] for field in relevant_fields if field in columns}
         print(f"Análise de gênero: {path.name}")
         print(
             "  Colunas identificadoras: "
@@ -239,11 +230,7 @@ def inspect_gender_exclusions(paths: list[Path]) -> list[dict[str, Any]]:
             continue
         frame = pd.read_csv(path, usecols=list(selected.values()))
         values = {
-            field: (
-                frame[selected[field]]
-                if field in selected
-                else pd.Series([None] * len(frame))
-            )
+            field: (frame[selected[field]] if field in selected else pd.Series([None] * len(frame)))
             for field in relevant_fields
         }
         gender_counts = (
@@ -274,24 +261,18 @@ def inspect_gender_exclusions(paths: list[Path]) -> list[dict[str, Any]]:
         ]
         groups: list[dict[str, Any]] = []
         print("  Ligas que serão excluídas (liga: jogadores):")
-        league_counts = (
-            excluded["league"].fillna("(sem liga)").value_counts().sort_index()
-        )
+        league_counts = excluded["league"].fillna("(sem liga)").value_counts().sort_index()
         for league, count in league_counts.items():
             print(f"    {league}: {count:,}")
         print("  Times que serão excluídos (liga | time: jogadores):")
         team_counts = (
-            excluded.groupby(["league", "club"], dropna=False)
-            .size()
-            .sort_values(ascending=False)
+            excluded.groupby(["league", "club"], dropna=False).size().sort_values(ascending=False)
         )
         for (league, club), count in team_counts.items():
             league_name = _text(league) or "(sem liga)"
             club_name = _text(club) or "(sem time)"
             print(f"    {league_name} | {club_name}: {count:,}")
-            groups.append(
-                {"league": league_name, "club": club_name, "count": int(count)}
-            )
+            groups.append({"league": league_name, "club": club_name, "count": int(count)})
         summaries.append({"path": path, "female_rows": len(excluded), "groups": groups})
     return summaries
 
@@ -321,20 +302,14 @@ def _overall(value: Any, path: Path, row_number: int) -> int | None:
             f"{path.name}, linha {row_number}: overall inválido: {cleaned!r}"
         ) from error
     if not numeric.is_integer():
-        raise ValueError(
-            f"{path.name}, linha {row_number}: overall não inteiro: {cleaned!r}"
-        )
+        raise ValueError(f"{path.name}, linha {row_number}: overall não inteiro: {cleaned!r}")
     result = int(numeric)
     if not 1 <= result <= 100:
-        raise ValueError(
-            f"{path.name}, linha {row_number}: overall fora da faixa 1-100: {result}"
-        )
+        raise ValueError(f"{path.name}, linha {row_number}: overall fora da faixa 1-100: {result}")
     return result
 
 
-def _iter_rows(
-    path: Path, columns: dict[str, str], limit: int | None
-) -> Iterator[dict[str, Any]]:
+def _iter_rows(path: Path, columns: dict[str, str], limit: int | None) -> Iterator[dict[str, Any]]:
     rows_read = 0
     with pd.read_csv(
         path,
@@ -366,9 +341,7 @@ def _snapshot_date(value: Any, path: Path) -> date | None:
     match = re.search(r"20\d{6}", path.stem)
     if match:
         try:
-            return date(
-                int(match.group()[:4]), int(match.group()[4:6]), int(match.group()[6:])
-            )
+            return date(int(match.group()[:4]), int(match.group()[4:6]), int(match.group()[6:]))
         except ValueError:
             return None
     match = re.search(r"20\d{2}-\d{2}-\d{2}", path.stem)
@@ -387,11 +360,7 @@ def _age_at(birth_date: str | None, on_date: date | None) -> int | None:
         born = date.fromisoformat(birth_date[:10])
     except ValueError:
         return None
-    return (
-        on_date.year
-        - born.year
-        - ((on_date.month, on_date.day) < (born.month, born.day))
-    )
+    return on_date.year - born.year - ((on_date.month, on_date.day) < (born.month, born.day))
 
 
 def _player_candidates(
@@ -501,10 +470,7 @@ def _alias_player_candidates(
         if not identity.get("tm_player_id"):
             continue
         candidate_birth_date = identity.get("birth_date")
-        if (
-            not candidate_birth_date
-            or str(candidate_birth_date)[:10] != target_birth_date
-        ):
+        if not candidate_birth_date or str(candidate_birth_date)[:10] != target_birth_date:
             continue
         candidate_nationality = normalize_player_name(identity.get("nationality"))
         same_nationality = bool(
@@ -602,18 +568,12 @@ def _import_file(
             """)]
     identities_by_name: dict[str, list[dict[str, Any]]] = {}
     for identity in identity_rows:
-        identities_by_name.setdefault(
-            normalize_player_name(identity["name"]), []
-        ).append(identity)
+        identities_by_name.setdefault(normalize_player_name(identity["name"]), []).append(identity)
 
     for row_number, row in enumerate(_iter_rows(path, columns, limit), start=2):
         source_id = _clean(row.get(columns["player_id"]))
         name_column = columns["name"]
-        name = (
-            None
-            if name_column == "__name_from_parts__"
-            else _text(row.get(name_column))
-        )
+        name = None if name_column == "__name_from_parts__" else _text(row.get(name_column))
         if not name and "first_name" in columns and "last_name" in columns:
             first_name = _text(row.get(columns["first_name"]))
             last_name = _text(row.get(columns["last_name"]))
@@ -627,9 +587,7 @@ def _import_file(
         source_club = _text(row.get(columns.get("club", "")))
         source_league = _text(row.get(columns.get("league", "")))
         source_gender = _text(row.get(columns.get("gender", "")))
-        if not include_women and _is_women_record(
-            source_gender, source_league, source_club
-        ):
+        if not include_women and _is_women_record(source_gender, source_league, source_club):
             women_excluded += 1
             continue
         raw_position = _clean(row.get(columns["position"]))
@@ -664,9 +622,7 @@ def _import_file(
         same_name = identities_by_name.get(normalize_player_name(name), [])
         if existing:
             candidates = [
-                identity
-                for identity in candidates
-                if identity["id"] == existing["player_id"]
+                identity for identity in candidates if identity["id"] == existing["player_id"]
             ]
             if not candidates:
                 candidates = [
@@ -718,9 +674,7 @@ def _import_file(
                     )
                 )
                 continue
-        same_name_missing_birth = any(
-            not identity["birth_date"] for identity in same_name
-        )
+        same_name_missing_birth = any(not identity["birth_date"] for identity in same_name)
         if len(candidates) > 1:
             ambiguous += 1
             review_rows.append(
@@ -758,9 +712,7 @@ def _import_file(
             continue
 
         is_new_player = not candidates
-        if is_new_player and _is_brazilian_team(
-            source_club, source_league, league_country
-        ):
+        if is_new_player and _is_brazilian_team(source_club, source_league, league_country):
             brazil_excluded += 1
             continue
 
@@ -900,9 +852,7 @@ def _import_file(
                 "overall_source": "EA",
             }
             identity_rows.append(identity)
-            identities_by_name.setdefault(normalize_player_name(name), []).append(
-                identity
-            )
+            identities_by_name.setdefault(normalize_player_name(name), []).append(identity)
         imported += 1
 
     return {
@@ -923,9 +873,7 @@ def _import_file(
 def _copy_database_read_only(source_path: Path, target_path: Path) -> None:
     if not source_path.is_file():
         raise FileNotFoundError(f"Banco SQLite não encontrado: {source_path}")
-    source = sqlite3.connect(
-        f"file:{source_path.resolve().as_posix()}?mode=ro", uri=True
-    )
+    source = sqlite3.connect(f"file:{source_path.resolve().as_posix()}?mode=ro", uri=True)
     target = sqlite3.connect(target_path)
     try:
         source.backup(target)
@@ -991,9 +939,7 @@ def simulate_ea_import(
                     if row["market_value_eur"] is not None
                     else None
                 )
-                for row in connection.execute(
-                    "SELECT id, market_value_eur FROM players"
-                )
+                for row in connection.execute("SELECT id, market_value_eur FROM players")
             }
 
         import_results = import_ea(
@@ -1008,8 +954,7 @@ def simulate_ea_import(
 
         with connect(simulated_database) as connection:
             imported_sources = {
-                (row["source"], row["source_id"]): dict(row)
-                for row in connection.execute("""
+                (row["source"], row["source_id"]): dict(row) for row in connection.execute("""
                     SELECT ps.source, ps.source_id, p.id AS player_id,
                            p.tm_player_id, p.display_name, p.name, p.overall
                     FROM player_sources AS ps
@@ -1029,26 +974,16 @@ def simulate_ea_import(
         top_new_players: list[dict[str, Any]] = []
         file_summaries: list[dict[str, Any]] = []
         alias_matches = [
-            match
-            for counts in import_results.values()
-            for match in counts["alias_matches"]
+            match for counts in import_results.values() for match in counts["alias_matches"]
         ]
-        alias_identities = {
-            (match["source"], match["source_id"]): match for match in alias_matches
-        }
+        alias_identities = {(match["source"], match["source_id"]): match for match in alias_matches}
         for path in paths:
             columns = columns_by_path[path]
             frame = pd.read_csv(path)
             birth_column = columns.get("birth_date")
             age_column = columns.get("age")
-            birth_count = (
-                int(frame[birth_column].notna().sum())
-                if birth_column is not None
-                else 0
-            )
-            age_count = (
-                int(frame[age_column].notna().sum()) if age_column is not None else 0
-            )
+            birth_count = int(frame[birth_column].notna().sum()) if birth_column is not None else 0
+            age_count = int(frame[age_column].notna().sum()) if age_column is not None else 0
             editions = (
                 sorted(frame[columns["edition"]].dropna().astype(str).unique())
                 if columns.get("edition")
@@ -1076,16 +1011,12 @@ def simulate_ea_import(
             def record_identity(row: dict[str, Any]) -> tuple[str, str] | None:
                 source_id = _source_id(row.get(columns["player_id"]))
                 edition = _edition(row.get(columns.get("edition", "")), path)
-                source = (
-                    f"ea_fc{edition[2:].lower()}" if edition else _source_name(path)
-                )
+                source = f"ea_fc{edition[2:].lower()}" if edition else _source_name(path)
                 if source_id is None:
                     return None
                 return source, source_id
 
-            ordered = frame.sort_values(
-                by=columns["overall"], ascending=False, kind="stable"
-            )
+            ordered = frame.sort_values(by=columns["overall"], ascending=False, kind="stable")
             for row_index, source_row in enumerate(ordered.to_dict(orient="records")):
                 identity = record_identity(source_row)
                 if identity is None:
@@ -1095,9 +1026,7 @@ def simulate_ea_import(
                 alias = alias_identities.get(identity)
                 club = _text(source_row.get(columns.get("club", "")))
                 league = _text(source_row.get(columns.get("league", "")))
-                league_country = _text(
-                    source_row.get(columns.get("league_country", ""))
-                )
+                league_country = _text(source_row.get(columns.get("league_country", "")))
                 if review:
                     status = f"ambíguo: {review['candidate_names'] or review['reason']}"
                 elif not include_women and _is_women_record(
@@ -1137,9 +1066,7 @@ def simulate_ea_import(
             market_overall = market_overalls.get(imported["player_id"])
             ea_overall = imported["overall"]
             if market_overall is not None and ea_overall is not None:
-                comparisons.append(
-                    (market_overall, ea_overall, ea_overall - market_overall)
-                )
+                comparisons.append((market_overall, ea_overall, ea_overall - market_overall))
 
         correlation = (
             float(
@@ -1151,9 +1078,7 @@ def simulate_ea_import(
             else None
         )
         average_difference = (
-            sum(entry[2] for entry in comparisons) / len(comparisons)
-            if comparisons
-            else None
+            sum(entry[2] for entry in comparisons) / len(comparisons) if comparisons else None
         )
         matched_total = sum(counts["matched"] for counts in import_results.values())
         matched_without_market_value = matched_total - len(comparisons)
@@ -1198,10 +1123,7 @@ def simulate_ea_import(
         if average_difference is not None
         else "Jogadores comparados: 0; diferença média indisponível."
     )
-    print(
-        f"Casados sem valor de mercado para comparar: "
-        f"{matched_without_market_value:,}."
-    )
+    print(f"Casados sem valor de mercado para comparar: " f"{matched_without_market_value:,}.")
     print(f"CSV de revisão (simulação): {output_review}")
     print("Top 30 overalls do EA e resultado do cruzamento:")
     for player in top_players[:30]:
@@ -1216,9 +1138,7 @@ def simulate_ea_import(
             f"| EA ID {player['source_id']}"
         )
     print("Exemplos de casamentos por alias:")
-    for match in sorted(
-        alias_matches, key=lambda item: (-item["score"], item["ea_name"])
-    )[:30]:
+    for match in sorted(alias_matches, key=lambda item: (-item["score"], item["ea_name"]))[:30]:
         print(
             f"  {match['ea_name']} -> {match['transfermarkt_name']} "
             f"(TM {match['transfermarkt_id']}, score {match['score']:.1f}, "
@@ -1259,12 +1179,9 @@ def import_ea(
     unknown = _unknown_position_tokens(positions)
     if unknown:
         details = "; ".join(
-            f"{Path(path).name}: {', '.join(tokens)}"
-            for path, tokens in unknown.items()
+            f"{Path(path).name}: {', '.join(tokens)}" for path, tokens in unknown.items()
         )
-        raise ValueError(
-            "Há posições EA FC sem mapeamento; revise antes de importar: " + details
-        )
+        raise ValueError("Há posições EA FC sem mapeamento; revise antes de importar: " + details)
 
     columns_by_path = {path: _columns(path) for path in paths}
     if not include_women:
@@ -1372,9 +1289,7 @@ def main() -> None:
     try:
         if args.show_positions:
             if not paths:
-                parser.error(
-                    f"Nenhum CSV encontrado em {RAW_DIRECTORY}; informe um com --input."
-                )
+                parser.error(f"Nenhum CSV encontrado em {RAW_DIRECTORY}; informe um com --input.")
             _show_positions(inspect_positions(paths))
             return
         if args.dry_run:

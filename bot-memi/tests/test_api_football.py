@@ -129,9 +129,9 @@ class ApiFootballImportTests(unittest.TestCase):
         self.assertEqual(first["players"], 1)
         with connect(self.database_path) as connection:
             checkpoint = json.loads(
-                connection.execute(
-                    "SELECT checkpoint FROM import_checkpoints"
-                ).fetchone()["checkpoint"]
+                connection.execute("SELECT checkpoint FROM import_checkpoints").fetchone()[
+                    "checkpoint"
+                ]
             )
             player = connection.execute(
                 "SELECT * FROM players WHERE name = ?", ("Jogador API",)
@@ -162,9 +162,9 @@ class ApiFootballImportTests(unittest.TestCase):
                 3,
             )
             checkpoint = json.loads(
-                connection.execute(
-                    "SELECT checkpoint FROM import_checkpoints"
-                ).fetchone()["checkpoint"]
+                connection.execute("SELECT checkpoint FROM import_checkpoints").fetchone()[
+                    "checkpoint"
+                ]
             )
             self.assertEqual(checkpoint, {"page": 3, "offset": 0})
 

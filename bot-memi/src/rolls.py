@@ -10,18 +10,18 @@ from pathlib import Path
 from typing import Any
 
 from src.db import DATABASE_PATH, connect
-from src.ratings import GAME_OVERALL_SQL, RARITY_TIERS, effective_overall
+from src.ratings import GAME_OVERALL_SQL, POOL_SQL, RARITY_TIERS, effective_overall
 
 ROLLS_PER_CYCLE = 10
-CYCLE_LENGTH = timedelta(minutes=30)
+CYCLE_LENGTH = timedelta(hours=1)
+# Os ciclos começam na hora cheia (em Brasília também, já que o fuso é UTC-3).
+CYCLE_OFFSET_SECONDS = 0
 CLAIM_EXCLUSIVE_TIME = timedelta(seconds=5)
 CLAIM_OFFER_LIFETIME = timedelta(minutes=5)
 CLAIM_COOLDOWN = timedelta(hours=1)
 MAX_DUPLICATE_BALLS = 10
 
-RARITY_BANDS = tuple(
-    (lower, upper, weight) for _, _, lower, upper, weight in RARITY_TIERS
-)
+RARITY_BANDS = tuple((lower, upper, weight) for _, _, lower, upper, weight in RARITY_TIERS)
 
 
 class RollError(Exception):
@@ -70,9 +70,9 @@ def _utc_now(value: datetime | None) -> datetime:
 
 def _cycle_start(now: datetime) -> datetime:
     epoch_seconds = int(now.timestamp())
-    cycle_index = (epoch_seconds - 10 * 60) // int(CYCLE_LENGTH.total_seconds())
+    cycle_index = (epoch_seconds - CYCLE_OFFSET_SECONDS) // int(CYCLE_LENGTH.total_seconds())
     return datetime.fromtimestamp(
-        cycle_index * int(CYCLE_LENGTH.total_seconds()) + 10 * 60,
+        cycle_index * int(CYCLE_LENGTH.total_seconds()) + CYCLE_OFFSET_SECONDS,
         tz=timezone.utc,
     )
 
@@ -171,15 +171,10 @@ def roll_player(
         counts = connection.execute(f"""
             SELECT rarity_index({GAME_OVERALL_SQL}) AS band, COUNT(*) AS player_count
             FROM players AS p
-            WHERE p.activity_status = 'active'
-              AND p.phase2_candidate = 0
-              AND p.overall IS NOT NULL
-              AND p.game_position IS NOT NULL
+            WHERE {POOL_SQL}
             GROUP BY band
             """).fetchall()
-        available_counts = {
-            int(row["band"]): int(row["player_count"]) for row in counts
-        }
+        available_counts = {int(row["band"]): int(row["player_count"]) for row in counts}
         available_bands = sorted(available_counts)
         if not available_bands:
             raise NoEligiblePlayers("Não há jogadores elegíveis no pool.")
@@ -198,18 +193,16 @@ def roll_player(
               ON w.player_id = p.id
              AND w.discord_user_id = ?
              AND w.wish_type = 'star'
-            WHERE p.activity_status = 'active'
-              AND p.phase2_candidate = 0
+            WHERE {POOL_SQL}
               AND {GAME_OVERALL_SQL} BETWEEN ? AND ?
-              AND p.game_position IS NOT NULL
             """,
             (user_id, lower_bound, upper_bound),
         ).fetchall()
         star_wish_ids = [int(row["id"]) for row in star_wish_rows]
         candidate_count = available_counts[selected_band]
-        if star_wish_ids and generator.random() < (
-            1.25 * len(star_wish_ids)
-        ) / (candidate_count + 0.25 * len(star_wish_ids)):
+        if star_wish_ids and generator.random() < (1.25 * len(star_wish_ids)) / (
+            candidate_count + 0.25 * len(star_wish_ids)
+        ):
             selected_player_id = generator.choice(star_wish_ids)
             player_row = connection.execute(
                 f"""
@@ -228,14 +221,18 @@ def roll_player(
                 (selected_player_id,),
             ).fetchone()
         else:
-            star_exclusion = """
+            star_exclusion = (
+                """
               AND NOT EXISTS (
                   SELECT 1 FROM user_wishes AS w
                   WHERE w.discord_user_id = ?
                     AND w.player_id = p.id
                     AND w.wish_type = 'star'
               )
-            """ if star_wish_ids else ""
+            """
+                if star_wish_ids
+                else ""
+            )
             offset = generator.randrange(candidate_count - len(star_wish_ids))
             params: tuple[Any, ...] = (lower_bound, upper_bound)
             if star_wish_ids:
@@ -253,10 +250,8 @@ def roll_player(
             LEFT JOIN player_ownership AS o ON o.player_id = p.id
             LEFT JOIN game_users AS owner ON owner.discord_user_id = o.discord_user_id
             LEFT JOIN player_balls AS b ON b.player_id = p.id
-            WHERE p.activity_status = 'active'
-              AND p.phase2_candidate = 0
+            WHERE {POOL_SQL}
               AND {GAME_OVERALL_SQL} BETWEEN ? AND ?
-              AND p.game_position IS NOT NULL
               {star_exclusion}
             ORDER BY p.id
             LIMIT 1 OFFSET ?
@@ -417,9 +412,7 @@ def claim_roll_offer(
             )
             return ClaimOutcome("reward_claimed", reward_amount=reward_amount)
 
-        if (
-            user_id != offer["roller_id"]
-        ):
+        if user_id != offer["roller_id"]:
             exclusivity = connection.execute(
                 """
                 SELECT level FROM user_upgrades

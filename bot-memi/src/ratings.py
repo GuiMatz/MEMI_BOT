@@ -17,6 +17,11 @@ BOOST_FACTOR = 0.4
 CARTOLA_OVERALL = 90
 SPECIAL_OVERALL = 100
 MAX_REGULAR_OVERALL = 99
+# Jogadores sem nota em nenhuma fonte entram na roleta com esta nota bruta (vira 60).
+MISSING_RAW_OVERALL = 40
+# Lendas da Enciclopédia ficam sempre entre 90 e 99.
+LEGEND_SOURCE = "Lenda"
+LEGEND_MIN_OVERALL = 90
 # A única carta 100 do jogo; comparada com o nome normalizado.
 SPECIAL_PLAYER_NAMES = frozenset({"maria sofia"})
 
@@ -52,13 +57,14 @@ def game_overall(
     name: str | None = None,
 ) -> int | None:
     """Converte a nota bruta da fonte no overall usado em todo o jogo."""
-    if raw_overall is None:
-        return None
     if is_special_player(name):
         return SPECIAL_OVERALL
-    if (overall_source or "").casefold() == "cartola":
+    source = (overall_source or "").casefold()
+    if source == "cartola":
         return CARTOLA_OVERALL
-    raw = int(raw_overall)
+    if source == LEGEND_SOURCE.casefold():
+        return max(LEGEND_MIN_OVERALL, min(MAX_REGULAR_OVERALL, int(raw_overall or 0)))
+    raw = MISSING_RAW_OVERALL if raw_overall is None else int(raw_overall)
     if raw < BOOST_CEILING:
         raw = round(raw + (BOOST_CEILING - raw) * BOOST_FACTOR)
     return max(1, min(MAX_REGULAR_OVERALL, raw))
@@ -95,6 +101,11 @@ def register_sql_functions(connection) -> None:
     connection.create_function("effective_overall", 2, effective_overall, deterministic=True)
     connection.create_function("rarity_index", 1, rarity_index, deterministic=True)
 
+
+# Quem pode sair no roll: qualquer jogador não marcado como inativo e com posição.
+# Atividade "unknown" e a marca de fase 2 não tiram mais ninguém da roleta, e quem
+# não tem overall usa MISSING_RAW_OVERALL.
+POOL_SQL = "p.activity_status != 'inactive' AND p.game_position IS NOT NULL"
 
 # Expressões reutilizadas nas consultas (alias `p` para players e `b` para bolas).
 GAME_OVERALL_SQL = "game_overall(p.overall, p.overall_source, p.name)"

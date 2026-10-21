@@ -122,9 +122,7 @@ def create_trade(
                 (user_id, player_id),
             ).fetchone()
             if owner is None:
-                raise TransactionError(
-                    "Cada lado precisa oferecer um jogador do próprio elenco."
-                )
+                raise TransactionError("Cada lado precisa oferecer um jogador do próprio elenco.")
         for user_id, amount in (
             (proposer, proposer_memilets),
             (recipient, recipient_memilets),

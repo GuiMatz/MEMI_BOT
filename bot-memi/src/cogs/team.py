@@ -8,7 +8,8 @@ import discord
 from discord.ext import commands
 
 from src.db import DATABASE_PATH, normalize_player_name
-from src.game import list_owned_players
+from src.cogs.common import PlayerChoiceView, ambiguity_text
+from src.game import list_owned_players, resolve_player
 from src.lineup_image import render_lineup
 from src.teams import (
     FORMATIONS,
@@ -37,6 +38,7 @@ TEAM_FIELDS = {
     "estadio": "stadium_name",
     "logo": "logo_path",
     "camisa": "kit_path",
+    "liga": "favorite_league",
 }
 
 
@@ -124,9 +126,7 @@ class LineupBuilderView(discord.ui.View):
         if self.selected_slot is not None:
             position = positions[self.selected_slot - 1]
             current = by_slot.get(self.selected_slot)
-            elsewhere = {
-                int(player["id"]): int(player["slot_order"]) for player in lineup
-            }
+            elsewhere = {int(player["id"]): int(player["slot_order"]) for player in lineup}
             players = list_owned_players(
                 self.owner.id,
                 self.database_path,
@@ -137,7 +137,9 @@ class LineupBuilderView(discord.ui.View):
             options = []
             for player in players:
                 description = player["club_name"] or "Passe livre"
-                if int(player["id"]) in elsewhere and int(player["id"]) != (current or {}).get("id"):
+                if int(player["id"]) in elsewhere and int(player["id"]) != (current or {}).get(
+                    "id"
+                ):
                     description = "já escalado em outra vaga (muda de lugar)"
                 options.append(
                     discord.SelectOption(
@@ -167,10 +169,14 @@ class LineupBuilderView(discord.ui.View):
                 )
             self.add_item(picker)
 
-        auto = discord.ui.Button(label="Escalar automático", emoji="🪄", style=discord.ButtonStyle.primary, row=3)
+        auto = discord.ui.Button(
+            label="Escalar automático", emoji="🪄", style=discord.ButtonStyle.primary, row=3
+        )
         auto.callback = self._on_auto
         self.add_item(auto)
-        done = discord.ui.Button(label="Concluir", emoji="✅", style=discord.ButtonStyle.success, row=3)
+        done = discord.ui.Button(
+            label="Concluir", emoji="✅", style=discord.ButtonStyle.success, row=3
+        )
         done.callback = self._on_done
         self.add_item(done)
 
@@ -179,12 +185,14 @@ class LineupBuilderView(discord.ui.View):
         embed = discord.Embed(
             title=f"✏️ Escalação · {team['team_name']}",
             description=(
-                (f"{self.notice}\n\n" if self.notice else "")
-                + "1. Escolha a **formação**\n"
+                (f"{self.notice}\n\n" if self.notice else "") + "1. Escolha a **formação**\n"
                 "2. Clique na **posição**\n"
                 "3. Escolha o **jogador** (ordenados por overall)\n"
-                + ("\n✅ Time completo! Pronto para `mm!amistoso`." if complete
-                   else f"\n{len(lineup)}/11 titulares escalados.")
+                + (
+                    "\n✅ Time completo! Pronto para `mm!amistoso`."
+                    if complete
+                    else f"\n{len(lineup)}/11 titulares escalados."
+                )
             ),
             color=discord.Color.from_str(team["color"]),
         )
@@ -202,9 +210,7 @@ class LineupBuilderView(discord.ui.View):
 
     async def _on_formation(self, interaction: discord.Interaction) -> None:
         value = interaction.data["values"][0]
-        dropped = set_formation(
-            self.owner.id, value, self.database_path, drop_incompatible=True
-        )
+        dropped = set_formation(self.owner.id, value, self.database_path, drop_incompatible=True)
         self.selected_slot = None
         self.notice = f"Formação **{value}**." + (
             f" {dropped} titular(es) sem vaga saíram." if dropped else ""
@@ -291,10 +297,10 @@ class TeamCog(commands.Cog):
     ) -> None:
         ensure_team(context.author.id, context.author.display_name, self.database_path)
         if field:
-            key = TEAM_FIELDS.get(field.casefold())
+            key = TEAM_FIELDS.get(normalize_player_name(field))
             if key is None or value is None:
                 await context.reply(
-                    "Use `mm!time nome|cor|mascote|tecnico|estadio|logo|camisa <valor>`.",
+                    "Use `mm!time nome|cor|liga|mascote|tecnico|estadio|logo|camisa <valor>`.",
                     mention_author=False,
                 )
                 return
@@ -317,6 +323,11 @@ class TeamCog(commands.Cog):
         embed.add_field(
             name="Estilo",
             value=STYLE_LABELS[team["style"]],
+            inline=True,
+        )
+        embed.add_field(
+            name="Liga favorita",
+            value=team.get("favorite_league") or "`mm!time liga <nome>`",
             inline=True,
         )
         embed.add_field(
@@ -396,59 +407,49 @@ class TeamCog(commands.Cog):
             )
             return
         parts = query.split(maxsplit=1)
-        if parts[0].casefold() in {"remover", "tirar"}:
-            if len(parts) != 2:
-                await context.reply(
-                    "Informe o ID do jogador a remover: `mm!escalar remover <id>`.",
-                    mention_author=False,
-                )
-                return
-            player_id = self._parse_player_id(parts[1])
-            if player_id is None or not remove_player_from_lineup(
-                context.author.id,
-                player_id,
-                self.database_path,
-            ):
-                await context.reply("Esse jogador não está escalado.", mention_author=False)
-                return
-            await context.reply("Jogador removido da escalação.", mention_author=False)
+        removing = normalize_player_name(parts[0]) in {"remover", "tirar"}
+        if removing and len(parts) != 2:
+            await context.reply("Diga quem sai: `mm!escalar remover <nome>`.", mention_author=False)
+            return
+        search = parts[1] if removing else query
+        pool = (
+            get_lineup(context.author.id, self.database_path)
+            if removing
+            else list_owned_players(context.author.id, self.database_path, limit=5000)
+        )
+        player, candidates = resolve_player(search, pool)
+
+        async def apply(chosen: dict) -> str:
+            if removing:
+                remove_player_from_lineup(context.author.id, int(chosen["id"]), self.database_path)
+                return f"**{chosen['name']}** saiu da escalação."
+            try:
+                slot = scale_player(context.author.id, int(chosen["id"]), self.database_path)
+            except TeamError as error:
+                return str(error)
+            return (
+                f"**{chosen['name']}** escalado na vaga {slot}. "
+                "Veja com `mm!time` ou monte clicando em `mm!escalar`."
+            )
+
+        if player is not None:
+            await context.reply(await apply(player), mention_author=False)
+            return
+        if not candidates:
+            where = "na escalação" if removing else "no seu elenco"
+            await context.reply(f"Não achei **{search[:60]}** {where}.", mention_author=False)
             return
 
-        player_id = self._parse_player_id(query)
-        if player_id is None:
-            owned = list_owned_players(
-                context.author.id,
-                self.database_path,
-                limit=1000,
-            )
-            normalized_query = normalize_player_name(query)
-            matches = [
-                player
-                for player in owned
-                if normalized_query in normalize_player_name(player["name"])
-            ]
-            if len(matches) != 1:
-                await context.reply(
-                    "Informe um ID de jogador do seu elenco, ou refine o nome.",
-                    mention_author=False,
-                )
-                return
-            player_id = int(matches[0]["id"])
-        try:
-            slot = scale_player(
-                context.author.id,
-                player_id,
-                self.database_path,
-            )
-        except TeamError as error:
-            await context.reply(str(error), mention_author=False)
-            return
+        async def chosen(interaction: discord.Interaction, picked: dict) -> None:
+            await interaction.response.edit_message(content=await apply(picked), view=None)
+
         await context.reply(
-            f"Jogador escalado na posição {slot}. Consulte `mm!time` para ver a escalação.",
+            ambiguity_text(search, candidates),
+            view=PlayerChoiceView(context.author.id, candidates, chosen),
             mention_author=False,
         )
 
-    @commands.command(name="tatica")
+    @commands.command(name="tatica", aliases=["tática", "tactics"])
     async def tactics(
         self,
         context: commands.Context,
@@ -457,53 +458,72 @@ class TeamCog(commands.Cog):
         value: str | None = None,
     ) -> None:
         ensure_team(context.author.id, context.author.display_name, self.database_path)
+        notice = ""
         if operation and value:
             op = normalize_player_name(operation)
             try:
-                if op in {"formacao", "formação"}:
+                if op == "formacao":
                     set_formation(context.author.id, value, self.database_path)
+                    notice = f"✅ Formação: **{value.strip()}**."
                 elif op in {"estilo", "style"}:
                     set_team_style(context.author.id, value, self.database_path)
-                elif op in {"capitao", "capitão", "falta", "penalti", "pênalti"}:
-                    role = {
-                        "capitão": "capitao",
-                        "pênalti": "penalti",
-                    }.get(op, op)
-                    player_id = self._parse_player_id(value)
-                    if player_id is None:
-                        raise TeamError("Informe o ID do jogador escalado.")
+                    notice = "✅ Estilo atualizado."
+                elif op in TACTIC_ROLES:
+                    lineup = get_lineup(context.author.id, self.database_path)
+                    player, candidates = resolve_player(value, lineup)
+                    if player is None:
+                        if not candidates:
+                            raise TeamError(
+                                f"**{value[:60]}** não está entre os titulares. "
+                                "Escale primeiro com `mm!escalar`."
+                            )
+                        names = ", ".join(candidate["name"] for candidate in candidates[:5])
+                        raise TeamError(
+                            f"Mais de um titular combina com **{value[:60]}**: {names}."
+                        )
                     set_team_role(
-                        context.author.id,
-                        role,
-                        player_id,
-                        self.database_path,
+                        context.author.id, TACTIC_ROLES[op], int(player["id"]), self.database_path
                     )
+                    notice = f"✅ {ROLE_LABELS[TACTIC_ROLES[op]]}: **{player['name']}**."
                 else:
-                    raise TeamError(
-                        "Use formacao, estilo, capitao, falta ou penalti."
-                    )
+                    raise TeamError("Use formacao, estilo, capitao, falta ou penalti.")
             except TeamError as error:
                 await context.reply(str(error), mention_author=False)
                 return
         team = get_team(context.author.id, self.database_path)
         lineup = get_lineup(context.author.id, self.database_path)
-        lines = [
-            f"**Formação:** {team['formation']} "
-            f"(`mm!tatica formacao <{'|'.join(FORMATIONS)}>`) ",
-            f"**Estilo:** {STYLE_LABELS[team['style']]} "
-            "(`equilibrado`, `ataque`, `contra-ataque`)",
-            f"**Titulares:** {len(lineup)}/11",
-            "**Capitão:** cosmético; **falta/pênalti:** definidos por ID "
-            "com `mm!tatica capitao|falta|penalti <id>`.",
-        ]
-        await context.reply("\n".join(lines), mention_author=False)
+        names = {int(player["id"]): player["name"] for player in lineup}
+        embed = discord.Embed(
+            title=f"Tática · {team['team_name']}",
+            description=notice or None,
+            color=discord.Color.from_str(team["color"]),
+        )
+        embed.add_field(name="Formação", value=team["formation"])
+        embed.add_field(name="Estilo", value=STYLE_LABELS[team["style"]])
+        embed.add_field(name="Titulares", value=f"{len(lineup)}/11")
+        for column, label in (
+            ("captain_player_id", "Capitão"),
+            ("free_kick_player_id", "Cobrador de falta"),
+            ("penalty_player_id", "Cobrador de pênalti"),
+        ):
+            embed.add_field(name=label, value=names.get(team[column] or 0, "não definido"))
+        embed.set_footer(
+            text="mm!tatica formacao 4-3-3 · estilo ataque · capitao <nome> · falta <nome> · penalti <nome>"
+        )
+        await context.reply(embed=embed, mention_author=False)
 
-    @staticmethod
-    def _parse_player_id(value: str) -> int | None:
-        try:
-            return int(value.strip())
-        except ValueError:
-            return None
+
+# Funções táticas aceitas (sem acento) e a coluna correspondente em set_team_role.
+TACTIC_ROLES = {
+    "capitao": "capitao",
+    "capita": "capitao",
+    "falta": "falta",
+    "faltas": "falta",
+    "penalti": "penalti",
+    "penaltis": "penalti",
+    "penalty": "penalti",
+}
+ROLE_LABELS = {"capitao": "Capitão", "falta": "Cobrador de falta", "penalti": "Cobrador de pênalti"}
 
 
 async def setup(bot: commands.Bot) -> None:

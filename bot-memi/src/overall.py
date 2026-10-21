@@ -18,9 +18,7 @@ def estimate_overall(market_value_eur: int) -> int:
     """Estima overall somente pelo valor de mercado."""
     if market_value_eur < 0:
         raise ValueError("O valor de mercado não pode ser negativo.")
-    bounded_value = min(
-        max(market_value_eur, MIN_MARKET_VALUE_EUR), MAX_MARKET_VALUE_EUR
-    )
+    bounded_value = min(max(market_value_eur, MIN_MARKET_VALUE_EUR), MAX_MARKET_VALUE_EUR)
     market_score = MIN_MARKET_OVERALL + (
         (MAX_MARKET_OVERALL - MIN_MARKET_OVERALL)
         * math.log(bounded_value / MIN_MARKET_VALUE_EUR)
@@ -49,9 +47,7 @@ def recalculate_overalls(
         query += " LIMIT ?"
 
     with connect(database_path) as connection:
-        rows = connection.execute(
-            query, (limit,) if limit is not None else ()
-        ).fetchall()
+        rows = connection.execute(query, (limit,) if limit is not None else ()).fetchall()
         for row in rows:
             player_id = row["id"]
             if row["manual_overall"] is not None:
@@ -98,10 +94,7 @@ def main() -> None:
         result = recalculate_overalls(args.database, args.limit)
     except ValueError as error:
         parser.error(str(error))
-    print(
-        "Overalls atualizados: "
-        + ", ".join(f"{key}={value}" for key, value in result.items())
-    )
+    print("Overalls atualizados: " + ", ".join(f"{key}={value}" for key, value in result.items()))
 
 
 if __name__ == "__main__":

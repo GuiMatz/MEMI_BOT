@@ -43,7 +43,7 @@ python -m src.bot
 ```
 
 O bot carrega os comandos de jogo e gerenciamento em `src/cogs/`. `mm!roll`
-oferece 10 rolagens por ciclo de 30 minutos, renovadas às `:10` e `:40` UTC, e
+oferece 10 rolagens por ciclo de 1 hora, renovadas na hora cheia (horário de Brasília), e
 segue as faixas de raridade do [guia de implementação](docs/guia-ideias-jogo.md).
 Upgrades e tokens de crates podem aumentar os rolls. Duplicatas próprias dão
 uma bola (até 10), +1 overall efetivo e 100 Memilets; acima do limite dão 500
@@ -117,6 +117,28 @@ testar a simulação sem alterar times reais.
 O FUT.AE é um módulo do MeMi BOT, não um bot separado. O menu geral continua em
 `mm!ajuda`; `mm!fut.ae` e `mm!futae` mostram apenas os comandos do jogo.
 
+### 3.2 — enciclopédia, cartas e roleta maior
+
+- **Enciclopédia** (`src/encyclopedia.py`, dados em `src/seeds/enciclopedia.json`):
+  carregada a cada inicialização, sem duplicar. As lendas viram cartas com
+  `overall_source = 'Lenda'` (90–99, com os maiores nomes até 99). Se o jogador já
+  existe no banco com o mesmo nome e nacionalidade, ele é promovido em vez de
+  duplicado. Nomes de uma palavra só ("Marcos", "Juan") só promovem jogadores com
+  nota 80 ou mais; abaixo disso a lenda ganha carta própria, chamada "Nome (Lenda)".
+  Carga manual: `python -m src.encyclopedia`.
+- **Roleta** (`POOL_SQL` em `src/ratings.py`): entra todo jogador que não está
+  marcado como inativo e tem posição. Atividade `unknown` e a marca de fase 2 deixaram
+  de excluir. Quem não tem overall usa nota bruta 40 (60 no jogo). Sem posição
+  continua fora. `scripts/gerar_tabela_fora_roleta.py` usa a mesma regra.
+- **Horários**: rolls renovam a cada hora cheia, e mensagens mostram horário de
+  Brasília (`src/clock.py`, UTC−3 fixo, sem depender de `tzdata`).
+- **Cartas** (`src/card_image.py`): carta vertical usada em `mm!elenco` (uma por
+  página), `mm!scout` e `mm!roll`.
+- **Nomes em vez de IDs** (`src.game.resolve_player`): ordem de busca é ID, nome
+  exato, apelido contido no nome e iniciais. Com homônimos, abre um menu.
+- **Logos**: `sync_club_logos` liga escudos e logos do Cartola aos clubes e cria
+  os que faltam. Os nomes são padronizados com acentos dos clubes brasileiros.
+
 ### 3.1 — escalação clicável, jogos narrados e overall novo
 
 - **Overall do jogo** (`src/ratings.py`): o banco guarda a nota da fonte e o jogo usa
@@ -146,7 +168,7 @@ O FUT.AE é um módulo do MeMi BOT, não um bot separado. O menu geral continua 
 ### Coleção e rolagens
 
 - Banco local com jogadores, ligas, clubes, técnicos, estádios e fontes de dados.
-- `mm!roll` com ciclos de 30 minutos, raridades, claims, exclusividade temporária,
+- `mm!roll` com ciclos de 1 hora, raridades, claims, exclusividade temporária,
   duplicatas, bolas e recompensas.
 - Jogadores sem clube aparecem como `Passes Livres`.
 - Fotos locais são opcionais, têm fallback visual e são coletadas pelo worker do

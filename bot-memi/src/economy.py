@@ -7,8 +7,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
-from zoneinfo import ZoneInfo
 
+from src.clock import BRASILIA
 from src.db import DATABASE_PATH, connect
 from src.game import register_user
 from src.rolls import CLAIM_COOLDOWN, CYCLE_LENGTH, ROLLS_PER_CYCLE, cycle_start_for
@@ -26,7 +26,7 @@ CRATE_WEIGHTS = {
     "rolls": 2.5,
     "star_wishes": 2.5,
 }
-DAILY_TIMEZONE = ZoneInfo("America/Sao_Paulo")
+DAILY_TIMEZONE = BRASILIA
 
 UPGRADE_LIMITS = {
     "rolls": 90,
@@ -159,9 +159,7 @@ def buy_upgrade(
             (user_id,),
         ).fetchone()["memilets"]
         if balance < cost:
-            raise InsufficientFunds(
-                f"Você precisa de {cost} Memilets para comprar este upgrade."
-            )
+            raise InsufficientFunds(f"Você precisa de {cost} Memilets para comprar este upgrade.")
         connection.execute(
             """
             UPDATE game_users
@@ -201,9 +199,9 @@ def claim_daily(
             (user_id,),
         ).fetchone()
         if account["last_daily_at"]:
-            available_at = datetime.fromisoformat(
-                account["last_daily_at"]
-            ).astimezone(timezone.utc) + timedelta(hours=24)
+            available_at = datetime.fromisoformat(account["last_daily_at"]).astimezone(
+                timezone.utc
+            ) + timedelta(hours=24)
             if current_time < available_at:
                 raise DailyCooldown(available_at)
         row = connection.execute(
@@ -297,9 +295,7 @@ def add_wish(
             """,
             (user_id, "wishes" if wish_type == "normal" else "star_wishes"),
         ).fetchone()
-        capacity = (5 if wish_type == "normal" else 1) + (
-            int(upgrade["level"]) if upgrade else 0
-        )
+        capacity = (5 if wish_type == "normal" else 1) + (int(upgrade["level"]) if upgrade else 0)
         if count_by_type.get(wish_type, 0) >= capacity:
             raise EconomyError(
                 f"Você já está usando todos os {capacity} slots de "
@@ -400,7 +396,10 @@ def open_crate(
                 weights=tuple(CRATE_WEIGHTS.values()),
                 k=1,
             )[0]
-            if reward_key in {"star_wishes", "wishes", "rolls"} and reward_key not in permanent_available:
+            if (
+                reward_key in {"star_wishes", "wishes", "rolls"}
+                and reward_key not in permanent_available
+            ):
                 reward_key = "jackpot"
 
         if reward_key == "claim_reset":
@@ -409,8 +408,7 @@ def open_crate(
                 (user_id,),
             ).fetchone()
             on_cooldown = bool(account["last_claim_at"]) and (
-                datetime.fromisoformat(account["last_claim_at"]) + CLAIM_COOLDOWN
-                > _utc_now(None)
+                datetime.fromisoformat(account["last_claim_at"]) + CLAIM_COOLDOWN > _utc_now(None)
             )
             if on_cooldown:
                 connection.execute(

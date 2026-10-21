@@ -7,13 +7,13 @@ import random
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
+from src.clock import BRASILIA
 from src.db import DATABASE_PATH, connect
 from src.simulation import penalty_shootout_kicks, simulate_match
 from src.teams import TeamError, get_valid_lineup
 
-CHAMPIONSHIP_TIMEZONE = ZoneInfo("America/Sao_Paulo")
+CHAMPIONSHIP_TIMEZONE = BRASILIA
 
 
 class ChampionshipError(Exception):
@@ -232,7 +232,7 @@ def play_championship(
         if fixture_count == 0:
             match_order = 0
             for index, home in enumerate(entries):
-                for away in entries[index + 1:]:
+                for away in entries[index + 1 :]:
                     match_order += 1
                     connection.execute(
                         """
@@ -312,13 +312,15 @@ def play_championship(
                 ),
             )
             connection.commit()
-        final_fixture = dict(connection.execute(
-            """
+        final_fixture = dict(
+            connection.execute(
+                """
             SELECT * FROM championship_fixtures
             WHERE championship_id = ? AND is_final = 1
             """,
-            (championship["id"],),
-        ).fetchone())
+                (championship["id"],),
+            ).fetchone()
+        )
     if final_fixture["home_goals"] is None:
         final_fixture = _play_fixture(final_fixture, generator, database_path, final=True)
     with connect(database_path) as connection:
@@ -378,9 +380,7 @@ def _play_fixture(
         extra["penalties"] = [home_penalties, away_penalties]
         extra["penalty_kicks"] = [asdict(kick) for kick in kicks]
         winner_id = (
-            fixture["home_user_id"]
-            if home_penalties > away_penalties
-            else fixture["away_user_id"]
+            fixture["home_user_id"] if home_penalties > away_penalties else fixture["away_user_id"]
         )
     elif final:
         winner_id = (

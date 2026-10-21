@@ -8,7 +8,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from src.db import DATABASE_PATH, ROOT, connect
+from src.db import DATABASE_PATH, ROOT, connect, normalize_player_name
 from src.game import register_user
 from src.ratings import EFFECTIVE_OVERALL_SQL, GAME_OVERALL_SQL
 
@@ -107,6 +107,7 @@ def set_team_field(
         "stadium_name",
         "logo_path",
         "kit_path",
+        "favorite_league",
     }
     if field not in allowed:
         raise ValueError("Campo de time inválido.")
@@ -120,6 +121,8 @@ def set_team_field(
         raise TeamError("Esse campo pode ter até 80 caracteres.")
     if field in {"logo_path", "kit_path"}:
         value = resolve_local_asset(value).relative_to(ROOT).as_posix()
+    if field in CATALOG_FIELDS:
+        value = catalog_name(field, value, database_path)
     with connect(database_path) as connection:
         cursor = connection.execute(
             f"""
@@ -133,6 +136,61 @@ def set_team_field(
             raise TeamError("Seu time ainda não foi criado.")
 
 
+# Campos do time que, quando batem com o catálogo, usam o nome oficial do item.
+# A liga precisa existir; técnico, estádio e mascote também aceitam texto livre.
+CATALOG_FIELDS = {
+    "favorite_league": ("leagues", "name", True),
+    "coach_name": ("coaches", "name", False),
+    "stadium_name": ("stadiums", "name", False),
+    "mascot": ("mascots", "name || COALESCE(' (' || owner || ')', '')", False),
+}
+
+
+# Apelidos comuns trocados pelo nome oficial antes de procurar no catálogo.
+CATALOG_NICKNAMES = {
+    "brasileirao": "campeonato brasileiro",
+    "carioca": "campeonato carioca",
+    "paulistao": "campeonato paulista",
+    "gauchao": "campeonato gaucho",
+    "mineirao": "campeonato mineiro",
+    "baianao": "campeonato baiano",
+    "mls": "major league soccer",
+    "epl": "premier league",
+}
+
+
+def catalog_name(field: str, value: str, database_path: str | Path = DATABASE_PATH) -> str:
+    table, name_sql, required = CATALOG_FIELDS[field]
+    wanted = normalize_player_name(value)
+    for nickname, official in CATALOG_NICKNAMES.items():
+        wanted = re.sub(rf"\b{nickname}\b", official, wanted)
+    if wanted == "campeonato brasileiro":
+        wanted += " serie a"
+    tokens = wanted.split()
+    with connect(database_path) as connection:
+        names = [
+            row["name"] for row in connection.execute(f"SELECT {name_sql} AS name FROM {table}")
+        ]
+
+    def matches(name: str) -> bool:
+        words = normalize_player_name(name).split()
+        return all(any(word.startswith(token) for word in words) for token in tokens)
+
+    exact = [name for name in names if normalize_player_name(name) == wanted]
+    partial = [name for name in names if tokens and matches(name)]
+    if exact:
+        return exact[0]
+    if len(partial) == 1:
+        return partial[0]
+    if not required:
+        return value.strip()
+    if partial:
+        raise TeamError("Mais de uma liga combina: " + ", ".join(sorted(partial)[:8]) + ".")
+    raise TeamError(
+        f"Não conheço a liga **{value.strip()[:60]}**. Veja as opções em `mm!top ligas`."
+    )
+
+
 def resolve_local_asset(path: str | Path) -> Path:
     base = (ROOT / "data" / "assets" / "brasfoot").resolve()
     candidate = Path(path)
@@ -140,9 +198,7 @@ def resolve_local_asset(path: str | Path) -> Path:
         candidate = base / candidate
     resolved = candidate.resolve()
     if base not in resolved.parents or not resolved.is_file():
-        raise TeamError(
-            "A imagem precisa existir dentro de `data/assets/brasfoot/`."
-        )
+        raise TeamError("A imagem precisa existir dentro de `data/assets/brasfoot/`.")
     if resolved.suffix.casefold() not in {".png", ".jpg", ".jpeg", ".webp"}:
         raise TeamError("A imagem precisa ser PNG, JPG ou WEBP.")
     return resolved
@@ -158,9 +214,7 @@ def set_formation(
     """Troca a formação; devolve quantos titulares saíram por falta de vaga."""
     normalized = formation.strip()
     if normalized not in FORMATIONS:
-        raise TeamError(
-            "Formação inválida. Escolha uma: " + ", ".join(FORMATIONS) + "."
-        )
+        raise TeamError("Formação inválida. Escolha uma: " + ", ".join(FORMATIONS) + ".")
     user_id = str(discord_user_id)
     with connect(database_path) as connection:
         team = connection.execute(
@@ -176,9 +230,7 @@ def set_formation(
             """,
             (user_id,),
         ).fetchall()
-        current_counts = Counter(
-            {row["position"]: int(row["amount"]) for row in lineup}
-        )
+        current_counts = Counter({row["position"]: int(row["amount"]) for row in lineup})
         allowed_counts = Counter(FORMATIONS[normalized])
         if not drop_incompatible and any(
             current_counts[position] > allowed_counts[position] for position in current_counts
@@ -306,9 +358,7 @@ def scale_player(
             None,
         )
         if slot_order is None:
-            raise TeamError(
-                f"A formação {team['formation']} não tem vaga para mais um {position}."
-            )
+            raise TeamError(f"A formação {team['formation']} não tem vaga para mais um {position}.")
         connection.execute(
             """
             INSERT INTO team_lineups (discord_user_id, slot_order, player_id, position)
@@ -429,8 +479,8 @@ def get_team_statistics(
         if fixture["is_final"] and fixture["winner_user_id"]:
             outcome = "V" if fixture["winner_user_id"] == user_id else "D"
         else:
-            outcome = "V" if own_goals > opponent_goals else (
-                "D" if own_goals < opponent_goals else "E"
+            outcome = (
+                "V" if own_goals > opponent_goals else ("D" if own_goals < opponent_goals else "E")
             )
         form.append(outcome)
         events = json.loads(fixture["events_json"] or "{}")
@@ -597,7 +647,6 @@ def auto_fill_lineup(
             JOIN players AS p ON p.id = o.player_id
             LEFT JOIN player_balls AS b ON b.player_id = p.id
             WHERE o.discord_user_id = ? AND p.game_position IS NOT NULL
-              AND p.overall IS NOT NULL
             ORDER BY {EFFECTIVE_OVERALL_SQL} DESC, p.id
             """,
             (user_id,),

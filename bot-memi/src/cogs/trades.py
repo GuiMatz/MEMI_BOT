@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import re
+
 import discord
 from discord.ext import commands
 
 from src.db import DATABASE_PATH, connect
+from src.game import list_owned_players, resolve_player
 from src.transactions import (
     TransactionError,
     create_trade,
@@ -93,17 +96,15 @@ class TradesCog(commands.Cog):
                 await context.reply(message, mention_author=False)
                 return
             await context.reply(
-                "✅ Troca concluída."
-                if status == "accepted"
-                else "Oferta de troca recusada.",
+                "✅ Troca concluída." if status == "accepted" else "Oferta de troca recusada.",
                 mention_author=False,
             )
             return
 
         if not context.message.mentions:
             await context.reply(
-                "Use `mm!troca @pessoa <seu_jogador_id> "
-                "<jogador_dela_id> [seus_memilets] [memilets_dela]`.",
+                "Use `mm!troca @pessoa <seu jogador> por <jogador dela> "
+                "[seus_memilets] [memilets_dela]`.",
                 mention_author=False,
             )
             return
@@ -111,18 +112,44 @@ class TradesCog(commands.Cog):
         if target.bot:
             await context.reply("Não é possível trocar com um bot.", mention_author=False)
             return
-        numeric = []
-        for part in parts:
-            if part.startswith("<@"):
-                continue
-            try:
-                numeric.append(int(part))
-            except ValueError:
-                await context.reply("Os IDs e valores precisam ser números.", mention_author=False)
+        text = re.sub(r"<@!?\d+>", " ", arguments).strip()
+        coins = (
+            re.search(r"((?:\s+\d+){1,2})\s*$", text) if " por " in f" {text.casefold()} " else None
+        )
+        amounts = [int(value) for value in coins.group(1).split()] if coins else []
+        if coins:
+            text = text[: coins.start()].strip()
+        halves = re.split(r"\s+por\s+", text, maxsplit=1, flags=re.IGNORECASE)
+        if len(halves) == 2:
+            mine, _ = resolve_player(
+                halves[0], list_owned_players(context.author.id, self.database_path, limit=5000)
+            )
+            theirs, _ = resolve_player(
+                halves[1], list_owned_players(target.id, self.database_path, limit=5000)
+            )
+            if mine is None or theirs is None:
+                missing = halves[0] if mine is None else halves[1]
+                owner = "no seu elenco" if mine is None else f"no elenco de {target.display_name}"
+                await context.reply(
+                    f"Não identifiquei **{missing[:60]}** {owner}. Use um nome mais completo.",
+                    mention_author=False,
+                )
                 return
+            numeric = [int(mine["id"]), int(theirs["id"]), *amounts]
+        else:
+            # Formato antigo: IDs dos dois jogadores e moedas opcionais.
+            numeric = []
+            for part in text.split():
+                if not part.isdigit():
+                    await context.reply(
+                        "Use `mm!troca @pessoa <seu jogador> por <jogador dela> [moedas]`.",
+                        mention_author=False,
+                    )
+                    return
+                numeric.append(int(part))
         if not 2 <= len(numeric) <= 4 or any(value < 0 for value in numeric):
             await context.reply(
-                "Informe os IDs dos dois jogadores e, opcionalmente, "
+                "Informe os dois jogadores e, opcionalmente, "
                 "os Memilets oferecidos por cada lado.",
                 mention_author=False,
             )
