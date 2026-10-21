@@ -209,6 +209,33 @@ FUTAE_SECTIONS = (
     ),
 )
 
+GENERAL_HELP_PAGES = (
+    (
+        "**MEMI BOT — comandos gerais**\n"
+        "`mm!ajuda` / `mm!help` / `mm!comandos` — este menu\n"
+        "`mm!changelog` — novidades e alterações do bot\n"
+        "`mm!perfil` — seu perfil e progresso\n"
+        "`mm!nivel` — nível, XP e patente\n"
+        "`mm!rank` — ranking da comunidade\n"
+        "`mm!resumo` — resumo da sua conta\n"
+        "`mm!config` — configurações pessoais\n"
+        "`mm!ec` / `mm!embedcolor` — define a cor dos embeds\n\n"
+        "**Mudae e comunidade**\n"
+        "`mm!mudae` — funções do rastreador Mudae\n"
+        "`mm!tags` — suas tags e patentes\n"
+        "`mm!give` — concede itens permitidos\n"
+        "`mm!insignias` — suas insígnias\n"
+        "`mm!sobre` — informações sobre o MeMi BOT"
+    ),
+    (
+        "**FUT.AE — comandos do jogo**\n"
+        "Use `mm!fut.ae` para abrir diretamente esta página.\n\n"
+        + "\n\n".join(
+            f"{name}\n{value}" for name, value in FUTAE_SECTIONS
+        )
+    ),
+)
+
 
 class GameCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -471,14 +498,27 @@ class GameCog(commands.Cog):
 
 
 class StandaloneHelpCog(commands.Cog):
-    """Menu geral usado só quando o FUT.AE roda sozinho (python -m src.bot)."""
+    """Menu geral do MeMi BOT, com o FUT.AE na segunda página."""
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
     @commands.command(name="help", aliases=["ajuda", "comandos"])
     async def general_help(self, context: commands.Context) -> None:
-        await self.bot.get_command("futae").callback(self.bot.get_cog("GameCog"), context)
+        view = PagedView(
+            "MeMi BOT — ajuda",
+            [],
+            color=discord.Color.blurple(),
+            footer="Use os botões para navegar entre MeMi BOT e FUT.AE.",
+        )
+        view.pages = [[page] for page in GENERAL_HELP_PAGES]
+        view.index = 0
+        view._sync_buttons()
+        view.message = await context.reply(
+            embed=view.embed(),
+            view=view,
+            mention_author=False,
+        )
 
 
 async def setup(bot: commands.Bot) -> None:
