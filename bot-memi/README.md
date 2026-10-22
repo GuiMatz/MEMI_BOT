@@ -126,9 +126,12 @@ python -m src.sportsdb_images --retentar                # busca de novo quem fal
 
 O script respeita ~30 consultas por minuto. Quem não é encontrado fica em
 `image_attempts` e não é buscado de novo sem `--retentar`. Com a chave gratuita `123`,
-o TheSportsDB devolve listas cortadas (10 times por liga) e poucas respostas por
-busca de jogador; com uma chave paga a cobertura é completa. Só é aceita resposta
-com o nome exato (sem acentos): na dúvida entre homônimos, o script não baixa nada.
+o TheSportsDB corta as listas (5 ligas por país, 10 times por liga) e devolve poucas
+respostas por busca de jogador. Por isso as ligas são casadas com o índice
+`src/seeds/sportsdb_ligas.json` (todas as ligas de futebol, montado por
+`python -m scripts.indexar_ligas_sportsdb`) e os times são buscados pelo ID da liga,
+que traz a lista inteira. Só é aceita resposta com o nome exato (sem acentos): na
+dúvida entre homônimos, o script não baixa nada.
 
 Para testar manualmente, complete um time com `mm!time`, `mm!tatica` e
 `mm!escalar <id>` (o ID aparece em `mm!elenco`), depois use

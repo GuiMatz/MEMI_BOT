@@ -80,10 +80,29 @@ Reinicie o bot e use:
   crates;
 - `mm!scout <nome da lenda>`: a carta da lenda com foto.
 
+### Índice de ligas (já vem pronto)
+
+A chave gratuita só mostra **5 ligas por país**, em ordem alfabética. Por isso o
+Brasileirão nem aparecia na busca. Para contornar isso, o repositório traz o arquivo
+`src/seeds/sportsdb_ligas.json` com todas as ligas de futebol do TheSportsDB (ID, nome,
+nomes alternativos, país e escudo), montado consultando liga por liga pelo ID.
+
+O script compara os nomes das nossas ligas, que estão em português, com esse índice:
+"Campeonato Brasileiro Série A" acha "Brazilian Serie A", e "Primera División
+Chilena" acha "Chilean Primera Division". Os times de cada liga também são buscados
+pelo ID da liga, que traz a lista inteira, e não só 10.
+
+Para atualizar o índice no futuro (ligas novas no TheSportsDB), rode:
+
+```powershell
+python -m scripts.indexar_ligas_sportsdb
+```
+
+Leva cerca de 50 minutos e pode ser interrompido: continua de onde parou.
+
 ### 6. Por que algumas imagens não vieram
 
-- **Chave gratuita:** a lista de times de cada liga vem cortada em 10, e a busca de
-  jogador traz poucos resultados. Lendas de um nome só (por exemplo "Romário") podem
+- **Chave gratuita:** a busca de jogador traz poucos resultados. Lendas de um nome só (por exemplo "Romário") podem
   não ser achadas. Uma chave paga do TheSportsDB resolve: troque a chave no `.env` e
   rode com `--retentar`.
 - **Nome diferente:** o script só aceita o nome exato, ignorando acentos e
@@ -133,16 +152,24 @@ Contrato e limites para um agente que vá rodar, alterar ou depurar este recurso
 4. **Respeitar o limite da API.** `SportsDB.get` espera `MIN_INTERVAL = 2.1 s` entre chamadas, aguarda 60 s quando recebe HTTP 429 e tenta até 4 vezes. Não reduza esse intervalo com a chave gratuita.
 5. **Lendas** são `players.overall_source IN ('Lenda', 'Lenda de Clube')` com `photo_path IS NULL`. Apelidos vêm de `src/seeds/lendas_brasileiras.json` (`aliases`) e de `NICKNAME_SUFFIXES`.
 
+### Ligas: índice em vez de busca
+
+- Com a chave `123`, `search_all_leagues.php` devolve só 5 ligas por país e `all_leagues.php` só 10 no total. Por isso as ligas são casadas com o índice local `src/seeds/sportsdb_ligas.json` (`{"scanned_until", "leagues": [{id, name, alternates, country, badge}]}`), gerado por `scripts/indexar_ligas_sportsdb.py` via `lookupleague.php?id=` (que não tem corte).
+- O casamento é `src.sportsdb_images.best_league`. Ele filtra pelo país (`_country_names` devolve o nome do banco em português mais as formas em inglês do TheSportsDB) e compara palavras com `_league_tokens`, que ignora palavras genéricas ("campeonato", "de"…) e adjetivos do país (toda palavra cujas 4 primeiras letras batem com um nome do país: "brasileiro", "chilena", "german"). Escolhe a liga que contém **todas** as palavras restantes com menos palavras sobrando; empate = ambíguo = nada.
+- Sem o arquivo de índice, cai na lista por país (cortada).
+- Se uma liga não casar por causa do nome do país, acrescente a forma usada pelo TheSportsDB em `EXTRA_COUNTRIES`.
+
 ### Endpoints usados (TheSportsDB v1)
 
 | Uso | Endpoint | Campos lidos |
 |---|---|---|
-| Ligas de um país | `search_all_leagues.php?c=<país>&s=Soccer` | `countries[].strLeague`, `strLeagueAlternate`, `strBadge`, `strLogo` |
-| Times de uma liga | `search_all_teams.php?l=<strLeague>` | `teams[].strTeam`, `strTeamShort`, `strTeamAlternate`, `strCountry`, `strBadge` |
+| Índice de ligas | `lookupleague.php?id=<id>` | `leagues[].strLeague`, `strLeagueAlternate`, `strCountry`, `strSport`, `strBadge`, `strLogo` |
+| Ligas de um país (sem índice) | `search_all_leagues.php?c=<país>&s=Soccer` | `countries[]` com os mesmos campos |
+| Times de uma liga | `lookup_all_teams.php?id=<idLeague>` (ou `search_all_teams.php?l=<nome>` sem ID) | `teams[].strTeam`, `strTeamShort`, `strTeamAlternate`, `strCountry`, `strBadge` |
 | Técnicos e lendas | `searchplayers.php?p=<nome>` | `player[].strPlayer`, `strNationality`, `strPosition`, `strStatus`, `strSport`, `strCutout`/`strThumb`/`strRender` |
 | Estádios | `searchvenues.php?v=<nome>` | `venues[].strVenue`, `strVenueAlternate`, `strThumb`, `strFanart1` |
 
-Com a chave `123`, `search_all_teams` devolve no máximo 10 times e `searchplayers` traz poucos resultados (verificado em 22/10/2026).
+Com a chave `123`: `search_all_leagues` corta em 5 ligas por país, `search_all_teams` em 10 times e `searchplayers` traz poucos resultados; `lookupleague` e `lookup_all_teams` (por ID) não têm esse corte (verificado em 22/10/2026).
 
 ### Onde as imagens aparecem no bot
 
