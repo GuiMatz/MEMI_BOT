@@ -27,7 +27,9 @@ CREATE TABLE IF NOT EXISTS leagues (
     name TEXT NOT NULL,
     country TEXT,
     transfermarkt_id TEXT UNIQUE,
-    api_football_id INTEGER UNIQUE
+    api_football_id INTEGER UNIQUE,
+    logo_url TEXT,
+    logo_path TEXT
 );
 
 CREATE TABLE IF NOT EXISTS stadiums (
@@ -408,6 +410,14 @@ CREATE TABLE IF NOT EXISTS mission_progress (
     PRIMARY KEY (discord_user_id, period, mission_key)
 );
 
+CREATE TABLE IF NOT EXISTS image_attempts (
+    entity TEXT NOT NULL,
+    entity_id INTEGER NOT NULL,
+    tried_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    found INTEGER NOT NULL DEFAULT 0 CHECK (found IN (0, 1)),
+    PRIMARY KEY (entity, entity_id)
+);
+
 CREATE TABLE IF NOT EXISTS championship_settings (
     guild_id TEXT PRIMARY KEY,
     channel_id TEXT NOT NULL,
@@ -486,6 +496,10 @@ def initialize_database(database_path: str | Path = DATABASE_PATH) -> None:
                 connection.execute(
                     f"ALTER TABLE players ADD COLUMN {_identifier(column)} {definition}"
                 )
+        league_columns = {row["name"] for row in connection.execute("PRAGMA table_info(leagues)")}
+        for column in ("logo_url", "logo_path"):
+            if column not in league_columns:
+                connection.execute(f"ALTER TABLE leagues ADD COLUMN {_identifier(column)} TEXT")
         game_user_columns = {
             row["name"] for row in connection.execute("PRAGMA table_info(game_users)")
         }

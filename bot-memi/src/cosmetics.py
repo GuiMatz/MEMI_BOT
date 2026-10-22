@@ -82,6 +82,15 @@ def catalog(kind: str, database_path: str | Path = DATABASE_PATH) -> list[dict[s
     if kind == "emblema":
         for entry in list_assets("emblema") + list_assets("logo_cartola"):
             items.append({"name": entry["name"], "image_path": Path(entry["path"]).as_posix()})
+        # Escudos baixados do TheSportsDB (data/photos/clubs/<id>.png) também são emblemas.
+        with connect(database_path) as connection:
+            items += [
+                dict(row)
+                for row in connection.execute(
+                    "SELECT name, logo_path AS image_path FROM clubs "
+                    "WHERE logo_path LIKE 'clubs/%'"
+                )
+            ]
     elif kind == "uniforme":
         items = [
             {"name": entry["name"], "image_path": Path(entry["path"]).as_posix()}
@@ -91,7 +100,7 @@ def catalog(kind: str, database_path: str | Path = DATABASE_PATH) -> list[dict[s
         queries = {
             "estadio": "SELECT name, photo_path AS image_path FROM stadiums",
             "tecnico": "SELECT name, photo_path AS image_path FROM coaches",
-            "liga": "SELECT name, NULL AS image_path FROM leagues",
+            "liga": "SELECT name, logo_path AS image_path FROM leagues",
             "mascote": (
                 "SELECT name || COALESCE(' (' || owner || ')', '') AS name, "
                 "image_path FROM mascots"
