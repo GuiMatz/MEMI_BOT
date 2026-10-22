@@ -199,6 +199,7 @@ FUTAE_SECTIONS = (
     (
         "⚽ Time e partidas",
         "`mm!time` — perfil e imagem do time (`mm!time nome|cor <valor>`)\n"
+        "`mm!escudo` + imagem anexada — escudo próprio do time (`mm!escudo remover`)\n"
         "`mm!escalar` — monta o time clicando em cada posição\n"
         "`mm!tatica capitao|falta|penalti <nome>` — capitão e cobradores\n"
         "`mm!troca @pessoa <seu> por <dela>` / `mm!demitir <nome>`\n"

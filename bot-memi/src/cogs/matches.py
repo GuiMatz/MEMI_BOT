@@ -24,8 +24,8 @@ from src.db import DATABASE_PATH, connect, normalize_player_name
 from src.income import IncomeError, collect_income, income_status, venue_name
 from src.missions import record_event
 from src.narration import narrate
-from src.score_image import render_score_card
-from src.simulation import penalty_events, simulate_match
+from src.score_image import render_score_gif
+from src.simulation import penalty_events, penalty_shootout_kicks, simulate_match
 from src.teams import TeamError, get_team, get_valid_lineup
 
 SET_PIECE_MARK = {"penalti": " (pênalti)", "falta": " (falta)", "contra": " (contra)"}
@@ -34,11 +34,11 @@ LOGGER = logging.getLogger("memi.championship")
 
 
 async def score_file(home, away, home_goals, away_goals, goals, **options) -> discord.File:
-    """Imagem do placar final (`src.score_image`)."""
+    """GIF do placar final (`src.score_image`): amistoso ou campeonato, pelo título."""
     image = await asyncio.to_thread(
-        render_score_card, home, away, home_goals, away_goals, list(goals), **options
+        render_score_gif, home, away, home_goals, away_goals, list(goals), **options
     )
-    return discord.File(image, filename="placar.png")
+    return discord.File(image, filename="placar.gif")
 
 
 class IncomeChoiceView(discord.ui.View):
@@ -152,13 +152,26 @@ class MatchesCog(commands.Cog):
             away_tactics=away,
             home_advantage=True,
         )
+        # Empate no amistoso também vai para os pênaltis.
+        timeline = list(result.events)
+        penalties = None
+        if result.home_goals == result.away_goals:
+            kicks = penalty_shootout_kicks(
+                home_players,
+                away_players,
+                home_taker_id=home.get("penalty_player_id"),
+                away_taker_id=away.get("penalty_player_id"),
+            )
+            timeline += penalty_events(kicks, result.home_name, result.away_name)
+            penalties = (kicks[-1].home_score, kicks[-1].away_score)
         await context.send(f"🏟️ Local: **{venue_name(home)}**")
         await narrate(
             lambda embed: context.send(embed=embed),
             result.home_name,
             result.away_name,
-            result.events,
+            timeline,
             title="Amistoso",
+            penalties=penalties,
             home_color=home.get("color"),
             away_color=away.get("color"),
         )
@@ -171,13 +184,17 @@ class MatchesCog(commands.Cog):
                 result.goals,
                 title="Amistoso",
                 venue=venue_name(home),
+                penalties=penalties,
             )
         )
         for user_id in (context.author.id, opponent.id):
             record_event(user_id, "friendly", self.database_path)
-        if result.home_goals != result.away_goals:
-            winner = context.author.id if result.home_goals > result.away_goals else opponent.id
-            record_event(winner, "friendly_win", self.database_path)
+        # Empate não existe mais no amistoso: quem ganha nos pênaltis também vence.
+        home_won = result.home_goals > result.away_goals or (
+            penalties is not None and penalties[0] > penalties[1]
+        )
+        winner = context.author.id if home_won else opponent.id
+        record_event(winner, "friendly_win", self.database_path)
         if not with_income:
             return
         try:
