@@ -243,8 +243,10 @@ def sync_existing_photos(
     """Liga ao banco as imagens já baixadas cujo caminho ainda não foi gravado."""
     root = Path(photo_root)
     updated = 0
+    folders = {entity: config["path"] for entity, config in ENTITIES.items()}
+    folders.update({"coaches": "photo_path", "leagues": "logo_path"})
     with connect(database_path) as connection:
-        for entity, config in ENTITIES.items():
+        for entity, path_column in folders.items():
             folder = root / entity
             if not folder.is_dir():
                 continue
@@ -261,12 +263,12 @@ def sync_existing_photos(
             missing = [
                 int(row["id"])
                 for row in connection.execute(
-                    f"SELECT id FROM {entity} WHERE {config['path']} IS NULL"
+                    f"SELECT id FROM {entity} WHERE {path_column} IS NULL"
                 )
                 if int(row["id"]) in files
             ]
             connection.executemany(
-                f"UPDATE {entity} SET {config['path']} = ? WHERE id = ?",
+                f"UPDATE {entity} SET {path_column} = ? WHERE id = ?",
                 [(files[entity_id], entity_id) for entity_id in missing],
             )
             updated += len(missing)

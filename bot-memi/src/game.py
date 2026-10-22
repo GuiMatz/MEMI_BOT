@@ -639,7 +639,7 @@ SCOUT_TABLES = {
     "Técnico": ("coaches", "name", "photo_path"),
     "Estádio": ("stadiums", "name", "photo_path"),
     "Emblema": ("clubs", "name", "logo_path"),
-    "Liga": ("leagues", "name", "NULL"),
+    "Liga": ("leagues", "name", "logo_path"),
     "Mascote": ("mascots", "name || COALESCE(' (' || owner || ')', '')", "image_path"),
 }
 

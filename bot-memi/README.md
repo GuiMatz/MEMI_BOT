@@ -95,6 +95,41 @@ O uso da chave `123` deve respeitar os limites do TheSportsDB. O worker não
 envia as fotos pelo Discord: ele salva localmente e o bot as anexa somente
 quando aquele jogador for sorteado.
 
+### Imagens de ligas, técnicos, estádios, lendas e times
+
+Tutorial completo (para pessoas e para IA): [docs/imagens-sportsdb.md](docs/imagens-sportsdb.md).
+
+`src.sportsdb_images` busca no TheSportsDB o que o `photo_worker` não cobre. Cada
+imagem é salva com o ID do registro, igual às fotos dos jogadores
+(`data/photos/leagues/<id>.png`, `coaches/`, `stadiums/`, `players/`, `clubs/`), e o
+caminho fica gravado no banco:
+
+```powershell
+python -m src.sportsdb_images                          # tudo
+python -m src.sportsdb_images --tipos ligas,lendas      # só alguns tipos
+python -m src.sportsdb_images --limite 10               # teste rápido
+python -m src.sportsdb_images --retentar                # busca de novo quem falhou
+```
+
+- **ligas**: lista as ligas de futebol de cada país e compara pelo nome e pelos nomes
+  alternativos (a liga "Premier League" acha a "English Premier League");
+- **técnicos**: busca pelo nome e prefere o registro com posição Manager/Coach;
+- **estádios**: tenta o nome e o nome oficial ("Estádio do …"), ignorando
+  "Estádio/Stadium/do" na comparação;
+- **lendas**: jogadores `Lenda`/`Lenda de Clube` sem foto, pelo nome, pelos apelidos do
+  arquivo das lendas e sem o sufixo de apelido ("Ronaldo Fenômeno" → "Ronaldo"),
+  conferindo a nacionalidade;
+- **times**: lista os times de cada liga encontrada. Time que já existe no bot (mesmo
+  nome, ignorando FC/SC e acentos, ou um nome alternativo) só ganha o escudo se não
+  tiver; time novo é criado com o escudo e passa a valer como emblema. Rodar de novo
+  não duplica nada.
+
+O script respeita ~30 consultas por minuto. Quem não é encontrado fica em
+`image_attempts` e não é buscado de novo sem `--retentar`. Com a chave gratuita `123`,
+o TheSportsDB devolve listas cortadas (10 times por liga) e poucas respostas por
+busca de jogador; com uma chave paga a cobertura é completa. Só é aceita resposta
+com o nome exato (sem acentos): na dúvida entre homônimos, o script não baixa nada.
+
 Para testar manualmente, complete um time com `mm!time`, `mm!tatica` e
 `mm!escalar <id>` (o ID aparece em `mm!elenco`), depois use
 `mm!amistoso @pessoa`. Em um servidor, times completos podem se inscrever com
