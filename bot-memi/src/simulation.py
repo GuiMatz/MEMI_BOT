@@ -51,6 +51,8 @@ class MatchEvent:
     away_goals: int = 0
     stoppage: int = 0
     player: str | None = None
+    # Goleiro que defendeu ou quem deu a assistência.
+    detail: str | None = None
 
     @property
     def clock(self) -> str:
@@ -221,9 +223,12 @@ def simulate_match(
         text: str,
         side: str | None = None,
         player: str | None = None,
+        detail: str | None = None,
     ) -> None:
         events.append(
-            MatchEvent(minute, kind, text, side, score["home"], score["away"], stoppage, player)
+            MatchEvent(
+                minute, kind, text, side, score["home"], score["away"], stoppage, player, detail
+            )
         )
 
     add(1, 0, "kickoff", f"🟢 Rola a bola! {home_name} × {away_name}.")
@@ -259,7 +264,15 @@ def simulate_match(
                     )
                     if assistant is not None:
                         text += f" Assistência de {_name(assistant)}."
-                    add(minute, stoppage, "goal", text, side, _name(shooter))
+                    add(
+                        minute,
+                        stoppage,
+                        "goal",
+                        text,
+                        side,
+                        _name(shooter),
+                        _name(assistant) if assistant is not None else None,
+                    )
                 else:
                     roll = generator.random()
                     lines, kind = (
@@ -267,16 +280,17 @@ def simulate_match(
                         if roll < 0.5
                         else (POST_LINES, "post") if roll < 0.62 else (MISS_LINES, "miss")
                     )
+                    keeper = _name(_goalkeeper(opponent))
                     add(
                         minute,
                         stoppage,
                         kind,
                         generator.choice(lines).format(
-                            shooter=_name(shooter),
-                            keeper=_name(_goalkeeper(opponent)),
-                            team=team_name,
+                            shooter=_name(shooter), keeper=keeper, team=team_name
                         ),
                         side,
+                        _name(shooter),
+                        keeper if kind == "save" else None,
                     )
             if generator.random() < YELLOW_CARD_CHANCE:
                 fouler = generator.choice(
@@ -292,6 +306,7 @@ def simulate_match(
                     "card",
                     f"🟨 Cartão amarelo para {_name(fouler)} ({team_name}).",
                     side,
+                    _name(fouler),
                 )
     add(
         90,
@@ -426,6 +441,8 @@ def penalty_events(
                 "stoppage": 0,
                 "kind": "penalty",
                 "side": data["side"],
+                "player": data["kicker_name"],
+                "scored": data["scored"],
                 "home_goals": data["home_score"],
                 "away_goals": data["away_score"],
                 "text": f"{text} Pênaltis: {data['home_score']} × {data['away_score']}",

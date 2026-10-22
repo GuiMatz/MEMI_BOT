@@ -18,18 +18,65 @@ DEFAULT_OWNER_ID = 277898482960826369
 TEST_RATINGS = [80, 75, 90, 77, 60, 50]
 
 
+# Nomes de mentira para os jogos de teste (cada time de teste pega 11 diferentes).
+TEST_FIRST = (
+    "Rafael",
+    "Bruno",
+    "Diego",
+    "Thiago",
+    "Lucas",
+    "Matheus",
+    "Caio",
+    "Igor",
+    "Vitor",
+    "Danilo",
+    "Renan",
+    "Felipe",
+    "Gustavo",
+    "André",
+    "Hugo",
+    "Otávio",
+)
+TEST_LAST = (
+    "Moura",
+    "Teixeira",
+    "Ramos",
+    "Pires",
+    "Farias",
+    "Nogueira",
+    "Castro",
+    "Lopes",
+    "Barros",
+    "Cardoso",
+    "Rezende",
+    "Matos",
+    "Freitas",
+    "Aguiar",
+    "Siqueira",
+    "Vidal",
+)
+TEST_COLORS = ("#C8102E", "#1E5AA8", "#1F7A3A", "#E8B84A", "#7B3FB0", "#333333")
+
+
 def _test_lineup(overall: int, prefix: str) -> list[dict]:
     positions = ["GOL", "ZAG", "ZAG", "LE", "LD", "MC", "MC", "MEI", "PE", "PD", "CA"]
+    names = random.Random(prefix).sample(
+        [f"{first} {last}" for first in TEST_FIRST for last in TEST_LAST], len(positions)
+    )
     return [
         {
             "id": index + 1,
-            "name": f"{prefix} {position}",
-            "display_name": f"{prefix} {position}",
+            "name": names[index],
+            "display_name": names[index],
             "position": position,
             "overall": overall,
         }
         for index, position in enumerate(positions)
     ]
+
+
+def _test_color(name: str) -> str:
+    return TEST_COLORS[sum(map(ord, name)) % len(TEST_COLORS)]
 
 
 async def _play_final(send, home: tuple[str, int], away: tuple[str, int], rng, title: str):
@@ -43,7 +90,19 @@ async def _play_final(send, home: tuple[str, int], away: tuple[str, int], rng, t
         kicks = penalty_shootout_kicks(home_players, away_players, rng=rng)
         timeline += penalty_events(kicks, home[0], away[0])
         penalties = (kicks[-1].home_score, kicks[-1].away_score)
-    await narrate(send, home[0], away[0], timeline, title=title, penalties=penalties)
+    home_color, away_color = _test_color(home[0]), _test_color(away[0])
+    if home_color == away_color:
+        away_color = TEST_COLORS[(TEST_COLORS.index(home_color) + 1) % len(TEST_COLORS)]
+    await narrate(
+        send,
+        home[0],
+        away[0],
+        timeline,
+        title=title,
+        penalties=penalties,
+        home_color=home_color,
+        away_color=away_color,
+    )
     if penalties:
         return home[0] if penalties[0] > penalties[1] else away[0]
     return home[0] if result.home_goals > result.away_goals else away[0]

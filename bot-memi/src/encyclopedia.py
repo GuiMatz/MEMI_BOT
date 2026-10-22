@@ -531,7 +531,7 @@ def seed_cartola_extra(database_path: str | Path = DATABASE_PATH) -> int:
 
 def prepare_game_data(database_path: str | Path = DATABASE_PATH) -> dict[str, int]:
     """Tudo que o bot sincroniza ao iniciar: enciclopédia, lendas, escudos e fotos."""
-    from src.cosmetics import grandfather_equipped
+    from src.cosmetics import grandfather_equipped, refresh_names
     from src.game import sync_club_logos
     from src.photos import sync_existing_photos
 
@@ -539,6 +539,7 @@ def prepare_game_data(database_path: str | Path = DATABASE_PATH) -> dict[str, in
     report.update(seed_club_legends(database_path))
     report["cartola_extra"] = seed_cartola_extra(database_path)
     report["cosmetics_grandfathered"] = grandfather_equipped(database_path)
+    report["cosmetics_renamed"] = refresh_names(database_path)
     logos = sync_club_logos(database_path)
     report["club_logos_linked"] = logos["linked"]
     report["clubs_created_from_logos"] = logos["created"]

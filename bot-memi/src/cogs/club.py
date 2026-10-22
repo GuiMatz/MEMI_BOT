@@ -216,8 +216,9 @@ class ClubCog(commands.Cog):
         """Texto do menu da torre; o prédio vem na imagem (`tower_file`)."""
         status = tower_status(user.id, self.database_path)
         embed = intro_embed("🏗️ Centro de Treinamento", TOWER_INTRO, color=discord.Color.teal())
-        effects = " · ".join(f"**{floor}** {effect}" for floor, effect in TOWER_FLOORS.items())
-        embed.add_field(name="Andares", value=effects[:1024], inline=False)
+        embed.description += "\n\n" + "\n".join(
+            f"`{floor:>2}` {effect}" for floor, effect in TOWER_FLOORS.items()
+        )
         embed.add_field(
             name="Próximo andar", value=f"{icons.memilets(status.next_price)}", inline=True
         )

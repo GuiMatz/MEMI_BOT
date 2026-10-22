@@ -467,6 +467,13 @@ def pretty_asset_name(stem: str) -> str:
         or raw_words
         or [stem]
     )
+    # Logos do Cartola vêm como "Time Universo do Cartola": o "Universo do" também sai.
+    while (
+        len(words) > 2
+        and normalize_player_name(words[-2]) == "universo"
+        and normalize_player_name(words[-1]) in {"do", "da"}
+    ):
+        words = words[:-2]
     compact = normalize_player_name("".join(words)).replace(" ", "")
     if compact in KNOWN_TEAMS:
         return KNOWN_TEAMS[compact]

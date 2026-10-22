@@ -1,4 +1,8 @@
-"""Quadros em imagem: missões (`mm!missoes`) e temporada mensal (`mm!temporada`)."""
+"""Quadros em imagem: missões (`mm!missoes`) e temporada mensal (`mm!temporada`).
+
+O Discord mostra a imagem do embed com ~450 px de largura: o texto aqui é grande (26 px
+ou mais nas linhas) para continuar legível nesse tamanho.
+"""
 
 from __future__ import annotations
 
@@ -27,188 +31,168 @@ def _coin() -> Image.Image | None:
     if not path.is_file():
         return None
     with Image.open(path) as opened:
-        return opened.convert("RGBA").resize((30, 30), Image.LANCZOS)
-
-
-def _tracked(draw, xy, text: str, size: int, fill, spacing: int = 4, anchor: str = "lm") -> None:
-    face = font(size, True)
-    x, y = xy
-    total = sum(draw.textlength(c, font=face) for c in text) + spacing * (len(text) - 1)
-    if anchor == "mm":
-        x -= total / 2
-    elif anchor == "rm":
-        x -= total
-    for letter in text:
-        draw.text((x, y), letter, font=face, fill=fill, anchor="lm")
-        x += draw.textlength(letter, font=face) + spacing
+        return opened.convert("RGBA").resize((40, 40), Image.LANCZOS)
 
 
 def _header(image: Image.Image, title: str, subtitle: str, art: str, accent) -> None:
     draw = ImageDraw.Draw(image)
     medal = artwork(art)
     if medal is not None:
-        image.alpha_composite(medal.resize((76, 76), Image.LANCZOS), (40, 30))
-    _tracked(draw, (134, 54), title, 26, (255, 255, 255), 6)
-    draw.text((134, 90), subtitle, font=font(20), fill=MUTED, anchor="lm")
-    draw.line((40, 130, image.width - 40, 130), fill=(*accent, 255), width=2)
+        image.alpha_composite(medal.resize((88, 88), Image.LANCZOS), (36, 26))
+    draw.text((140, 54), title, font=font(40, True), fill="white", anchor="lm")
+    draw.text(
+        (140, 98),
+        fit(draw, subtitle, font(26), image.width - 180),
+        font=font(26),
+        fill=MUTED,
+        anchor="lm",
+    )
+    draw.line((36, 138, image.width - 36, 138), fill=(*accent, 255), width=3)
 
 
 def render_missions(rows: list[dict[str, Any]], owner: str) -> BytesIO:
     width = 900
+    row_height = 108
     sections = [("DIÁRIAS", "diaria"), ("SEMANAIS", "semanal")]
     height = (
         160
-        + sum(48 + 84 * sum(1 for row in rows if row["scope"] == scope) for _, scope in sections)
-        + 20
+        + sum(
+            52 + row_height * sum(1 for row in rows if row["scope"] == scope)
+            for _, scope in sections
+        )
+        + 16
     )
     image = Image.new("RGBA", (width, height), (*BACKGROUND, 255))
     image.alpha_composite(glow(image.size, (width - 120, 40), 220, CYAN, 40))
-    _header(
-        image,
-        "MISSÕES",
-        f"de {owner} · diárias viram à meia-noite, semanais na segunda",
-        "missoes",
-        CYAN,
-    )
+    _header(image, "MISSÕES", f"de {owner}", "missoes", CYAN)
     draw = ImageDraw.Draw(image)
     y = 160
     coin = _coin()
     for label, scope in sections:
-        _tracked(draw, (40, y + 16), label, 15, MUTED, 5)
-        y += 48
+        draw.text((36, y + 22), label, font=font(22, True), fill=MUTED, anchor="lm")
+        y += 52
         for row in (row for row in rows if row["scope"] == scope):
             done = row["progress"] >= row["goal"]
-            box = (40, y, width - 40, y + 70)
-            draw.rounded_rectangle(box, 14, fill=CARD)
+            draw.rounded_rectangle((36, y, width - 36, y + row_height - 14), 16, fill=CARD)
             title_fill = (130, 140, 155) if row["claimed"] else (255, 255, 255)
             draw.text(
-                (64, y + 24),
-                fit(draw, row["text"], font(22, True), 430),
-                font=font(22, True),
+                (60, y + 32),
+                fit(draw, row["text"], font(30, True), 520),
+                font=font(30, True),
                 fill=title_fill,
                 anchor="lm",
             )
-            bar = (64, y + 48, 494, y + 54)
-            draw.rounded_rectangle(bar, 3, fill=LINE)
+            bar = (60, y + 66, 470, y + 76)
+            draw.rounded_rectangle(bar, 5, fill=LINE)
             share = min(1, row["progress"] / row["goal"])
             if share:
                 draw.rounded_rectangle(
                     (bar[0], bar[1], bar[0] + (bar[2] - bar[0]) * share, bar[3]),
-                    3,
+                    5,
                     fill=GOLD if done else CYAN,
                 )
             draw.text(
-                (514, y + 51),
+                (488, y + 71),
                 f"{row['progress']}/{row['goal']}",
-                font=font(16, True),
+                font=font(24, True),
                 fill=MUTED,
                 anchor="lm",
             )
+            right = width - 60
             if row["claimed"]:
-                _tracked(draw, (width - 64, y + 35), "RESGATADA", 14, (120, 130, 145), 4, "rm")
+                draw.text(
+                    (right, y + 47),
+                    "RESGATADA",
+                    font=font(24, True),
+                    fill=(120, 130, 145),
+                    anchor="rm",
+                )
             else:
                 amount = f"{row['reward']:,}".replace(",", ".")
-                right = width - 64
                 draw.text(
-                    (right, y + 35),
+                    (right, y + 38),
                     amount,
-                    font=font(24, True),
+                    font=font(34, True),
                     fill=GOLD if done else (255, 255, 255),
                     anchor="rm",
                 )
-                text_width = draw.textlength(amount, font=font(24, True))
+                text_width = draw.textlength(amount, font=font(34, True))
                 if coin is not None:
-                    image.alpha_composite(coin, (int(right - text_width - 40), y + 20))
+                    image.alpha_composite(coin, (int(right - text_width - 50), y + 18))
                 if done:
-                    _tracked(draw, (right - text_width - 54, y + 35), "PRONTA", 13, GOLD, 4, "rm")
-            y += 84
+                    draw.text(
+                        (right, y + 74), "PRONTA", font=font(20, True), fill=GOLD, anchor="rm"
+                    )
+            y += row_height
     return to_png(image)
 
 
 def render_season(table: list[dict[str, Any]], title: str) -> BytesIO:
     width = 1000
-    shown = table[:10]
-    height = 560 + 58 * max(1, len(shown)) + 30
+    shown = table[:8]
+    row_height = 70
+    height = 600 + row_height * max(1, len(shown)) + 30
     image = Image.new("RGBA", (width, height), (*BACKGROUND, 255))
-    image.alpha_composite(glow(image.size, (width / 2, 300), 300, GOLD, 45))
-    _header(image, "TEMPORADA", f"{title} · soma dos campeonatos diários", "temporada", GOLD)
+    image.alpha_composite(glow(image.size, (width / 2, 320), 300, GOLD, 45))
+    _header(image, "TEMPORADA", title, "temporada", GOLD)
     draw = ImageDraw.Draw(image)
     if not shown:
-        text_center(
-            draw, (width / 2, 330), "Nenhum campeonato terminado neste mês ainda.", 24, False, MUTED
-        )
+        text_center(draw, (width / 2, 340), "Nenhum campeonato terminado ainda.", 30, False, MUTED)
         return to_png(image)
 
     # Pódio: 2º, 1º e 3º.
     slots = (
-        (1, width / 2 - 280, 190, SILVER),
-        (0, width / 2, 220, GOLD),
-        (2, width / 2 + 280, 170, BRONZE),
+        (1, width / 2 - 300, 170, SILVER),
+        (0, width / 2, 210, GOLD),
+        (2, width / 2 + 300, 150, BRONZE),
     )
     for index, center, size, medal_color in slots:
         if index >= len(shown):
             continue
         team = shown[index]
-        badge = emblem(team, size - 50)
+        badge = emblem(team, size)
         top = 410 - badge.height
         image.alpha_composite(badge, (int(center - badge.width / 2), int(top)))
-        draw.ellipse((center - 18, top - 10, center + 18, top + 26), fill=medal_color)
-        text_center(draw, (center, top + 8), str(index + 1), 20, True, BACKGROUND)
-        name = fit(draw, team["team_name"], font(24, True), 250)
-        text_center(draw, (center, 440), name, 24)
-        text_center(
-            draw,
-            (center, 474),
-            f"{team['points']} pts · {team['titles']} título{'s' if team['titles'] != 1 else ''}",
-            18,
-            True,
-            medal_color,
-        )
+        draw.ellipse((center - 22, top - 14, center + 22, top + 30), fill=medal_color)
+        text_center(draw, (center, top + 8), str(index + 1), 26, True, BACKGROUND)
+        name = fit(draw, team["team_name"], font(32, True), 280)
+        text_center(draw, (center, 450), name, 32)
+        text_center(draw, (center, 492), f"{team['points']} pts", 28, True, medal_color)
 
-    y = 530
-    columns = (
-        (560, "J"),
-        (620, "V"),
-        (680, "E"),
-        (740, "D"),
-        (810, "SG"),
-        (880, "TÍT"),
-        (950, "PTS"),
-    )
+    y = 556
+    columns = ((640, "V-E-D"), (770, "SG"), (850, "TÍT"), (935, "PTS"))
     for x, label in columns:
-        _tracked(draw, (x, y), label, 13, MUTED, 2, "mm")
-    y += 30
+        text_center(draw, (x, y), label, 20, True, MUTED)
+    y += 28
     for rank, team in enumerate(shown, start=1):
         if rank % 2:
-            draw.rounded_rectangle((30, y - 2, width - 30, y + 50), 10, fill=CARD)
-        text_center(draw, (60, y + 24), str(rank), 20, True, GOLD if rank == 1 else MUTED)
-        mini = emblem(team, 40)
-        image.alpha_composite(mini, (90, y + 4))
+            draw.rounded_rectangle((26, y, width - 26, y + row_height - 6), 12, fill=CARD)
+        middle = y + (row_height - 6) / 2
+        text_center(draw, (62, middle), str(rank), 28, True, GOLD if rank == 1 else MUTED)
+        mini = emblem(team, 48)
+        image.alpha_composite(mini, (96, int(middle - 24)))
         draw.text(
-            (146, y + 24),
-            fit(draw, team["team_name"], font(21, True), 380),
-            font=font(21, True),
+            (160, middle),
+            fit(draw, team["team_name"], font(28, True), 380),
+            font=font(28, True),
             fill="white",
             anchor="lm",
         )
         values = (
-            team["played"],
-            team["wins"],
-            team["draws"],
-            team["losses"],
-            team["gf"] - team["ga"],
-            team["titles"],
-            team["points"],
+            f"{team['wins']}-{team['draws']}-{team['losses']}",
+            f"{team['gf'] - team['ga']:+d}",
+            str(team["titles"]),
+            str(team["points"]),
         )
         for (x, label), value in zip(columns, values):
             text_center(
                 draw,
-                (x, y + 24),
-                str(value),
-                22 if label == "PTS" else 19,
-                label == "PTS",
+                (x, middle),
+                value,
+                32 if label == "PTS" else 26,
+                True,
                 "white" if label == "PTS" else (205, 212, 222),
             )
-        y += 58
-    draw.rectangle((0, height - 6, width, height), fill=mix(GOLD, BACKGROUND, 0.3))
+        y += row_height
+    draw.rectangle((0, height - 8, width, height), fill=mix(GOLD, BACKGROUND, 0.3))
     return to_png(image)

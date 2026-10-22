@@ -482,7 +482,7 @@ class MenuTests(unittest.IsolatedAsyncioTestCase):
         club = ClubCog(self.bot)
         embed = club.tower_embed(self.user)
         self.assertTrue(embed.description.startswith(f"*{TOWER_INTRO}*"))
-        self.assertIn("**12**", embed.fields[0].value)
+        self.assertIn("`12` ", embed.description)
         self.assertEqual(embed.image.url, "attachment://torre.png")
 
     async def test_purchase_prompt_asks_before_buying(self):

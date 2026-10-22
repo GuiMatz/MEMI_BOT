@@ -154,6 +154,8 @@ class MatchesCog(commands.Cog):
             result.away_name,
             result.events,
             title="Amistoso",
+            home_color=home.get("color"),
+            away_color=away.get("color"),
         )
         await context.send(
             file=await score_file(
@@ -394,6 +396,8 @@ class MatchesCog(commands.Cog):
         if events.get("penalty_kicks"):
             timeline += penalty_events(events["penalty_kicks"], home, away)
             penalties = tuple(events["penalties"])
+        home_team = get_team(final["home_user_id"], self.database_path) or {"team_name": home}
+        away_team = get_team(final["away_user_id"], self.database_path) or {"team_name": away}
         await narrate(
             lambda embed: send(embed=embed),
             home,
@@ -401,11 +405,13 @@ class MatchesCog(commands.Cog):
             timeline,
             title="FINAL do campeonato",
             penalties=penalties,
+            home_color=home_team.get("color"),
+            away_color=away_team.get("color"),
         )
         await send(
             file=await score_file(
-                get_team(final["home_user_id"], self.database_path) or {"team_name": home},
-                get_team(final["away_user_id"], self.database_path) or {"team_name": away},
+                home_team,
+                away_team,
                 int(final["home_goals"]),
                 int(final["away_goals"]),
                 events.get("goals", []),
