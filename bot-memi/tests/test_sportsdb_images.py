@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 from src.db import connect, initialize_database
-from src.sportsdb_images import ImageHarvester, SportsDB
+from src.sportsdb_images import ImageHarvester, SportsDB, best_league
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 64
 
@@ -110,7 +110,7 @@ class FakeSession:
                     }
                 )
             return FakeResponse({"venues": None})
-        if endpoint == "search_all_teams.php":
+        if endpoint in ("search_all_teams.php", "lookup_all_teams.php"):
             return FakeResponse(
                 {
                     "teams": [
@@ -167,7 +167,10 @@ class HarvesterTests(unittest.TestCase):
             )
         self.session = FakeSession()
         self.harvester = ImageHarvester(
-            self.database_path, SportsDB("123", self.session, interval=0), self.photos
+            self.database_path,
+            SportsDB("123", self.session, interval=0),
+            self.photos,
+            league_index=[],  # sem índice: usa a lista por país
         )
 
     def tearDown(self):
@@ -182,6 +185,13 @@ class HarvesterTests(unittest.TestCase):
         self.assertEqual(report, {"baixadas": 1, "nao_encontradas": 1})
         self.assertEqual(self.value("SELECT logo_path FROM leagues WHERE id = 1"), "leagues/1.png")
         self.assertTrue((self.photos / "leagues" / "1.png").is_file())
+
+    def test_incomplete_index_falls_back_to_country_list(self):
+        self.harvester.league_index = [
+            {"id": 4351, "name": "Brazilian Serie A", "alternates": "", "country": "Brazil"}
+        ]
+        found = self.harvester.match_league("Premier League", "Inglaterra")
+        self.assertEqual(found["name"], "English Premier League")
 
     def test_coach_prefers_the_manager_record(self):
         self.harvester.collect_coaches()
@@ -235,6 +245,76 @@ class HarvesterTests(unittest.TestCase):
         self.harvester.collect_teams()
         names = {item["name"] for item in catalog("emblema", self.database_path)}
         self.assertIn("Liverpool", names)
+
+
+INDEX = [
+    {
+        "id": 4351,
+        "name": "Brazilian Serie A",
+        "alternates": "Brazil Brasileirão Série A Brasileiro",
+        "country": "Brazil",
+    },
+    {
+        "id": 4404,
+        "name": "Brazilian Serie B",
+        "alternates": "Brasileirão Série B",
+        "country": "Brazil",
+    },
+    {
+        "id": 4625,
+        "name": "Brazil Brasileiro Women",
+        "alternates": "Série A1, Campeonato Brasileiro Feminino Série A1",
+        "country": "Brazil",
+    },
+    {
+        "id": 4627,
+        "name": "Chilean Primera Division",
+        "alternates": "Campeonato Nacional",
+        "country": "Chile",
+    },
+    {"id": 4332, "name": "Italian Serie A", "alternates": "Italy Serie A", "country": "Italy"},
+    {
+        "id": 4810,
+        "name": "Italian Serie A Women",
+        "alternates": "Serie A Femminile",
+        "country": "Italy",
+    },
+    {
+        "id": 4331,
+        "name": "German Bundesliga",
+        "alternates": "Bundesliga, Fußball-Bundesliga",
+        "country": "Germany",
+    },
+    {
+        "id": 4399,
+        "name": "German 2. Bundesliga",
+        "alternates": "2. Bundesliga",
+        "country": "Germany",
+    },
+]
+
+
+class LeagueIndexTests(unittest.TestCase):
+    def find(self, name, country):
+        from src.sportsdb_images import _country_names
+
+        names = _country_names(country)
+        options = [item for item in INDEX if item["country"] in names]
+        found = best_league(name, names, options)
+        return found["id"] if found else None
+
+    def test_portuguese_names_match_english_leagues(self):
+        self.assertEqual(self.find("Campeonato Brasileiro Série A", "Brasil"), 4351)
+        self.assertEqual(self.find("Campeonato Brasileiro Série B", "Brasil"), 4404)
+        self.assertEqual(self.find("Brasileirão Feminino", "Brasil"), 4625)
+        self.assertEqual(self.find("Primera División Chilena", "Chile"), 4627)
+
+    def test_closest_league_wins_and_unknown_is_none(self):
+        self.assertEqual(self.find("Serie A", "Itália"), 4332)
+        self.assertEqual(self.find("Serie A Femminile", "Itália"), 4810)
+        self.assertEqual(self.find("Bundesliga", "Alemanha"), 4331)
+        self.assertEqual(self.find("2. Bundesliga", "Alemanha"), 4399)
+        self.assertIsNone(self.find("Liga Inventada", "Brasil"))
 
 
 if __name__ == "__main__":

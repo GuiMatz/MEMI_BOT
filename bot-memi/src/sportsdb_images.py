@@ -106,6 +106,32 @@ def _first_image(record: dict[str, Any], keys: Iterable[str]) -> str | None:
     return None
 
 
+# País do banco (em português) -> como o TheSportsDB escreve. Complementa COUNTRIES_EN.
+EXTRA_COUNTRIES = {
+    "África do Sul": ["South Africa"],
+    "Angola": ["Angola"],
+    "Arábia Saudita": ["Saudi Arabia"],
+    "Canadá": ["Canada"],
+    "Catar": ["Qatar"],
+    "China": ["China"],
+    "Colômbia": ["Colombia"],
+    "Coreia do Sul": ["South Korea", "Korea Republic"],
+    "Emirados Árabes Unidos": ["United Arab Emirates", "UAE"],
+    "Equador": ["Ecuador"],
+    "Estados Unidos": ["USA", "United States"],
+    "Índia": ["India"],
+    "Israel": ["Israel"],
+    "Marrocos": ["Morocco"],
+    "Países Baixos": ["Netherlands", "The Netherlands"],
+    "Holanda": ["Netherlands", "The Netherlands"],
+    "RD Congo": ["DR Congo", "Congo DR", "Democratic Republic of the Congo"],
+    "Tailândia": ["Thailand"],
+    "Turquia": ["Turkey", "Türkiye"],
+    "Irlanda": ["Ireland", "Republic of Ireland"],
+    "Coreia, Sul": ["South Korea"],
+}
+
+
 def _country_names(country: str | None) -> list[str]:
     """Nome do país como o TheSportsDB usa (os do banco podem estar em português)."""
     from src.encyclopedia import COUNTRIES_EN
@@ -113,13 +139,74 @@ def _country_names(country: str | None) -> list[str]:
     if not country:
         return []
     english = COUNTRIES_EN.get(country, country)
-    names = [english]
+    # O nome em português fica junto: "brasileiro" vem de "Brasil", não de "Brazil".
+    names = [english, *EXTRA_COUNTRIES.get(country, []), country]
     names += {
         "Türkiye": ["Turkey"],
         "Korea, South": ["South Korea"],
         "Cote d'Ivoire": ["Ivory Coast"],
     }.get(english, [])
-    return names
+    return list(dict.fromkeys(names))
+
+
+# Palavras que não ajudam a distinguir uma liga ("Campeonato Brasileiro Série A").
+LEAGUE_STOPWORDS = {"campeonato", "de", "do", "da", "del", "the", "of", "s"}
+LEAGUE_INDEX_PATH = Path(__file__).with_name("seeds") / "sportsdb_ligas.json"
+
+
+def _league_tokens(text: str, countries: Iterable[str]) -> set[str]:
+    """Palavras do nome, sem as genéricas e sem adjetivos do país ("chilena", "brazilian")."""
+    prefixes = {_key(country)[:4] for country in countries if len(_key(country)) >= 4}
+    return {
+        token
+        for token in _key(text).split()
+        if token not in LEAGUE_STOPWORDS and not (len(token) >= 4 and token[:4] in prefixes)
+    }
+
+
+def _league_variants(record: dict[str, Any]) -> list[str]:
+    alternates = str(record.get("alternates") or record.get("strLeagueAlternate") or "")
+    return [
+        str(record.get("name") or record.get("strLeague") or ""),
+        alternates,
+        *alternates.split(","),
+    ]
+
+
+def best_league(name: str, country_names: list[str], options: list[dict[str, Any]]) -> dict | None:
+    """A liga do país que contém todas as palavras do nome, com menos palavras sobrando.
+
+    Empate entre duas ligas = ambíguo, e nada é escolhido.
+    """
+    if not options:
+        return None
+    countries = list(country_names) + [str(option.get("country") or "") for option in options[:1]]
+    wanted = _league_tokens(name, countries)
+    if not wanted:
+        return None
+    scored = []
+    for option in options:
+        extras = [
+            len(tokens - wanted)
+            for tokens in (
+                _league_tokens(variant, countries) for variant in _league_variants(option)
+            )
+            if tokens and wanted <= tokens
+        ]
+        if extras:
+            scored.append((min(extras), option))
+    if not scored:
+        return None
+    scored.sort(key=lambda item: item[0])
+    if len(scored) > 1 and scored[0][0] == scored[1][0]:
+        return None
+    return scored[0][1]
+
+
+def load_league_index(path: Path = LEAGUE_INDEX_PATH) -> list[dict[str, Any]]:
+    if not path.is_file():
+        return []
+    return json.loads(path.read_text(encoding="utf-8")).get("leagues", [])
 
 
 class ImageHarvester:
@@ -131,6 +218,7 @@ class ImageHarvester:
         *,
         retry: bool = False,
         limit: int | None = None,
+        league_index: list[dict[str, Any]] | None = None,
     ):
         self.database_path = database_path
         self.api = api
@@ -138,6 +226,7 @@ class ImageHarvester:
         self.retry = retry
         self.limit = limit
         self._leagues_by_country: dict[str, list[dict[str, Any]]] = {}
+        self.league_index = load_league_index() if league_index is None else league_index
 
     # Registro de tentativas --------------------------------------------------------
 
@@ -212,32 +301,44 @@ class ImageHarvester:
         return self._leagues_by_country[country]
 
     def match_league(self, name: str, country: str | None) -> dict[str, Any] | None:
-        wanted = _key(name)
-        for country_name in _country_names(country):
-            options = self.leagues_of(country_name)
+        """`{"id", "name", "badge"}` da liga no TheSportsDB, ou None.
 
-            def names(record: dict[str, Any]) -> set[str]:
-                alternates = str(record.get("strLeagueAlternate") or "").split(",")
-                return {_key(record.get("strLeague"))} | {
-                    _key(item) for item in alternates if item.strip()
-                }
-
-            exact = [record for record in options if wanted in names(record)]
-            if len(exact) == 1:
-                return exact[0]
-            partial = [
-                record
-                for record in options
-                if any(wanted in item or (item and item in wanted) for item in names(record))
+        Usa o índice de ligas (`src/seeds/sportsdb_ligas.json`) quando ele existe: a
+        chave gratuita corta as listas de ligas por país em 5 e o índice não tem esse
+        corte. Sem índice, cai na lista por país.
+        """
+        countries = _country_names(country)
+        wanted_countries = {_key(item) for item in countries}
+        if self.league_index:
+            options = [
+                item
+                for item in self.league_index
+                if not wanted_countries or _key(item.get("country")) in wanted_countries
             ]
-            if len(partial) == 1:
-                return partial[0]
+            found = best_league(name, countries, options)
+            if found:
+                return found
+            # Índice incompleto (varredura em andamento): tenta a lista por país.
+        for country_name in countries:
+            options = [
+                {
+                    "id": record.get("idLeague"),
+                    "name": record.get("strLeague"),
+                    "alternates": record.get("strLeagueAlternate") or "",
+                    "country": country_name,
+                    "badge": _first_image(record, ("strBadge", "strLogo")) or "",
+                }
+                for record in self.leagues_of(country_name)
+            ]
+            found = best_league(name, countries, options)
+            if found:
+                return found
         return None
 
     def collect_leagues(self) -> dict[str, int]:
         def find(row: dict[str, Any]) -> str | None:
             record = self.match_league(row["name"], row["country"])
-            return _first_image(record, ("strBadge", "strLogo")) if record else None
+            return _first_image(record, ("badge",)) if record else None
 
         return self._run(
             "leagues",
@@ -400,7 +501,11 @@ class ImageHarvester:
             if record is None:
                 report["ligas_sem_times"] += 1
                 continue
-            payload = self.api.get("search_all_teams.php", l=str(record.get("strLeague")))
+            # Pelo ID da liga a lista vem inteira; pelo nome a chave gratuita corta em 10.
+            if record.get("id"):
+                payload = self.api.get("lookup_all_teams.php", id=str(record["id"]))
+            else:
+                payload = self.api.get("search_all_teams.php", l=str(record.get("name")))
             for team in payload.get("teams") or []:
                 if str(team.get("strSport") or "Soccer").casefold() != "soccer":
                     continue

@@ -1,0 +1,166 @@
+{
+ "scanned_until": 4375,
+ "leagues": [
+  {
+   "id": 4328,
+   "name": "English Premier League",
+   "alternates": "Premier League, EPL, England",
+   "country": "England",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/gasy9d1737743125.png"
+  },
+  {
+   "id": 4329,
+   "name": "English League Championship",
+   "alternates": "England EFL Championship, English Football League Championship",
+   "country": "England",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/ty5a681688770169.png"
+  },
+  {
+   "id": 4330,
+   "name": "Scottish Premier League",
+   "alternates": "Scotland Premiership, SPFL, William Hill Premiership",
+   "country": "Scotland",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/72d3zc1688333496.png"
+  },
+  {
+   "id": 4331,
+   "name": "German Bundesliga",
+   "alternates": "Bundesliga, Fußball-Bundesliga",
+   "country": "Germany",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/teqh1b1679952008.png"
+  },
+  {
+   "id": 4332,
+   "name": "Italian Serie A",
+   "alternates": "Italy Serie A",
+   "country": "Italy",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/67q3q21679951383.png"
+  },
+  {
+   "id": 4334,
+   "name": "French Ligue 1",
+   "alternates": "Ligue 1 Conforama France",
+   "country": "France",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/9f7z9d1742983155.png"
+  },
+  {
+   "id": 4335,
+   "name": "Spanish La Liga",
+   "alternates": "LaLiga EA Sports, La Liga, Campeonato Nacional de Liga de Primera División",
+   "country": "Spain",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/ja4it51687628717.png"
+  },
+  {
+   "id": 4336,
+   "name": "Greek Super League 1",
+   "alternates": "Greek Superleague, Σούπερ Λιγκ 1",
+   "country": "Greece",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/sni7f51782459204.png"
+  },
+  {
+   "id": 4337,
+   "name": "Dutch Eredivisie",
+   "alternates": "Eredivisie",
+   "country": "The Netherlands",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/5cdsu21725984946.png"
+  },
+  {
+   "id": 4338,
+   "name": "Belgian Pro League",
+   "alternates": "Belgium Jupiler Pro League",
+   "country": "Belgium",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/xj8azr1786316931.png"
+  },
+  {
+   "id": 4339,
+   "name": "Turkish Super Lig",
+   "alternates": "Trendyol Süper Lig",
+   "country": "Turkey",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/dikktz1785779891.png"
+  },
+  {
+   "id": 4340,
+   "name": "Danish Superliga",
+   "alternates": "",
+   "country": "Denmark",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/28uq381687624585.png"
+  },
+  {
+   "id": 4344,
+   "name": "Portuguese Primeira Liga",
+   "alternates": "Liga NOS, Liga Portugal Betclic",
+   "country": "Portugal",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/3tgdke1782689102.png"
+  },
+  {
+   "id": 4346,
+   "name": "American Major League Soccer",
+   "alternates": "MLS, Major League Soccer",
+   "country": "United States",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/dqo6r91549878326.png"
+  },
+  {
+   "id": 4347,
+   "name": "Swedish Allsvenskan",
+   "alternates": "Fotbollsallsvenskan",
+   "country": "Sweden",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/denok11707459183.png"
+  },
+  {
+   "id": 4350,
+   "name": "Mexican Liga MX",
+   "alternates": "Mexico Primera League",
+   "country": "Mexico",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/mav5rx1686157960.png"
+  },
+  {
+   "id": 4351,
+   "name": "Brazilian Serie A",
+   "alternates": "Brazil Brasileirão Série A Brasileiro",
+   "country": "Brazil",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/lywv7t1766787179.png"
+  },
+  {
+   "id": 4354,
+   "name": "Ukrainian Premier League",
+   "alternates": "Українська Прем'єр-ліга",
+   "country": "Ukraine",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/qprvpy1471773025.png"
+  },
+  {
+   "id": 4355,
+   "name": "Russian Football Premier League",
+   "alternates": "Российская премьер-лига, Rossiyskaya premyer-liga",
+   "country": "Russia",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/d4yp7g1690178551.png"
+  },
+  {
+   "id": 4356,
+   "name": "Australian A-League",
+   "alternates": "A-League Men",
+   "country": "Australia",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/2u78lm1638459575.png"
+  },
+  {
+   "id": 4358,
+   "name": "Norwegian Eliteserien",
+   "alternates": "Eliteserien",
+   "country": "Norway",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/owo80l1512822583.png"
+  },
+  {
+   "id": 4359,
+   "name": "Chinese Super League",
+   "alternates": "中国足球超级联赛, Zhōngguó Zúqiú Chāojí Liánsài, CSL",
+   "country": "China",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/3s59ux1760652414.png"
+  },
+  {
+   "id": 4367,
+   "name": "_No League",
+   "alternates": "",
+   "country": "Worldwide",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/aj163o1682438506.png"
+  }
+ ]
+}
