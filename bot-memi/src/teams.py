@@ -551,7 +551,12 @@ def auto_fill_lineup(
     discord_user_id: int | str,
     database_path: str | Path = DATABASE_PATH,
 ) -> int:
-    """Preenche as vagas vazias com os maiores overalls de cada posição."""
+    """Remonta a escalação com os maiores overalls (com bolas) de cada posição.
+
+    Troca também titulares mais fracos, não só vagas vazias. Quem sai do time perde a
+    função de capitão/falta/pênalti; quem continua fica na mesma vaga. Devolve quantos
+    jogadores entraram no time.
+    """
     user_id = str(discord_user_id)
     with connect(database_path) as connection:
         connection.execute("BEGIN IMMEDIATE")
@@ -561,14 +566,13 @@ def auto_fill_lineup(
         ).fetchone()
         if team is None:
             raise TeamError("Configure seu time primeiro com `mm!time`.")
-        lineup = {
+        current = {
             int(row["slot_order"]): int(row["player_id"])
             for row in connection.execute(
                 "SELECT slot_order, player_id FROM team_lineups WHERE discord_user_id = ?",
                 (user_id,),
             )
         }
-        used = set(lineup.values())
         candidates: dict[str, list[int]] = {}
         for row in connection.execute(
             f"""
@@ -581,18 +585,44 @@ def auto_fill_lineup(
             """,
             (user_id,),
         ):
-            if int(row["id"]) not in used:
-                candidates.setdefault(row["game_position"], []).append(int(row["id"]))
-        filled = 0
+            candidates.setdefault(row["game_position"], []).append(int(row["id"]))
+        slots_by_position: dict[str, list[int]] = {}
         for slot, position in enumerate(FORMATIONS[team["formation"]], start=1):
-            if slot in lineup or not candidates.get(position):
-                continue
-            connection.execute(
-                """
-                INSERT INTO team_lineups (discord_user_id, slot_order, player_id, position)
-                VALUES (?, ?, ?, ?)
-                """,
-                (user_id, slot, candidates[position].pop(0), position),
-            )
-            filled += 1
-        return filled
+            slots_by_position.setdefault(position, []).append(slot)
+        best: dict[int, tuple[int, str]] = {}
+        for position, slots in slots_by_position.items():
+            chosen = candidates.get(position, [])[: len(slots)]
+            # Quem continua no time fica na mesma vaga; os reforços ocupam as que sobram.
+            free = []
+            for slot in slots:
+                if current.get(slot) in chosen:
+                    best[slot] = (current[slot], position)
+                else:
+                    free.append(slot)
+            newcomers = [
+                player_id
+                for player_id in chosen
+                if player_id not in {kept for kept, _ in best.values()}
+            ]
+            for slot, player_id in zip(free, newcomers):
+                best[slot] = (player_id, position)
+        changed = len({player_id for player_id, _ in best.values()} - set(current.values()))
+        connection.execute("DELETE FROM team_lineups WHERE discord_user_id = ?", (user_id,))
+        connection.executemany(
+            """
+            INSERT INTO team_lineups (discord_user_id, slot_order, player_id, position)
+            VALUES (?, ?, ?, ?)
+            """,
+            [(user_id, slot, player_id, position) for slot, (player_id, position) in best.items()],
+        )
+        starters = {player_id for player_id, _ in best.values()}
+        for column in ("captain_player_id", "free_kick_player_id", "penalty_player_id"):
+            role = connection.execute(
+                f"SELECT {column} FROM team_tactics WHERE discord_user_id = ?", (user_id,)
+            ).fetchone()[0]
+            if role is not None and int(role) not in starters:
+                connection.execute(
+                    f"UPDATE team_tactics SET {column} = NULL WHERE discord_user_id = ?",
+                    (user_id,),
+                )
+        return changed

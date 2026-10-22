@@ -243,11 +243,11 @@ class LineupBuilderView(discord.ui.View):
         await self.refresh(interaction)
 
     async def _on_auto(self, interaction: discord.Interaction) -> None:
-        filled = auto_fill_lineup(self.owner.id, self.database_path)
+        changed = auto_fill_lineup(self.owner.id, self.database_path)
         self.notice = (
-            f"🪄 {filled} vaga(s) preenchidas com seus maiores overalls."
-            if filled
-            else "Não há jogadores livres das posições que faltam."
+            f"🪄 Time montado com o maior overall de cada posição: {changed} jogador(es) entraram."
+            if changed
+            else "🪄 Seu time já é o mais forte possível para essa formação."
         )
         self.selected_slot = None
         await self.refresh(interaction)
