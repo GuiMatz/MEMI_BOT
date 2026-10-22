@@ -10,7 +10,9 @@ from datetime import time
 import discord
 from discord.ext import commands, tasks
 
+from src import icons
 from src.championship import (
+    CHAMPION_PRIZE,
     CHAMPIONSHIP_TIMEZONE,
     ChampionshipError,
     get_championship,
@@ -18,11 +20,57 @@ from src.championship import (
     register_team,
 )
 from src.db import DATABASE_PATH, connect, normalize_player_name
+from src.income import IncomeError, collect_income, income_status, venue_name
 from src.narration import narrate
 from src.simulation import penalty_events, simulate_match
 from src.teams import TeamError, get_valid_lineup
 
 LOGGER = logging.getLogger("memi.championship")
+
+
+class IncomeChoiceView(discord.ui.View):
+    """O mandante decide se o amistoso vale a renda do dia."""
+
+    def __init__(self, author_id: int, play):
+        super().__init__(timeout=120)
+        self.author_id = author_id
+        self.play = play
+        self.message: discord.Message | None = None
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.author_id:
+            await interaction.response.send_message(
+                "Só o time mandante confirma a renda.", ephemeral=True
+            )
+            return False
+        return True
+
+    async def _start(self, interaction: discord.Interaction, with_income: bool) -> None:
+        self.stop()
+        await interaction.response.edit_message(
+            content="⚽ Bola rolando" + (" valendo renda!" if with_income else "!"), view=None
+        )
+        await self.play(with_income)
+
+    @discord.ui.button(label="Sim, valendo renda", emoji="🏟️", style=discord.ButtonStyle.success)
+    async def with_income(self, interaction: discord.Interaction, button) -> None:
+        await self._start(interaction, True)
+
+    @discord.ui.button(label="Jogar sem renda", style=discord.ButtonStyle.primary)
+    async def without_income(self, interaction: discord.Interaction, button) -> None:
+        await self._start(interaction, False)
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button) -> None:
+        self.stop()
+        await interaction.response.edit_message(content="Amistoso cancelado.", view=None)
+
+    async def on_timeout(self) -> None:
+        if self.message:
+            try:
+                await self.message.edit(content="Amistoso não confirmado a tempo.", view=None)
+            except discord.HTTPException:
+                pass
 
 
 class MatchesCog(commands.Cog):
@@ -50,31 +98,63 @@ class MatchesCog(commands.Cog):
             )
             return
         try:
-            home, home_players = get_valid_lineup(
-                context.author.id,
-                self.database_path,
-            )
-            away, away_players = get_valid_lineup(
-                opponent.id,
-                self.database_path,
-            )
-            result = simulate_match(
-                home["team_name"],
-                home_players,
-                away["team_name"],
-                away_players,
-                home_style=home["style"],
-                away_style=away["style"],
-            )
+            get_valid_lineup(context.author.id, self.database_path)
+            get_valid_lineup(opponent.id, self.database_path)
         except TeamError as error:
             await context.reply(str(error), mention_author=False)
             return
+
+        async def play(with_income: bool) -> None:
+            await self._play_friendly(context, opponent, with_income)
+
+        if not income_status(context.author.id, self.database_path).ready:
+            await play(False)
+            return
+        view = IncomeChoiceView(context.author.id, play)
+        view.message = await context.reply(
+            "🏟️ Esse amistoso vai gerar renda para o clube, tem certeza?\n"
+            "Depois dele, a próxima renda só sai em **24 h** (amistosos sem renda continuam "
+            "liberados). Regras em `mm!renda`.",
+            view=view,
+            mention_author=False,
+        )
+
+    async def _play_friendly(
+        self, context: commands.Context, opponent: discord.Member, with_income: bool
+    ) -> None:
+        try:
+            home, home_players = get_valid_lineup(context.author.id, self.database_path)
+            away, away_players = get_valid_lineup(opponent.id, self.database_path)
+        except TeamError as error:
+            await context.send(str(error))
+            return
+        result = simulate_match(
+            home["team_name"],
+            home_players,
+            away["team_name"],
+            away_players,
+            home_style=home["style"],
+            away_style=away["style"],
+        )
+        await context.send(f"🏟️ Local: **{venue_name(home)}**")
         await narrate(
-            lambda embed: context.reply(embed=embed, mention_author=False),
+            lambda embed: context.send(embed=embed),
             result.home_name,
             result.away_name,
             result.events,
             title="Amistoso",
+        )
+        if not with_income:
+            return
+        try:
+            income = collect_income(
+                context.author.id, result.home_goals, result.away_goals, self.database_path
+            )
+        except IncomeError as error:
+            await context.send(f"Sem renda neste amistoso: {error}")
+            return
+        await context.send(
+            f"{income.message} {icons.memilets()} · próxima renda <t:{int(income.available_at.timestamp())}:R>"
         )
 
     @commands.group(name="campeonato", invoke_without_command=True)
@@ -298,7 +378,16 @@ class MatchesCog(commands.Cog):
         )
         if final.get("winner_user_id"):
             winner = names.get(final["winner_user_id"], final["winner_user_id"])
-            await send(f"🏆 **{winner}** é o campeão do dia!")
+            prize = (
+                f" Prêmio: {icons.memilets(CHAMPION_PRIZE)} Memilets." if table.get("prize") else ""
+            )
+            await send(f"🏆 **{winner}** é o campeão do dia!{prize}")
+        box_office = events.get("box_office") or {}
+        if any(box_office.values()):
+            await send(
+                f"🎟️ Bilheteria da final · {home} +{box_office.get('home', 0)} · "
+                f"{away} +{box_office.get('away', 0)}"
+            )
 
     @staticmethod
     def _format_match(result) -> str:
@@ -340,6 +429,7 @@ class MatchesCog(commands.Cog):
                     f"{fixture['home_goals'] if fixture['home_goals'] is not None else '—'} "
                     f"× {fixture['away_goals'] if fixture['away_goals'] is not None else '—'} "
                     f"{names.get(fixture['away_user_id'], fixture['away_user_id'])}"
+                    + MatchesCog._box_office_text(fixture)
                 )
                 for fixture in group_fixtures
             )
@@ -364,6 +454,17 @@ class MatchesCog(commands.Cog):
                 winner = names.get(final["winner_user_id"], final["winner_user_id"])
                 lines.append(f"🏆 Campeão: **{winner}**")
         return "**Campeonato diário**\n" + "\n".join(lines)
+
+    @staticmethod
+    def _box_office_text(fixture: dict) -> str:
+        """Resumo da bilheteria (andar 5) dos dois times, quando alguém ganhou algo."""
+        try:
+            box_office = json.loads(fixture.get("events_json") or "{}").get("box_office") or {}
+        except ValueError:
+            return ""
+        if not any(box_office.values()):
+            return ""
+        return f" · 🎟️ +{box_office.get('home', 0)} / +{box_office.get('away', 0)}"
 
     @staticmethod
     def _split_message(content: str, limit: int = 1_900) -> list[str]:

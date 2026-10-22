@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from src.db import DATABASE_PATH, connect, initialize_database, normalize_player_name
-from src.ratings import LEGEND_MIN_OVERALL, LEGEND_SOURCE
+from src.ratings import CLUB_LEGEND_SOURCE, LEGEND_MIN_OVERALL, LEGEND_SOURCE
 
 SEED_PATH = Path(__file__).with_name("seeds") / "enciclopedia.json"
 SOURCE = "enciclopedia"
@@ -370,12 +370,143 @@ def seed_encyclopedia(database_path: str | Path = DATABASE_PATH) -> dict[str, in
     return report
 
 
+CLUB_LEGENDS_PATH = Path(__file__).with_name("seeds") / "lendas_brasileiras.json"
+CLUB_LEGENDS_SOURCE = "lendas_br"
+# Siglas do documento das lendas para as posições do jogo.
+CLUB_LEGEND_POSITIONS = {"GL": "GOL", "ATA": "CA"}
+
+
+@lru_cache(maxsize=1)
+def load_club_legends() -> list[dict[str, Any]]:
+    return json.loads(CLUB_LEGENDS_PATH.read_text(encoding="utf-8"))["clubs"]
+
+
+def seed_club_legends(database_path: str | Path = DATABASE_PATH) -> dict[str, int]:
+    """Carrega as 11 lendas de cada um dos 12 grandes clubes brasileiros, sem duplicar.
+
+    Antes de criar uma carta, procura a mesma pessoa no banco:
+    - lenda da Enciclopédia com o mesmo nome (ou apelido listado) e o mesmo país: já
+      existe, então fica como está (com o overall de lenda dela);
+    - jogador aposentado (inativo) com o mesmo nome e país: vira a carta da lenda;
+    - homônimo de outra pessoa: a carta nova ganha o clube no nome, ex. `Pepe (Santos)`.
+    O ID de cada carta nova é o próximo livre da tabela (chave primária do SQLite).
+    """
+    report = {"club_legends_created": 0, "club_legends_promoted": 0, "club_legends_existing": 0}
+    with connect(database_path) as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        linked = {
+            row["source_id"]: int(row["player_id"])
+            for row in connection.execute(
+                "SELECT source_id, player_id FROM player_sources WHERE source = ?",
+                (CLUB_LEGENDS_SOURCE,),
+            )
+        }
+        by_name: dict[str, list[dict[str, Any]]] = {}
+        for row in connection.execute(
+            "SELECT id, name, nationality, overall, overall_source, activity_status FROM players"
+        ):
+            by_name.setdefault(normalize_player_name(row["name"]), []).append(dict(row))
+        for club in load_club_legends():
+            club_name = club["club"]
+            for legend in club["players"]:
+                slug = f"{_slug(club_name)}:{_slug(legend['name'])}"
+                position = CLUB_LEGEND_POSITIONS.get(legend["position"], legend["position"])
+                countries = _country_keys(legend.get("country", "Brasil"))
+                keys = {
+                    normalize_player_name(name)
+                    for name in [legend["name"], *legend.get("aliases", [])]
+                }
+                same_person = [
+                    player
+                    for key in keys
+                    for player in by_name.get(key, [])
+                    if normalize_player_name(player["nationality"]) in countries
+                    and int(player["id"]) != linked.get(slug)
+                ]
+                player_id = linked.get(slug)
+                if player_id is None:
+                    if any(player["overall_source"] == LEGEND_SOURCE for player in same_person):
+                        report["club_legends_existing"] += 1
+                        continue
+                    retired = [
+                        player
+                        for player in same_person
+                        if player["activity_status"] == "inactive"
+                        and (
+                            " " in legend["name"] or (player["overall"] or 0) >= SINGLE_NAME_MIN_RAW
+                        )
+                    ]
+                    if len(retired) == 1:
+                        player_id = int(retired[0]["id"])
+                        report["club_legends_promoted"] += 1
+                    else:
+                        homonym = bool(by_name.get(normalize_player_name(legend["name"])))
+                        country = legend.get("country", "Brasil")
+                        player_id = connection.execute(
+                            """
+                            INSERT INTO players (name, display_name, nationality)
+                            VALUES (?, ?, ?)
+                            """,
+                            (
+                                legend["name"],
+                                f"{legend['name']} ({club_name})" if homonym else legend["name"],
+                                COUNTRIES_EN.get(country, country),
+                            ),
+                        ).lastrowid
+                        by_name.setdefault(normalize_player_name(legend["name"]), []).append(
+                            {
+                                "id": player_id,
+                                "name": legend["name"],
+                                "nationality": COUNTRIES_EN.get(country, country),
+                                "overall": legend["overall"],
+                                "overall_source": CLUB_LEGEND_SOURCE,
+                                "activity_status": "active",
+                            }
+                        )
+                        report["club_legends_created"] += 1
+                    connection.execute(
+                        """
+                        INSERT OR IGNORE INTO player_sources
+                            (source, source_id, player_id, source_name, source_club_name,
+                             source_position)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            CLUB_LEGENDS_SOURCE,
+                            slug,
+                            player_id,
+                            legend["name"],
+                            club_name,
+                            legend["position"],
+                        ),
+                    )
+                connection.execute(
+                    """
+                    UPDATE players SET overall = ?, overall_source = ?, club_name = ?,
+                        game_position = ?, activity_status = 'active', phase2_candidate = 0,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """,
+                    (
+                        legend["overall"],
+                        CLUB_LEGEND_SOURCE,
+                        f"Lendas do {club_name}",
+                        position,
+                        player_id,
+                    ),
+                )
+    return report
+
+
 def prepare_game_data(database_path: str | Path = DATABASE_PATH) -> dict[str, int]:
-    """Tudo que o bot sincroniza ao iniciar: enciclopédia, escudos e fotos baixadas."""
+    """Tudo que o bot sincroniza ao iniciar: enciclopédia, lendas, escudos e fotos."""
+    from src.cosmetics import grandfather_equipped
     from src.game import sync_club_logos
     from src.photos import sync_existing_photos
 
     report = seed_encyclopedia(database_path)
+    report.update(seed_club_legends(database_path))
+    report["cosmetics_grandfathered"] = grandfather_equipped(database_path)
     logos = sync_club_logos(database_path)
     report["club_logos_linked"] = logos["linked"]
     report["clubs_created_from_logos"] = logos["created"]

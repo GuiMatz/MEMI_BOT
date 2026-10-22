@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from src.card_image import render_player_card
 from src.clock import BRASILIA, brasilia_time
+from src.cosmetics import give_item
 from src.db import connect, initialize_database
 from src.dedupe import find_duplicates
 from src.encyclopedia import load_encyclopedia, seed_encyclopedia
@@ -194,6 +195,9 @@ class LogoAndLeagueTests(Case):
         seed_encyclopedia(self.database_path)
         register_user(1, "Pessoa", self.database_path)
         ensure_team(1, "Pessoa", self.database_path)
+        with self.assertRaises(TeamError):  # só equipa a liga que possui
+            set_team_field(1, "favorite_league", "brasileirao serie a", self.database_path)
+        give_item(1, "Pessoa", "liga", "Campeonato Brasileiro Série A", self.database_path)
         set_team_field(1, "favorite_league", "brasileirao serie a", self.database_path)
         self.assertEqual(
             get_team(1, self.database_path)["favorite_league"], "Campeonato Brasileiro Série A"
@@ -203,9 +207,11 @@ class LogoAndLeagueTests(Case):
 
 
 class ClockTests(unittest.TestCase):
-    def test_rolls_reset_every_full_hour(self):
-        self.assertEqual(CYCLE_LENGTH.total_seconds(), 3600)
+    def test_rolls_reset_every_half_hour(self):
+        self.assertEqual(CYCLE_LENGTH.total_seconds(), 1800)
         start = cycle_start_for(datetime(2026, 10, 20, 15, 59, tzinfo=timezone.utc))
+        self.assertEqual(start, datetime(2026, 10, 20, 15, 30, tzinfo=timezone.utc))
+        start = cycle_start_for(datetime(2026, 10, 20, 15, 29, tzinfo=timezone.utc))
         self.assertEqual(start, datetime(2026, 10, 20, 15, 0, tzinfo=timezone.utc))
 
     def test_times_are_shown_in_brasilia(self):

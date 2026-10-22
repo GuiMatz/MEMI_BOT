@@ -5,7 +5,9 @@ permissão nenhuma: o próprio bot os envia ao ligar. Fontes:
 
 - insígnias das tags: assets/insignias/<imagem> (ver tags.py);
 - patentes: assets/patentes/<id>.png, ou um emblema gerado pelo bot se o arquivo não existir;
-- emojis do bot: assets/emojis/<chave>.png substitui estilo.EMOJI[<chave>] (ex.: musica.png).
+- emojis do bot: assets/emojis/<chave>.png substitui estilo.EMOJI[<chave>] (ex.: musica.png);
+- FUT.AE: assets/emojis/futae/<chave>.png substitui src.icons.EMOJI[<chave>] (moeda Memilets e
+  ícones dos upgrades, gerados por bot-memi/scripts/gerar_icones.py).
 
 Cada emoji guarda no banco uma assinatura da imagem: só é reenviado quando o arquivo muda. Os
 emojis com o prefixo "mm_" que saíram do catálogo são apagados; os outros não são tocados.
@@ -26,7 +28,9 @@ import tags
 
 PREFIXO = "mm_"
 PREFIXO_ESTILO = "mm_e_"
+PREFIXO_FUTAE = "mm_f_"
 PASTA_EMOJIS = Path(__file__).with_name("assets") / "emojis"
+PASTA_FUTAE = PASTA_EMOJIS / "futae"
 PASTA_PATENTES = Path(__file__).with_name("assets") / "patentes"
 
 
@@ -56,6 +60,9 @@ def itens_para_enviar():
         for arquivo in sorted(PASTA_EMOJIS.glob("*.png")):
             if arquivo.stem in estilo.EMOJI:
                 itens[(PREFIXO_ESTILO + arquivo.stem)[:32]] = arquivo.read_bytes()
+    if PASTA_FUTAE.is_dir():
+        for arquivo in sorted(PASTA_FUTAE.glob("*.png")):
+            itens[(PREFIXO_FUTAE + arquivo.stem)[:32]] = arquivo.read_bytes()
     return itens
 
 
@@ -105,3 +112,11 @@ def aplicar(feitos):
         texto = feitos.get((PREFIXO_ESTILO + chave)[:32])
         if texto:
             estilo.EMOJI[chave] = texto
+    try:
+        from src import icons
+    except ImportError:  # FUT.AE fora do caminho: ficam os emojis padrão
+        return
+    for chave in list(icons.EMOJI):
+        texto = feitos.get((PREFIXO_FUTAE + chave)[:32])
+        if texto:
+            icons.EMOJI[chave] = texto

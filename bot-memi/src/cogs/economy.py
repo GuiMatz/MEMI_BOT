@@ -1,75 +1,183 @@
-"""Comandos de economia, upgrades e wishes."""
+"""Comandos de economia: daily, loja de upgrades, crates, wishes e demissão."""
 
 from __future__ import annotations
 
 import discord
 from discord.ext import commands
 
+from src import icons
 from src.db import DATABASE_PATH, normalize_player_name
 from src.economy import (
-    CRATE_PITY_LIMIT,
-    CRATE_PRICE,
-    DAILY_TIMEZONE,
+    CRATE_DOUBLE_CHANCE,
+    CRATE_EXTRA_CHANCES,
+    CRATE_MEMILETS,
+    RARITY_LABELS,
     DailyCooldown,
     EconomyError,
     InsufficientFunds,
-    UPGRADE_LABELS,
-    UPGRADE_LIMITS,
     add_wish,
     buy_upgrade,
     claim_daily,
+    describe_prize,
     get_account_status,
+    get_crate_price,
     get_upgrade_cost,
     get_upgrade_levels,
     list_wishes,
     open_crate,
 )
-from src.cogs.common import PlayerChoiceView, ambiguity_text
+from src.cogs.common import ConfirmView, PlayerChoiceView, ambiguity_text, intro_embed
 from src.game import find_player, get_wallet, list_owned_players, register_user, resolve_player
+from src.perks import UPGRADES
 from src.transactions import TransactionError, dismiss_player
 
+UPGRADES_INTRO = (
+    "Aqui você gasta Memilets em melhorias permanentes para o seu clube, como mais rolls, "
+    "wishes e um daily mais rápido. Cada upgrade tem nível máximo e pede confirmação antes "
+    "de comprar. Nenhum upgrade aumenta a sorte: a chance na roleta é igual para todo mundo."
+)
+CRATES_INTRO = (
+    "As caixas entregam itens aleatórios: rolls instantâneos, cosméticos, bônus e upgrades. "
+    "Toda caixa traz um item básico e, com sorte, um item de outra raridade. Quanto mais rara, "
+    "mais difícil de vir. A caixa vem toda em itens ou toda em Memilets, e nunca repete um "
+    "cosmético que você já tem."
+)
+
+# Palavras aceitas em `mm!upgrade <nome>` além do nome de cada upgrade.
 UPGRADE_ALIASES = {
     "roll": "rolls",
     "rolls": "rolls",
+    "olheiro": "rolls",
     "wish": "wishes",
     "wishes": "wishes",
+    "observar": "wishes",
+    "starwish": "star_wishes",
+    "star": "star_wishes",
+    "sw": "star_wishes",
+    "interesse": "star_wishes",
     "daily": "daily",
+    "salario": "daily",
+    "adiantar": "daily",
+    "protecao": "wish_protection",
+    "prioridade": "wish_protection",
+    "negociacao": "wish_protection",
+    "maximo": "daily_max",
+    "incorporacao": "daily_max",
+    "financeira": "daily_max",
     "exclusividade": "exclusivity",
-    "exclusiva": "exclusivity",
-    "exclusivity": "exclusivity",
-    "duplicata": "duplicate_bonus",
-    "duplicatas": "duplicate_bonus",
-    "duplicate": "duplicate_bonus",
-    "duplicate_bonus": "duplicate_bonus",
+    "exclusivo": "exclusivity",
+    "agente": "exclusivity",
+    "seguro": "dismiss_refund",
+    "contrato": "dismiss_refund",
+    "reembolso": "dismiss_refund",
+    "demitir": "dismiss_refund",
+    "bilheteria": "box_office_cap",
+    "ampliar": "box_office_cap",
+    "renda": "match_income",
+    "patrocinio": "match_income",
 }
 
-UPGRADE_COMMANDS = {
-    "rolls": "roll",
-    "wishes": "wish",
-    "daily": "daily",
-    "exclusivity": "exclusividade",
-    "duplicate_bonus": "duplicata",
+RARITY_STYLE = {
+    "basico": ("📦", discord.Color.light_grey()),
+    "incomum": ("🟢", discord.Color.green()),
+    "raro": ("🔵", discord.Color.blue()),
+    "epico": ("🟣", discord.Color.purple()),
+    "lendario": ("🟠", discord.Color.orange()),
+}
+RARITY_ITEMS_TEXT = {
+    "basico": "1 a 3 rolls instantâneos (só no ciclo atual)",
+    "incomum": "uniforme, emblema, estádio, técnico, liga ou mascote novo",
+    "raro": "-1 h no daily ou +1 s de proteção de wish",
+    "epico": "+1 slot de Star Wish, +1 slot de wish ou -2 h no daily",
+    "lendario": "+1 roll permanente, +1 nível de upgrade aleatório ou -10 no preço da crate",
 }
 
-REWARD_MESSAGES = {
-    "memilets": lambda amount: f"🪙 **{amount} Memilets**",
-    "jackpot": lambda amount: f"💰 **JACKPOT! {amount} Memilets**",
-    "roll_tokens": lambda amount: f"🎲 **{amount} rolls extras**",
-    "claim_reset": lambda amount: "⏱️ **Claim liberado agora** (cooldown zerado)",
-    "star_wishes": lambda amount: "⭐ **+1 slot permanente de Star Wish**",
-    "wishes": lambda amount: "💫 **+1 slot permanente de wish**",
-    "rolls": lambda amount: "🔁 **+1 roll permanente por ciclo**",
-}
 
-REWARD_RARITY = {
-    "memilets": ("Comum", discord.Color.light_grey()),
-    "roll_tokens": ("Comum", discord.Color.green()),
-    "claim_reset": ("Raro", discord.Color.blue()),
-    "jackpot": ("Épico", discord.Color.purple()),
-    "wishes": ("Lendário", discord.Color.gold()),
-    "rolls": ("Lendário", discord.Color.gold()),
-    "star_wishes": ("Lendário", discord.Color.gold()),
-}
+def _thousands(value: int) -> str:
+    return f"{value:,}".replace(",", ".")
+
+
+def resolve_upgrade(text: str) -> str | None:
+    wanted = normalize_player_name(text)
+    if wanted.replace(" ", "_") in UPGRADES:
+        return wanted.replace(" ", "_")
+    for key, spec in UPGRADES.items():
+        if normalize_player_name(spec.name) == wanted:
+            return key
+    for word in wanted.split():
+        if word in UPGRADE_ALIASES:
+            return UPGRADE_ALIASES[word]
+    return None
+
+
+def _percent(chance: float) -> str:
+    return f"{chance * 100:.1f}".rstrip("0").rstrip(".").replace(".", ",") + "%"
+
+
+def _range(values: tuple[int, int]) -> str:
+    low, high = values
+    return _thousands(low) if low == high else f"{_thousands(low)}–{_thousands(high)}"
+
+
+class UpgradeSelect(discord.ui.Select):
+    def __init__(self, cog: "EconomyCog", author: discord.abc.User, levels: dict[str, int]):
+        self.cog = cog
+        self.author = author
+        options = []
+        for key, spec in UPGRADES.items():
+            level = levels[key]
+            status = (
+                "nível máximo"
+                if level >= spec.limit
+                else f"{_thousands(spec.cost(level))} Memilets"
+            )
+            options.append(
+                discord.SelectOption(
+                    label=f"{spec.name} · {level}/{spec.limit}"[:100],
+                    description=f"{spec.effect} · {status}"[:100],
+                    value=key,
+                    emoji=icons.upgrade(key),
+                )
+            )
+        super().__init__(placeholder="Escolha um upgrade para comprar", options=options)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != self.author.id:
+            await interaction.response.send_message(
+                "Use `mm!upgrade` para abrir a sua loja.", ephemeral=True
+            )
+            return
+        content, view = self.cog.purchase_prompt(self.author, self.values[0])
+        await interaction.response.send_message(content, view=view, ephemeral=True)
+
+
+class UpgradeShopView(discord.ui.View):
+    def __init__(self, cog: "EconomyCog", author: discord.abc.User, levels: dict[str, int]):
+        super().__init__(timeout=300)
+        self.add_item(UpgradeSelect(cog, author, levels))
+
+
+class CrateMenuView(discord.ui.View):
+    def __init__(self, cog: "EconomyCog", author: discord.abc.User, price: int):
+        super().__init__(timeout=300)
+        self.cog = cog
+        self.author = author
+        self.open_button.label = f"Abrir crate ({_thousands(price)})"
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.author.id:
+            await interaction.response.send_message(
+                "Use `mm!crates` para abrir as suas.", ephemeral=True
+            )
+            return False
+        return True
+
+    @discord.ui.button(label="Abrir crate", emoji="📦", style=discord.ButtonStyle.success)
+    async def open_button(self, interaction: discord.Interaction, button) -> None:
+        embed = self.cog.open_crate_embed(interaction.user)
+        price = get_crate_price(interaction.user.id, self.cog.database_path)
+        button.label = f"Abrir outra ({_thousands(price)})"
+        await interaction.response.send_message(embed=embed)
 
 
 class DismissConfirmationView(discord.ui.View):
@@ -98,7 +206,8 @@ class DismissConfirmationView(discord.ui.View):
             return
         await interaction.response.edit_message(
             content=(
-                f"Jogador **{self.player_name}** liberado. " f"Você recebeu **{refund} Memilets**."
+                f"Jogador **{self.player_name}** liberado. "
+                f"Você recebeu {icons.memilets(refund)} Memilets."
             ),
             view=None,
         )
@@ -124,116 +233,161 @@ class EconomyCog(commands.Cog):
                 self.database_path,
             )
         except DailyCooldown as error:
-            local_time = error.available_at.astimezone(DAILY_TIMEZONE)
+            unix = int(error.available_at.timestamp())
             await context.reply(
-                "Você já resgatou seu daily. O próximo fica disponível em "
-                f"**{local_time:%d/%m às %H:%M}** (horário de Brasília).",
+                f"Você já resgatou seu daily. O próximo libera <t:{unix}:R> (<t:{unix}:t>).",
                 mention_author=False,
             )
             return
+        unix = int(reward.available_at.timestamp())
         await context.reply(
-            f"🎁 Você recebeu **{reward.amount} Memilets** " f"(máx: **{reward.cap}**).",
+            f"🎁 Você recebeu {icons.memilets(reward.amount)} Memilets "
+            f"(entre 100 e {_thousands(reward.cap)}). Próximo daily <t:{unix}:R>.",
             mention_author=False,
         )
 
-    @commands.command(name="upgrade")
+    def upgrade_menu(self, author: discord.abc.User) -> tuple[discord.Embed, UpgradeShopView]:
+        levels = get_upgrade_levels(author.id, self.database_path)
+        lines = []
+        for key, spec in UPGRADES.items():
+            level = levels[key]
+            price = (
+                "✅ nível máximo" if level >= spec.limit else f"{icons.memilets(spec.cost(level))}"
+            )
+            lines.append(
+                f"{icons.upgrade(key)} **{spec.name}** · {level}/{spec.limit}\n"
+                f"└ {spec.effect} · {price}"
+            )
+        embed = intro_embed("🛒 Loja de upgrades", UPGRADES_INTRO, color=discord.Color.gold())
+        embed.description += "\n\n" + "\n".join(lines)
+        balance = get_wallet(author.id, self.database_path)["memilets"]
+        embed.add_field(name="Saldo", value=f"{icons.memilets(balance)} Memilets")
+        embed.add_field(
+            name="Somam com",
+            value="Torre (`mm!construir`) e prêmios das crates (`mm!crates`)",
+        )
+        embed.set_footer(text="Escolha no menu ou use mm!upgrade <nome> · sempre pede confirmação")
+        return embed, UpgradeShopView(self, author, levels)
+
+    def purchase_prompt(self, author: discord.abc.User, key: str) -> tuple[str, ConfirmView | None]:
+        spec = UPGRADES[key]
+        level = get_upgrade_levels(author.id, self.database_path)[key]
+        try:
+            cost = get_upgrade_cost(key, level)
+        except EconomyError as error:
+            return str(error), None
+
+        async def confirm(interaction: discord.Interaction) -> None:
+            try:
+                purchase = buy_upgrade(author.id, author.display_name, key, self.database_path)
+            except EconomyError as error:
+                await interaction.response.edit_message(content=str(error), view=None)
+                return
+            balance = get_wallet(author.id, self.database_path)["memilets"]
+            await interaction.response.edit_message(
+                content=(
+                    f"✅ {icons.upgrade(key)} **{spec.name}** agora no nível "
+                    f"**{purchase.level}/{spec.limit}** ({spec.effect}). "
+                    f"Saldo: {icons.memilets(balance)}."
+                ),
+                view=None,
+            )
+
+        content = (
+            f"{icons.upgrade(key)} Comprar **{spec.name}** nível {level + 1}/{spec.limit} "
+            f"por {icons.memilets(cost)} Memilets?\nEfeito: {spec.effect}."
+        )
+        return content, ConfirmView(
+            author.id, confirm, confirm_label="Comprar", cancel_text="Compra cancelada."
+        )
+
+    @commands.command(name="upgrade", aliases=["upgrades", "loja"])
     async def upgrade(
         self,
         context: commands.Context,
+        *,
         upgrade_name: str | None = None,
     ) -> None:
         register_user(context.author.id, context.author.display_name, self.database_path)
         if not upgrade_name:
-            levels = get_upgrade_levels(context.author.id, self.database_path)
-            lines = []
-            for key, label in UPGRADE_LABELS.items():
-                level = levels[key]
-                if level >= UPGRADE_LIMITS[key]:
-                    cost_text = "✅ nível máximo"
-                elif key == "star_wishes":
-                    cost_text = "📦 só em crates"
-                else:
-                    cost = f"{get_upgrade_cost(key, level):,}".replace(",", ".")
-                    cost_text = f"🪙 {cost} · `mm!upgrade {UPGRADE_COMMANDS[key]}`"
-                lines.append(
-                    f"**{label[:1].upper()}{label[1:]}** — nível "
-                    f"{level}/{UPGRADE_LIMITS[key]}\n└ {cost_text}"
-                )
-            embed = discord.Embed(
-                title="Upgrades",
-                description="\n".join(lines),
-                color=discord.Color.gold(),
-            )
-            balance = get_wallet(context.author.id, self.database_path)["memilets"]
-            embed.set_footer(
-                text=f"Saldo: {balance:,} Memilets · Star Wish extra só sai em crate.".replace(
-                    ",", "."
-                )
-            )
-            await context.reply(embed=embed, mention_author=False)
+            embed, view = self.upgrade_menu(context.author)
+            await context.reply(embed=embed, view=view, mention_author=False)
             return
-
-        key = UPGRADE_ALIASES.get(normalize_player_name(upgrade_name))
+        key = resolve_upgrade(upgrade_name)
         if key is None:
             await context.reply(
-                "Upgrade inválido. Consulte `mm!upgrade` para ver as opções.",
+                "Upgrade inválido. Veja as opções em `mm!upgrade`.",
                 mention_author=False,
             )
             return
-        try:
-            purchase = buy_upgrade(
-                context.author.id,
-                context.author.display_name,
-                key,
-                self.database_path,
-            )
-        except InsufficientFunds as error:
-            await context.reply(str(error), mention_author=False)
-            return
-        except EconomyError as error:
-            await context.reply(str(error), mention_author=False)
-            return
-        balance = get_wallet(context.author.id, self.database_path)["memilets"]
-        await context.reply(
-            f"✅ Upgrade **{UPGRADE_LABELS[key]}** comprado: nível "
-            f"**{purchase.level}/{UPGRADE_LIMITS[key]}** por "
-            f"**{purchase.cost:,} Memilets**. Saldo: **{balance:,}**.".replace(",", "."),
-            mention_author=False,
-        )
+        content, view = self.purchase_prompt(context.author, key)
+        message = await context.reply(content, view=view, mention_author=False)
+        if view:
+            view.message = message
 
-    @commands.command(name="crates")
-    async def crates(self, context: commands.Context, amount: int = 1) -> None:
-        if amount != 1:
-            await context.reply(
-                "Por segurança, abra uma crate por vez: `mm!crates`.",
-                mention_author=False,
+    def crate_menu(self, author: discord.abc.User) -> tuple[discord.Embed, CrateMenuView]:
+        price = get_crate_price(author.id, self.database_path)
+        embed = intro_embed("📦 Crates", CRATES_INTRO, color=discord.Color.orange())
+        lines = [
+            f"{RARITY_STYLE['basico'][0]} **Básico** · sempre vem\n"
+            f"└ {RARITY_ITEMS_TEXT['basico']} **ou** {_range(CRATE_MEMILETS['basico'])} Memilets"
+        ]
+        for rarity in ("incomum", "raro", "epico", "lendario"):
+            lines.append(
+                f"{RARITY_STYLE[rarity][0]} **{RARITY_LABELS[rarity]}** · "
+                f"{_percent(CRATE_EXTRA_CHANCES[rarity])}\n"
+                f"└ {RARITY_ITEMS_TEXT[rarity]} **ou** {_range(CRATE_MEMILETS[rarity])} Memilets"
             )
-            return
+        lines.append(
+            f"🎁 {_percent(CRATE_DOUBLE_CHANCE)} de chance de o item vir em dobro "
+            "(não vale para Memilets)."
+        )
+        embed.description += "\n\n" + "\n".join(lines)
+        balance = get_wallet(author.id, self.database_path)["memilets"]
+        embed.add_field(name="Preço", value=f"{icons.memilets(price)} Memilets")
+        embed.add_field(name="Saldo", value=f"{icons.memilets(balance)} Memilets")
+        embed.set_footer(text="mm!crates abrir abre direto · mm!cosmeticos mostra o que você tem")
+        return embed, CrateMenuView(self, author, price)
+
+    def open_crate_embed(self, author: discord.abc.User) -> discord.Embed:
         try:
-            reward = open_crate(
-                context.author.id,
-                context.author.display_name,
-                self.database_path,
-            )
+            result = open_crate(author.id, author.display_name, self.database_path)
         except InsufficientFunds as error:
-            await context.reply(str(error), mention_author=False)
-            return
-        rarity, color = REWARD_RARITY[reward.kind]
-        balance = get_wallet(context.author.id, self.database_path)["memilets"]
+            return discord.Embed(description=str(error), color=discord.Color.red())
+        emoji, color = RARITY_STYLE[result.best_rarity]
+        lines = [
+            f"{RARITY_STYLE[prize.rarity][0]} **{RARITY_LABELS[prize.rarity]}** · "
+            + (
+                f"{icons.memilets(prize.amount)} Memilets"
+                if prize.kind == "memilets"
+                else describe_prize(prize)
+            )
+            for prize in result.prizes
+        ]
+        if result.doubled:
+            lines.append("🎁 **Sorte grande!** O prêmio veio em dobro.")
         embed = discord.Embed(
-            title=f"📦 Crate aberta · {rarity}",
-            description=REWARD_MESSAGES[reward.kind](reward.amount),
+            title=f"{emoji} Crate aberta · {RARITY_LABELS[result.best_rarity]}",
+            description="\n".join(lines),
             color=color,
         )
-        embed.add_field(name="Saldo", value=f"{balance:,} Memilets".replace(",", "."))
-        embed.add_field(
-            name="Garantia",
-            value=f"{reward.pity}/{CRATE_PITY_LIMIT} até um prêmio permanente",
-        )
-        embed.set_footer(
-            text=f"Cada crate custa {CRATE_PRICE} Memilets · mm!crates para abrir outra"
-        )
-        await context.reply(embed=embed, mention_author=False)
+        balance = get_wallet(author.id, self.database_path)["memilets"]
+        embed.add_field(name="Pagou", value=f"{icons.memilets(result.price)}")
+        embed.add_field(name="Saldo", value=f"{icons.memilets(balance)} Memilets")
+        if any(prize.kind.startswith("cosmetic:") for prize in result.prizes):
+            embed.set_footer(
+                text="Equipe com mm!cosmeticos · cada cosmético equipado: +100 no daily"
+            )
+        return embed
+
+    @commands.command(name="crates", aliases=["crate", "caixa", "caixas"])
+    async def crates(self, context: commands.Context, action: str | None = None) -> None:
+        register_user(context.author.id, context.author.display_name, self.database_path)
+        if action and normalize_player_name(action) in {"abrir", "open", "1"}:
+            await context.reply(embed=self.open_crate_embed(context.author), mention_author=False)
+            return
+        embed, view = self.crate_menu(context.author)
+        await context.reply(embed=embed, view=view, mention_author=False)
 
     @commands.command(name="demitir")
     async def dismiss(self, context: commands.Context, *, query: str) -> None:

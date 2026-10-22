@@ -51,6 +51,11 @@ class DatabaseSchemaTests(unittest.TestCase):
                     "championship_entries",
                     "championship_fixtures",
                     "championship_settings",
+                    "user_bonuses",
+                    "cycle_bonus_rolls",
+                    "user_cosmetics",
+                    "tower_floors",
+                    "tower_ball_grants",
                 }.issubset(tables)
             )
             self.assertEqual(
@@ -58,7 +63,7 @@ class DatabaseSchemaTests(unittest.TestCase):
                     row["version"]
                     for row in connection.execute("SELECT version FROM schema_version")
                 },
-                set(range(1, 13)),
+                set(range(1, 14)),
             )
 
     def test_player_constraints_reject_invalid_game_position_and_overall(self):
@@ -178,7 +183,7 @@ class DatabaseSchemaTests(unittest.TestCase):
             versions = {
                 row["version"] for row in connection.execute("SELECT version FROM schema_version")
             }
-            self.assertEqual(versions, set(range(1, 13)))
+            self.assertEqual(versions, set(range(1, 14)))
 
     def test_schema_v6_migrates_existing_players_and_preserves_relations(self):
         with connect(self.database_path) as connection:

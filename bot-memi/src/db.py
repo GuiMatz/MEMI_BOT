@@ -220,10 +220,7 @@ CREATE INDEX IF NOT EXISTS idx_claim_offers_status
 CREATE TABLE IF NOT EXISTS user_upgrades (
     discord_user_id TEXT NOT NULL REFERENCES game_users(discord_user_id)
         ON DELETE CASCADE,
-    upgrade_key TEXT NOT NULL CHECK (
-        upgrade_key IN ('rolls', 'wishes', 'daily', 'exclusivity', 'star_wishes',
-                        'duplicate_bonus')
-    ),
+    upgrade_key TEXT NOT NULL,
     level INTEGER NOT NULL DEFAULT 0 CHECK (level >= 0),
     roll_tokens INTEGER NOT NULL DEFAULT 0 CHECK (roll_tokens >= 0),
     crate_pity INTEGER NOT NULL DEFAULT 0 CHECK (crate_pity BETWEEN 0 AND 99),
@@ -353,6 +350,54 @@ CREATE TABLE IF NOT EXISTS mascots (
     UNIQUE (name, owner)
 );
 
+CREATE TABLE IF NOT EXISTS user_bonuses (
+    discord_user_id TEXT NOT NULL REFERENCES game_users(discord_user_id)
+        ON DELETE CASCADE,
+    bonus_key TEXT NOT NULL,
+    amount INTEGER NOT NULL DEFAULT 0 CHECK (amount >= 0),
+    PRIMARY KEY (discord_user_id, bonus_key)
+);
+
+CREATE TABLE IF NOT EXISTS cycle_bonus_rolls (
+    discord_user_id TEXT NOT NULL REFERENCES game_users(discord_user_id)
+        ON DELETE CASCADE,
+    cycle_started_at TEXT NOT NULL,
+    amount INTEGER NOT NULL CHECK (amount >= 0),
+    PRIMARY KEY (discord_user_id, cycle_started_at)
+);
+
+CREATE TABLE IF NOT EXISTS user_cosmetics (
+    discord_user_id TEXT NOT NULL REFERENCES game_users(discord_user_id)
+        ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK (
+        kind IN ('emblema', 'uniforme', 'estadio', 'tecnico', 'liga', 'mascote')
+    ),
+    item_key TEXT NOT NULL,
+    name TEXT NOT NULL,
+    image_path TEXT,
+    source TEXT NOT NULL DEFAULT 'crate',
+    acquired_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (discord_user_id, kind, item_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_cosmetics_item ON user_cosmetics(kind, item_key);
+
+CREATE TABLE IF NOT EXISTS tower_floors (
+    discord_user_id TEXT NOT NULL REFERENCES game_users(discord_user_id)
+        ON DELETE CASCADE,
+    floor INTEGER NOT NULL CHECK (floor BETWEEN 1 AND 12),
+    times INTEGER NOT NULL DEFAULT 0 CHECK (times >= 0),
+    PRIMARY KEY (discord_user_id, floor)
+);
+
+CREATE TABLE IF NOT EXISTS tower_ball_grants (
+    id INTEGER PRIMARY KEY,
+    discord_user_id TEXT NOT NULL REFERENCES game_users(discord_user_id)
+        ON DELETE CASCADE,
+    player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+    granted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS championship_settings (
     guild_id TEXT PRIMARY KEY,
     channel_id TEXT NOT NULL,
@@ -438,6 +483,18 @@ def initialize_database(database_path: str | Path = DATABASE_PATH) -> None:
             connection.execute("ALTER TABLE game_users ADD COLUMN last_claim_at TEXT")
         if "last_daily_at" not in game_user_columns:
             connection.execute("ALTER TABLE game_users ADD COLUMN last_daily_at TEXT")
+        game_user_migrations = {
+            "last_income_at": "TEXT",
+            "income_total": "INTEGER NOT NULL DEFAULT 0",
+            "tower_spent": "INTEGER NOT NULL DEFAULT 0",
+            "box_office": "INTEGER NOT NULL DEFAULT 0",
+            "box_office_total": "INTEGER NOT NULL DEFAULT 0",
+        }
+        for column, definition in game_user_migrations.items():
+            if column not in game_user_columns:
+                connection.execute(
+                    f"ALTER TABLE game_users ADD COLUMN {_identifier(column)} {definition}"
+                )
         trade_columns = {
             row["name"] for row in connection.execute("PRAGMA table_info(trade_offers)")
         }
@@ -453,27 +510,7 @@ def initialize_database(database_path: str | Path = DATABASE_PATH) -> None:
         for column in ("coach_name", "stadium_name", "kit_path", "favorite_league"):
             if column not in team_columns:
                 connection.execute(f"ALTER TABLE game_teams ADD COLUMN {_identifier(column)} TEXT")
-        upgrade_sql = connection.execute(
-            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'user_upgrades'"
-        ).fetchone()["sql"]
-        if "duplicate_bonus" not in upgrade_sql:
-            connection.execute("ALTER TABLE user_upgrades RENAME TO user_upgrades_v10")
-            connection.execute("""CREATE TABLE user_upgrades (
-                    discord_user_id TEXT NOT NULL REFERENCES game_users(discord_user_id)
-                        ON DELETE CASCADE,
-                    upgrade_key TEXT NOT NULL CHECK (
-                        upgrade_key IN ('rolls', 'wishes', 'daily', 'exclusivity',
-                                        'star_wishes', 'duplicate_bonus')
-                    ),
-                    level INTEGER NOT NULL DEFAULT 0 CHECK (level >= 0),
-                    roll_tokens INTEGER NOT NULL DEFAULT 0 CHECK (roll_tokens >= 0),
-                    crate_pity INTEGER NOT NULL DEFAULT 0 CHECK (crate_pity BETWEEN 0 AND 99),
-                    PRIMARY KEY (discord_user_id, upgrade_key)
-                )""")
-            connection.execute("""INSERT INTO user_upgrades
-                   SELECT discord_user_id, upgrade_key, level, roll_tokens, crate_pity
-                   FROM user_upgrades_v10""")
-            connection.execute("DROP TABLE user_upgrades_v10")
+        _migrate_upgrade_keys(connection)
         fixture_columns = {
             row["name"] for row in connection.execute("PRAGMA table_info(championship_fixtures)")
         }
@@ -488,7 +525,12 @@ def initialize_database(database_path: str | Path = DATABASE_PATH) -> None:
             _migrate_players_without_club_foreign_key(connection, player_columns)
         _migrate_player_overall_100(connection)
 
-        for version in range(1, 13):
+        upgrades_v2_done = connection.execute(
+            "SELECT 1 FROM schema_version WHERE version = 13"
+        ).fetchone()
+        if not upgrades_v2_done:
+            _migrate_upgrades_v2(connection)
+        for version in range(1, 14):
             connection.execute(
                 "INSERT OR IGNORE INTO schema_version (version) VALUES (?)",
                 (version,),
@@ -505,6 +547,95 @@ def initialize_database(database_path: str | Path = DATABASE_PATH) -> None:
                 f"Violação de chave estrangeira após migração do schema: "
                 f"{len(violations)} registro(s)."
             )
+
+
+def _migrate_upgrade_keys(connection: sqlite3.Connection) -> None:
+    """Tira a lista fixa de chaves de user_upgrades: as chaves válidas ficam no código."""
+    row = connection.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'user_upgrades'"
+    ).fetchone()
+    if row is None or "upgrade_key IN" not in re.sub(r"\s+", " ", row["sql"] or ""):
+        return
+    connection.execute("ALTER TABLE user_upgrades RENAME TO user_upgrades_v12")
+    connection.execute("""CREATE TABLE user_upgrades (
+            discord_user_id TEXT NOT NULL REFERENCES game_users(discord_user_id)
+                ON DELETE CASCADE,
+            upgrade_key TEXT NOT NULL,
+            level INTEGER NOT NULL DEFAULT 0 CHECK (level >= 0),
+            roll_tokens INTEGER NOT NULL DEFAULT 0 CHECK (roll_tokens >= 0),
+            crate_pity INTEGER NOT NULL DEFAULT 0 CHECK (crate_pity BETWEEN 0 AND 99),
+            PRIMARY KEY (discord_user_id, upgrade_key)
+        )""")
+    connection.execute("""INSERT INTO user_upgrades
+           SELECT discord_user_id, upgrade_key, level, roll_tokens, crate_pity
+           FROM user_upgrades_v12""")
+    connection.execute("DROP TABLE user_upgrades_v12")
+
+
+# Loja V2: limites novos e o que cada nível antigo custava (para devolver o excedente).
+_V2_LIMITS = {"rolls": 10, "wishes": 10, "exclusivity": 10, "daily_max": 5, "star_wishes": 5}
+_V1_LEVEL_COST = {
+    "rolls": lambda level: 5_000 * level,
+    "wishes": lambda level: 3_000 * level,
+    "daily": lambda level: 5_000,
+    "exclusivity": lambda level: 5_000 * level,
+    "duplicate_bonus": lambda level: 4_000 * level,
+    "star_wishes": lambda level: 0,
+}
+
+
+def _migrate_upgrades_v2(connection: sqlite3.Connection) -> None:
+    """Converte os upgrades da loja antiga para a V2 sem ninguém perder Memilets.
+
+    - `daily` antigo (+100 no máximo do daily) vira `daily_max`; `daily` agora é -10 min;
+    - o bônus de duplicata deixou de existir e é devolvido;
+    - níveis acima dos limites novos são devolvidos pelo preço antigo;
+    - Star Wishes acima do limite da loja viram bônus permanente (vinham de crates).
+    """
+    rows = [
+        dict(row)
+        for row in connection.execute(
+            "SELECT discord_user_id, upgrade_key, level FROM user_upgrades WHERE level > 0"
+        )
+    ]
+    for row in rows:
+        user_id, key, level = row["discord_user_id"], row["upgrade_key"], int(row["level"])
+        if key not in _V1_LEVEL_COST:
+            continue
+        new_key = {"daily": "daily_max", "duplicate_bonus": None}.get(key, key)
+        kept = min(level, _V2_LIMITS.get(new_key, 0)) if new_key else 0
+        refund = sum(_V1_LEVEL_COST[key](number) for number in range(kept + 1, level + 1))
+        connection.execute(
+            "UPDATE user_upgrades SET level = 0 WHERE discord_user_id = ? AND upgrade_key = ?",
+            (user_id, key),
+        )
+        if new_key and kept:
+            connection.execute(
+                """
+                INSERT INTO user_upgrades (discord_user_id, upgrade_key, level) VALUES (?, ?, ?)
+                ON CONFLICT(discord_user_id, upgrade_key) DO UPDATE SET level = excluded.level
+                """,
+                (user_id, new_key, kept),
+            )
+        if key == "star_wishes" and level > kept:
+            connection.execute(
+                """
+                INSERT INTO user_bonuses (discord_user_id, bonus_key, amount)
+                VALUES (?, 'star_wishes', ?)
+                ON CONFLICT(discord_user_id, bonus_key)
+                DO UPDATE SET amount = user_bonuses.amount + excluded.amount
+                """,
+                (user_id, level - kept),
+            )
+        if refund:
+            connection.execute(
+                "UPDATE game_users SET memilets = memilets + ? WHERE discord_user_id = ?",
+                (refund, user_id),
+            )
+    connection.execute("""
+        DELETE FROM user_upgrades
+        WHERE level = 0 AND roll_tokens = 0 AND crate_pity = 0 AND upgrade_key != 'rolls'
+        """)
 
 
 def _migrate_player_overall_100(connection: sqlite3.Connection) -> None:

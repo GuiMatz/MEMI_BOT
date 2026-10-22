@@ -8,7 +8,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from src.db import DATABASE_PATH, ROOT, connect, normalize_player_name
+from src.db import DATABASE_PATH, connect
 from src.game import register_user
 from src.ratings import EFFECTIVE_OVERALL_SQL, GAME_OVERALL_SQL
 
@@ -82,7 +82,9 @@ def get_team(
         row = connection.execute(
             """
             SELECT t.*, x.formation, x.style, x.captain_player_id,
-                   x.free_kick_player_id, x.penalty_player_id
+                   x.free_kick_player_id, x.penalty_player_id,
+                   (SELECT c.photo_path FROM coaches AS c
+                    WHERE c.name = t.coach_name ORDER BY c.id LIMIT 1) AS coach_photo_path
             FROM game_teams AS t
             LEFT JOIN team_tactics AS x
               ON x.discord_user_id = t.discord_user_id
@@ -99,17 +101,19 @@ def set_team_field(
     value: str,
     database_path: str | Path = DATABASE_PATH,
 ) -> None:
-    allowed = {
-        "team_name",
-        "color",
-        "mascot",
-        "coach_name",
-        "stadium_name",
-        "logo_path",
-        "kit_path",
-        "favorite_league",
-    }
-    if field not in allowed:
+    """Nome e cor são livres; cosméticos (técnico, liga, estádio…) só se forem da pessoa."""
+    from src.cosmetics import COSMETIC_KINDS, CosmeticError, equip
+
+    cosmetic_kind = next(
+        (kind for kind, (_, _, column, _) in COSMETIC_KINDS.items() if column == field), None
+    )
+    if cosmetic_kind is not None:
+        try:
+            equip(discord_user_id, cosmetic_kind, value, database_path)
+        except CosmeticError as error:
+            raise TeamError(str(error)) from error
+        return
+    if field not in {"team_name", "color"}:
         raise ValueError("Campo de time inválido.")
     if field == "team_name" and not 1 <= len(value.strip()) <= 50:
         raise TeamError("O nome do time deve ter entre 1 e 50 caracteres.")
@@ -117,12 +121,6 @@ def set_team_field(
         if not re.fullmatch(r"#[0-9a-fA-F]{6}", value):
             raise TeamError("Use uma cor hexadecimal, por exemplo `#2E8B57`.")
         value = value.upper()
-    if field in {"mascot", "coach_name", "stadium_name"} and len(value.strip()) > 80:
-        raise TeamError("Esse campo pode ter até 80 caracteres.")
-    if field in {"logo_path", "kit_path"}:
-        value = resolve_local_asset(value).relative_to(ROOT).as_posix()
-    if field in CATALOG_FIELDS:
-        value = catalog_name(field, value, database_path)
     with connect(database_path) as connection:
         cursor = connection.execute(
             f"""
@@ -134,74 +132,6 @@ def set_team_field(
         )
         if cursor.rowcount == 0:
             raise TeamError("Seu time ainda não foi criado.")
-
-
-# Campos do time que, quando batem com o catálogo, usam o nome oficial do item.
-# A liga precisa existir; técnico, estádio e mascote também aceitam texto livre.
-CATALOG_FIELDS = {
-    "favorite_league": ("leagues", "name", True),
-    "coach_name": ("coaches", "name", False),
-    "stadium_name": ("stadiums", "name", False),
-    "mascot": ("mascots", "name || COALESCE(' (' || owner || ')', '')", False),
-}
-
-
-# Apelidos comuns trocados pelo nome oficial antes de procurar no catálogo.
-CATALOG_NICKNAMES = {
-    "brasileirao": "campeonato brasileiro",
-    "carioca": "campeonato carioca",
-    "paulistao": "campeonato paulista",
-    "gauchao": "campeonato gaucho",
-    "mineirao": "campeonato mineiro",
-    "baianao": "campeonato baiano",
-    "mls": "major league soccer",
-    "epl": "premier league",
-}
-
-
-def catalog_name(field: str, value: str, database_path: str | Path = DATABASE_PATH) -> str:
-    table, name_sql, required = CATALOG_FIELDS[field]
-    wanted = normalize_player_name(value)
-    for nickname, official in CATALOG_NICKNAMES.items():
-        wanted = re.sub(rf"\b{nickname}\b", official, wanted)
-    if wanted == "campeonato brasileiro":
-        wanted += " serie a"
-    tokens = wanted.split()
-    with connect(database_path) as connection:
-        names = [
-            row["name"] for row in connection.execute(f"SELECT {name_sql} AS name FROM {table}")
-        ]
-
-    def matches(name: str) -> bool:
-        words = normalize_player_name(name).split()
-        return all(any(word.startswith(token) for word in words) for token in tokens)
-
-    exact = [name for name in names if normalize_player_name(name) == wanted]
-    partial = [name for name in names if tokens and matches(name)]
-    if exact:
-        return exact[0]
-    if len(partial) == 1:
-        return partial[0]
-    if not required:
-        return value.strip()
-    if partial:
-        raise TeamError("Mais de uma liga combina: " + ", ".join(sorted(partial)[:8]) + ".")
-    raise TeamError(
-        f"Não conheço a liga **{value.strip()[:60]}**. Veja as opções em `mm!top ligas`."
-    )
-
-
-def resolve_local_asset(path: str | Path) -> Path:
-    base = (ROOT / "data" / "assets" / "brasfoot").resolve()
-    candidate = Path(path)
-    if not candidate.is_absolute():
-        candidate = base / candidate
-    resolved = candidate.resolve()
-    if base not in resolved.parents or not resolved.is_file():
-        raise TeamError("A imagem precisa existir dentro de `data/assets/brasfoot/`.")
-    if resolved.suffix.casefold() not in {".png", ".jpg", ".jpeg", ".webp"}:
-        raise TeamError("A imagem precisa ser PNG, JPG ou WEBP.")
-    return resolved
 
 
 def set_formation(

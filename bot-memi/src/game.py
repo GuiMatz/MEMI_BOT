@@ -493,8 +493,9 @@ ASSET_KINDS = {
             "data/assets/brasfoot/teams/camisas3",
         ),
     ),
+    # Clubes e logos são a mesma coisa no jogo: os dois aparecem como "Emblema".
     "emblema": ("Emblema", ("data/assets/brasfoot/teams/escudos",)),
-    "logo_cartola": ("Logo Cartola", ("data/assets/cartola/logos",)),
+    "logo_cartola": ("Emblema", ("data/assets/cartola/logos",)),
     "mascote": ("Mascote", ("data/assets/cartola/mascots",)),
 }
 
@@ -506,26 +507,36 @@ def asset_display_name(kind: str, stem: str) -> str:
 
 
 def list_assets(kind: str) -> list[dict[str, Any]]:
-    """Arquivos locais de uma categoria, com nome padronizado e sem repetição."""
+    """Arquivos locais de uma categoria, com nome padronizado e sem repetição.
+
+    Uniformes das pastas `camisas2` e `camisas3` ganham `(Uniforme 2)` e `(Uniforme 3)`,
+    para não sumirem atrás do uniforme principal do mesmo time.
+    """
     _, directories = ASSET_KINDS[kind]
-    paths = sorted(
+    named = sorted(
         (
-            path
-            for directory in directories
+            (_asset_name(kind, path.stem, index), path)
+            for index, directory in enumerate(directories)
             for path in (ROOT / directory).rglob("*")
             if path.is_file() and path.suffix.casefold() in IMAGE_SUFFIXES
         ),
-        key=lambda path: (asset_display_name(kind, path.stem).casefold(), str(path)),
+        key=lambda pair: (pair[0].casefold(), str(pair[1])),
     )
     entries: list[dict[str, Any]] = []
     seen: set[str] = set()
-    for path in paths:
-        name = asset_display_name(kind, path.stem)
+    for name, path in named:
         if name.casefold() in seen:
             continue
         seen.add(name.casefold())
         entries.append({"name": name, "kind": kind, "path": str(path.relative_to(ROOT))})
     return entries
+
+
+def _asset_name(kind: str, stem: str, directory_index: int) -> str:
+    name = asset_display_name(kind, stem)
+    if kind == "uniforme" and directory_index:
+        return f"{name} (Uniforme {directory_index + 1})"
+    return name
 
 
 def get_catalog_entries(
@@ -583,16 +594,18 @@ def get_catalog_entries(
         ]
         return entries[offset : offset + limit], len(entries)
 
-    asset_categories = {
-        "uniforme": "uniforme",
-        "uniformes": "uniforme",
-        "emblema": "emblema",
-        "emblemas": "emblema",
-        "logo": "logo_cartola",
-        "logos": "logo_cartola",
-    }
-    if normalized in asset_categories:
-        entries = list_assets(asset_categories[normalized])
+    if normalized in {"emblema", "emblemas", "logo", "logos", "clube", "clubes", "escudos"}:
+        entries = []
+        seen: set[str] = set()
+        for entry in list_assets("emblema") + list_assets("logo_cartola"):
+            key = normalize_player_name(entry["name"])
+            if key not in seen:
+                seen.add(key)
+                entries.append(entry)
+        entries.sort(key=lambda entry: entry["name"].casefold())
+        return entries[offset : offset + limit], len(entries)
+    if normalized in {"uniforme", "uniformes"}:
+        entries = list_assets("uniforme")
         return entries[offset : offset + limit], len(entries)
 
     table_categories = {
@@ -602,8 +615,6 @@ def get_catalog_entries(
         "estadios": "stadiums",
         "liga": "leagues",
         "ligas": "leagues",
-        "clube": "clubs",
-        "clubes": "clubs",
     }
     table = table_categories.get(normalized)
     if table is None:
@@ -620,7 +631,7 @@ def get_catalog_entries(
 SCOUT_TABLES = {
     "Técnico": ("coaches", "name", "photo_path"),
     "Estádio": ("stadiums", "name", "photo_path"),
-    "Clube": ("clubs", "name", "logo_path"),
+    "Emblema": ("clubs", "name", "logo_path"),
     "Liga": ("leagues", "name", "NULL"),
     "Mascote": ("mascots", "name || COALESCE(' (' || owner || ')', '')", "image_path"),
 }
@@ -669,11 +680,18 @@ def search_catalog(
             for entry in list_assets(kind)
             if normalized_query in normalize_player_name(entry["name"])
         )
-    results.sort(
+    # O mesmo emblema pode vir do clube e do arquivo de logo: fica um só, com imagem.
+    unique: dict[tuple[str, str], dict[str, Any]] = {}
+    for item in results:
+        key = (item["kind"], normalize_player_name(item["name"]))
+        if key not in unique or (item["image_path"] and not unique[key]["image_path"]):
+            unique[key] = item
+    results = sorted(
+        unique.values(),
         key=lambda item: (
             normalize_player_name(item["name"]) != normalized_query,
             normalize_player_name(item["name"]),
-        )
+        ),
     )
     return results[:limit]
 
