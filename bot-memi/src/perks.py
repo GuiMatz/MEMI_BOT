@@ -128,14 +128,14 @@ TOWER_FLOORS: dict[int, str] = {
 TOWER_SHORT: dict[int, str] = {
     1: "+2 wishes",
     2: "Bola em dobro",
-    3: "Memilets por contratação",
+    3: "Bônus ao contratar",
     4: "Crate -25",
     5: "Bilheteria",
     6: "Renda +50",
     7: "+1 roll",
     8: "+1 Star Wish",
     9: "Daily -1 h",
-    10: "Proteção de wish +1 s",
+    10: "Proteção +1 s",
     11: "Daily máx. +100",
     12: "+1 bola no time",
 }

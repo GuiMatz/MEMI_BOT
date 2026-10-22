@@ -320,6 +320,34 @@ def owners_of(kind: str, name: str, database_path: str | Path = DATABASE_PATH) -
     return [row["display_name"] for row in rows]
 
 
+def refresh_names(database_path: str | Path = DATABASE_PATH) -> int:
+    """Atualiza o nome de cosméticos com imagem quando a regra de nomes muda."""
+    changed = 0
+    with connect(database_path) as connection:
+        for kind in ("emblema", "uniforme", "mascote"):
+            by_path = {
+                item["image_path"]: item
+                for item in catalog(kind, database_path)
+                if item.get("image_path")
+            }
+            rows = connection.execute(
+                "SELECT discord_user_id, item_key, name, image_path FROM user_cosmetics "
+                "WHERE kind = ? AND image_path IS NOT NULL",
+                (kind,),
+            ).fetchall()
+            for row in rows:
+                item = by_path.get(row["image_path"])
+                if item is None or item["name"] == row["name"]:
+                    continue
+                cursor = connection.execute(
+                    "UPDATE OR IGNORE user_cosmetics SET name = ?, item_key = ? "
+                    "WHERE discord_user_id = ? AND kind = ? AND item_key = ?",
+                    (item["name"], item["key"], row["discord_user_id"], kind, row["item_key"]),
+                )
+                changed += cursor.rowcount
+    return changed
+
+
 def grandfather_equipped(database_path: str | Path = DATABASE_PATH) -> int:
     """Quem já tinha algo equipado antes da regra de posse passa a possuir esse item."""
     granted = 0
