@@ -17,6 +17,12 @@ posição, `src.positions`). A partir disso:
   goleiro ruim vira gol à toa; goleiro excelente segura até atacante bom.
 - **Bola parada.** Parte das chances é falta ou pênalti, batidos pelos cobradores
   escolhidos em `mm!tatica` (ou, sem cobrador, pelo melhor batedor do time).
+- **Andamento.** O ritmo cresce no segundo tempo; quem perde se lança e quem ganha
+  administra; expulsão deixa o time com um a menos; depois de um gol ou de um lance
+  perigoso pode vir um momento de pressão; o mandante tem o apoio da torcida.
+- **Lances variados.** Gols de cabeça, de fora da área, de escanteio, no rebote, no
+  contra-ataque e contra; gol anulado por impedimento; milagre do goleiro. No apito
+  final saem posse, chutes, notas de cada jogador e o melhor em campo.
 """
 
 from __future__ import annotations
@@ -70,7 +76,7 @@ CONTROL_WEIGHT = {
 REFERENCE_ATTACK_VOLUME = 4.46
 REFERENCE_DEFENSE_VOLUME = 5.58
 
-BASE_CHANCES = 3.9  # chances perigosas por time em jogo equilibrado
+BASE_CHANCES = 4.25  # chances perigosas por time em jogo equilibrado
 QUALITY_FACTOR = 0.018  # por ponto de ataque acima da defesa adversária
 VOLUME_EXPONENT = 1.0
 CONTROL_FACTOR = 0.01
@@ -138,8 +144,11 @@ class MatchEvent:
     player: str | None = None
     # Goleiro que defendeu ou quem deu a assistência.
     detail: str | None = None
-    # "falta" ou "penalti" quando o lance nasce de bola parada.
+    # Tipo do lance: "penalti", "falta", "cabeca", "fora", "escanteio", "rebote",
+    # "contra_ataque" ou "contra" (gol contra; `player` é quem desviou).
     play: str | None = None
+    # Só no apito final: posse, chutes, notas e melhor em campo (`_match_stats`).
+    stats: dict[str, Any] | None = None
 
     @property
     def clock(self) -> str:
@@ -158,6 +167,7 @@ class MatchResult:
     away_strength: TeamStrength
     goals: tuple[Goal, ...]
     events: tuple[MatchEvent, ...] = field(default=())
+    stats: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         result = asdict(self)
@@ -311,14 +321,26 @@ GOAL_LINES = (
     "⚽ **GOOOL!** {scorer} aparece livre na área e marca para o {team}!",
     "⚽ **É GOL!** Que pintura de {scorer}! {team} comemora.",
     "⚽ **GOOOL do {team}!** {scorer} tira do goleiro e manda para o fundo do gol!",
-    "⚽ **GOL do {team}!** {scorer} de cabeça, sem chances para a defesa!",
 )
-FREE_KICK_GOAL = "⚽ **GOL DE FALTA!** {scorer} coloca a bola no ângulo para o {team}!"
-PENALTY_GOAL = "⚽ **GOL DE PÊNALTI!** {scorer} desloca o goleiro e marca para o {team}!"
+PLAY_GOAL_LINES = {
+    "penalti": "⚽ **GOL DE PÊNALTI!** {scorer} desloca o goleiro e marca para o {team}!",
+    "falta": "⚽ **GOL DE FALTA!** {scorer} coloca a bola no ângulo para o {team}!",
+    "cabeca": "⚽ **GOL DE CABEÇA!** {scorer} sobe mais que todo mundo e marca para o {team}!",
+    "fora": "⚽ **QUE GOLAÇO!** {scorer} solta a bomba de fora da área para o {team}!",
+    "contra_ataque": "⚽ **GOL DE CONTRA-ATAQUE!** {scorer} puxa a corrida e finaliza para o {team}!",
+    "rebote": "⚽ **GOL!** O goleiro solta e {scorer} pega o rebote para o {team}!",
+    "escanteio": "⚽ **GOL DE ESCANTEIO!** {scorer} desvia na pequena área para o {team}!",
+    "contra": "⚽ **GOL CONTRA!** {scorer} tenta cortar e manda para as próprias redes. Gol do {team}!",
+}
+LATE_GOAL = " ⏱️ **No apagar das luzes!**"
 SAVE_LINES = (
-    "🧤 {shooter} arrisca de fora e {keeper} faz grande defesa!",
+    "🧤 {shooter} arrisca e {keeper} faz grande defesa!",
     "🧤 Que defesa de {keeper}! Impediu o gol de {shooter}.",
     "🧤 {shooter} cara a cara… {keeper} fecha o ângulo e salva!",
+)
+MIRACLE_LINES = (
+    "🧤✨ **MILAGRE!** {keeper} voa e tira a bola de {shooter} quando todo mundo gritava gol!",
+    "🧤✨ **INACREDITÁVEL!** {shooter} chuta no ângulo e {keeper} busca com a ponta dos dedos!",
 )
 MISS_LINES = (
     "😬 {shooter} finaliza e a bola passa raspando a trave!",
@@ -329,6 +351,156 @@ POST_LINES = (
     "🥅 NA TRAVE! {shooter} quase marca para o {team}!",
     "🥅 Bola no travessão! {shooter} acertou a madeira!",
 )
+PRESSURE_LINES = (
+    "🔥 O {team} se lança ao ataque e encurrala o adversário!",
+    "🔥 Pressão total do {team}! A torcida empurra o time.",
+    "🔥 O {team} sente o momento e parte para cima!",
+)
+
+# Tipo de cada chance de jogada: (tipo, participação, multiplicador da conversão).
+OPEN_PLAYS = (
+    (None, 0.55, 1.0),
+    ("cabeca", 0.15, 0.9),
+    ("fora", 0.12, 0.55),
+    ("escanteio", 0.07, 0.8),
+    ("rebote", 0.05, 1.3),
+    ("contra_ataque", 0.06, 1.25),
+)
+# Quem cabeceia num escanteio: zagueiros e centroavantes.
+HEADER_WEIGHT = {
+    "ZAG": 1.0,
+    "CA": 1.0,
+    "MC": 0.35,
+    "LE": 0.2,
+    "LD": 0.2,
+    "MEI": 0.15,
+    "PE": 0.15,
+    "PD": 0.15,
+    "GOL": 0.0,
+}
+# Quem chuta de fora: meias e volantes aparecem mais.
+LONG_SHOT_WEIGHT = {
+    "MEI": 1.0,
+    "MC": 0.8,
+    "PE": 0.6,
+    "PD": 0.6,
+    "CA": 0.5,
+    "LE": 0.25,
+    "LD": 0.25,
+    "ZAG": 0.1,
+    "GOL": 0.0,
+}
+OWN_GOAL_CHANCE = 0.025  # das chances de jogada que viram gol
+OFFSIDE_CHANCE = 0.05  # gols anulados por impedimento
+MIRACLE_THRESHOLD = 0.3  # defesa de chance clara (conversão acima disso) pode ser milagre
+MIRACLE_SHARE = 0.25
+SECOND_YELLOW_CHANCE = 0.3  # quem já tem amarelo se cuida; nem toda falta vira o segundo
+
+# Dinâmica do jogo.
+HOME_ADVANTAGE = (1.07, 0.95)  # chances do mandante e do visitante
+TRAILING_BOOST = (1.0, 1.12, 1.22)  # por gols atrás (0, 1, 2+)
+LEADING_DAMPING = 0.92  # quem está na frente administra
+EXPOSED_BOOST = 1.06  # e cede espaço quando o adversário se lança
+RED_CARD_ATTACK = 0.7  # chances de quem joga com um a menos
+RED_CARD_EXPOSURE = 1.15  # chances do adversário
+DIRECT_RED_CHANCE = 0.0005  # por minuto e por time
+PRESSURE_BOOST = 1.6
+PRESSURE_MINUTES = 5
+PRESSURE_COOLDOWN = 15
+
+
+def _tempo(minute: int, stoppage: int) -> float:
+    """Ritmo do jogo: começa estudado e esquenta com o cansaço do segundo tempo."""
+    if stoppage:
+        return 1.3 if minute == 90 else 1.0
+    if minute <= HALF_LENGTH:
+        return 0.85 + 0.15 * minute / HALF_LENGTH
+    return 0.95 + 0.3 * (minute - HALF_LENGTH) / HALF_LENGTH
+
+
+def _pick(players, weights: dict[str, float], profile: TeamProfile, rng) -> dict[str, Any]:
+    values = [
+        weights[player["position"]] * math.exp(0.04 * (profile.ratings[id(player)] - 75))
+        for player in players
+    ]
+    return rng.choices(players, weights=values, k=1)[0]
+
+
+def _possession(profiles, home_style: str, away_style: str, rng) -> int:
+    lean = {"balanced": 0, "attack": 4, "counter": -5}
+    value = (
+        50
+        + 1.5 * (profiles["home"].control - profiles["away"].control)
+        + lean[home_style]
+        - lean[away_style]
+        + rng.uniform(-3, 3)
+    )
+    return round(min(72, max(28, value)))
+
+
+def _player_ratings(players, profiles, events, score, rng) -> dict[str, dict[str, float]]:
+    """Nota de 0 a 10 de cada titular, a partir do que ele fez na partida."""
+    deltas: dict[tuple[str, str], float] = {}
+
+    def bump(side: str, name: str, value: float) -> None:
+        deltas[(side, name)] = deltas.get((side, name), 0) + value
+
+    rival = {"home": "away", "away": "home"}
+    for event in events:
+        if event.side is None or event.player is None:
+            continue
+        if event.kind == "goal":
+            if event.play == "contra":
+                bump(rival[event.side], event.player, -1.0)
+            else:
+                bump(event.side, event.player, 1.2)
+                if event.detail:
+                    bump(event.side, event.detail, 0.7)
+        elif event.kind in {"save", "miracle"} and event.detail:
+            bump(rival[event.side], event.detail, 0.6 if event.kind == "miracle" else 0.3)
+        elif event.kind == "card":
+            bump(event.side, event.player, -0.3)
+        elif event.kind == "red":
+            bump(event.side, event.player, -1.5)
+        elif event.kind == "miss":
+            bump(event.side, event.player, -0.1)
+    ratings: dict[str, dict[str, float]] = {}
+    for side, other in (("home", "away"), ("away", "home")):
+        conceded = score[other]
+        result = 0.3 if score[side] > conceded else (-0.2 if score[side] < conceded else 0)
+        ratings[side] = {}
+        for player in players[side]:
+            position = player["position"]
+            value = 6.0 + 0.03 * (profiles[side].ratings[id(player)] - 75) + result
+            if position in {"GOL", "ZAG", "LE", "LD"}:
+                value += 0.5 if conceded == 0 else -0.25 * conceded
+            value += deltas.get((side, _name(player)), 0) + rng.uniform(-0.3, 0.3)
+            ratings[side][_name(player)] = round(min(10.0, max(3.0, value)), 1)
+    return ratings
+
+
+def _match_stats(events, possession: int, ratings) -> dict[str, Any]:
+    shots = {"home": 0, "away": 0}
+    on_target = {"home": 0, "away": 0}
+    for event in events:
+        if event.side is None:
+            continue
+        if event.kind in {"goal", "save", "miracle", "post", "miss", "offside"}:
+            if event.play != "contra":
+                shots[event.side] += 1
+        if event.kind in {"goal", "save", "miracle"} and event.play != "contra":
+            on_target[event.side] += 1
+    best_side, best_name = max(
+        ((side, name) for side in ratings for name in ratings[side]),
+        key=lambda item: ratings[item[0]][item[1]],
+    )
+    return {
+        "possession": [possession, 100 - possession],
+        "shots": [shots["home"], shots["away"]],
+        "on_target": [on_target["home"], on_target["away"]],
+        "ratings": ratings,
+        "best": {"side": best_side, "name": best_name, "rating": ratings[best_side][best_name]},
+    }
 
 
 def _expected_goals(players, profile, opponent, chances, style_conversion, tactics) -> float:
@@ -343,19 +515,21 @@ def _expected_goals(players, profile, opponent, chances, style_conversion, tacti
     )
     free_kick = _set_piece_taker(players, profile, (tactics or {}).get("free_kick_player_id"))
     penalty = _set_piece_taker(players, profile, (tactics or {}).get("penalty_player_id"))
-    free_kick_conversion = min(
-        0.3, max(0.04, 0.12 * math.exp(0.05 * (profile.ratings[id(free_kick)] - opponent.keeper)))
-    )
-    penalty_conversion = min(
-        0.92, max(0.55, 0.76 + 0.006 * (profile.ratings[id(penalty)] - opponent.keeper))
-    )
     share_open = 1 - PENALTY_SHARE - FREE_KICK_SHARE
     per_chance = (
-        share_open * open_play
-        + FREE_KICK_SHARE * free_kick_conversion
-        + PENALTY_SHARE * penalty_conversion
+        share_open * open_play * sum(share * factor for _, share, factor in OPEN_PLAYS)
+        + FREE_KICK_SHARE * _free_kick_conversion(profile.ratings[id(free_kick)], opponent.keeper)
+        + PENALTY_SHARE * _penalty_conversion(profile.ratings[id(penalty)], opponent.keeper)
     )
     return round(chances * per_chance, 2)
+
+
+def _free_kick_conversion(shooter: float, keeper: float) -> float:
+    return min(0.3, max(0.04, 0.12 * math.exp(0.05 * (shooter - keeper))))
+
+
+def _penalty_conversion(shooter: float, keeper: float) -> float:
+    return min(0.92, max(0.55, 0.76 + 0.006 * (shooter - keeper)))
 
 
 def simulate_match(
@@ -368,9 +542,16 @@ def simulate_match(
     away_style: str = "balanced",
     home_tactics: dict[str, Any] | None = None,
     away_tactics: dict[str, Any] | None = None,
+    home_advantage: bool = False,
     rng: random.Random | None = None,
 ) -> MatchResult:
-    """Simula 90 minutos. `*_tactics` traz capitão e cobradores (`team_tactics`)."""
+    """Simula 90 minutos. `*_tactics` traz capitão e cobradores (`team_tactics`).
+
+    O jogo muda com o andamento: esquenta no segundo tempo, quem está perdendo se
+    lança, quem está ganhando administra, expulsão deixa o time com um a menos e há
+    momentos de pressão depois de gols e lances perigosos. `home_advantage` dá o
+    empurrão da torcida ao mandante.
+    """
     generator = rng or random.SystemRandom()
     if home_style not in STYLES or away_style not in STYLES:
         raise TeamError("Estilo de time inválido.")
@@ -378,7 +559,8 @@ def simulate_match(
         "home": team_profile(home_players, home_tactics),
         "away": team_profile(away_players, away_tactics),
     }
-    players = {"home": list(home_players), "away": list(away_players)}
+    lineups = {"home": list(home_players), "away": list(away_players)}
+    on_pitch = {"home": list(home_players), "away": list(away_players)}
     names = {"home": home_name, "away": away_name}
     tactics = {"home": home_tactics or {}, "away": away_tactics or {}}
     styles = {"home": STYLES[home_style], "away": STYLES[away_style]}
@@ -389,7 +571,7 @@ def simulate_match(
         chances[side] = min(MAX_CHANCES, max(MIN_CHANCES, created))
     expected = {
         side: _expected_goals(
-            players[side],
+            lineups[side],
             profiles[side],
             profiles[other],
             chances[side],
@@ -398,13 +580,17 @@ def simulate_match(
         )
         for side, other in (("home", "away"), ("away", "home"))
     }
+    venue = dict(zip(("home", "away"), HOME_ADVANTAGE if home_advantage else (1.0, 1.0)))
 
     score = {"home": 0, "away": 0}
     goals: list[Goal] = []
     events: list[MatchEvent] = []
     booked: set[tuple[str, int]] = set()
+    sent_off = {"home": 0, "away": 0}
+    pressure_until = {"home": -1, "away": -1}
+    last_pressure = {"home": -PRESSURE_COOLDOWN, "away": -PRESSURE_COOLDOWN}
 
-    def add(minute, stoppage, kind, text, side=None, player=None, detail=None, play=None) -> None:
+    def add(minute, stoppage, kind, text, side=None, player=None, detail=None, play=None):
         events.append(
             MatchEvent(
                 minute,
@@ -420,6 +606,24 @@ def simulate_match(
             )
         )
 
+    def start_pressure(side: str, step: int, minute: int, stoppage: int) -> None:
+        if step - last_pressure[side] < PRESSURE_COOLDOWN or step >= len(timeline) - 3:
+            return
+        pressure_until[side] = step + PRESSURE_MINUTES
+        last_pressure[side] = step
+        add(
+            minute,
+            stoppage,
+            "pressure",
+            generator.choice(PRESSURE_LINES).format(team=names[side]),
+            side,
+        )
+
+    def send_off(side: str, player: dict[str, Any], minute: int, stoppage: int, text: str):
+        on_pitch[side] = [other for other in on_pitch[side] if other is not player]
+        sent_off[side] += 1
+        add(minute, stoppage, "red", text, side, _name(player))
+
     add(1, 0, "kickoff", f"🟢 Rola a bola! {home_name} × {away_name}.")
     first_stoppage = generator.randint(1, 3)
     second_stoppage = generator.randint(2, 5)
@@ -428,9 +632,9 @@ def simulate_match(
     timeline += [("half", 0)]
     timeline += [(minute, 0) for minute in range(HALF_LENGTH + 1, 91)]
     timeline += [(90, extra) for extra in range(1, second_stoppage + 1)]
-    minutes = 90 + first_stoppage + second_stoppage
+    total_tempo = sum(_tempo(minute, extra) for minute, extra in timeline if minute != "half")
 
-    for minute, stoppage in timeline:
+    for step, (minute, stoppage) in enumerate(timeline):
         if minute == "half":
             add(
                 HALF_LENGTH,
@@ -442,59 +646,80 @@ def simulate_match(
             continue
         for side, other in (("home", "away"), ("away", "home")):
             team_name = names[side]
-            squad = players[side]
+            squad = on_pitch[side]
             profile = profiles[side]
-            keeper_player = _goalkeeper(players[other])
+            keeper_player = _goalkeeper(lineups[other])
             keeper_rating = profiles[other].keeper
-            if generator.random() < chances[side] / minutes:
+            behind = score[other] - score[side]
+            rate = chances[side] * _tempo(minute, stoppage) / total_tempo * venue[side]
+            if behind > 0:
+                rate *= TRAILING_BOOST[min(behind, 2)]
+            elif behind < 0:
+                rate *= LEADING_DAMPING * EXPOSED_BOOST
+            rate *= RED_CARD_ATTACK ** sent_off[side] * RED_CARD_EXPOSURE ** sent_off[other]
+            if step <= pressure_until[side]:
+                rate *= PRESSURE_BOOST
+            if generator.random() < rate:
                 roll = generator.random()
                 if roll < PENALTY_SHARE:
                     play = "penalti"
                     shooter = _set_piece_taker(
                         squad, profile, tactics[side].get("penalty_player_id")
                     )
-                    probability = min(
-                        0.92,
-                        max(0.55, 0.76 + 0.006 * (profile.ratings[id(shooter)] - keeper_rating)),
-                    )
+                    probability = _penalty_conversion(profile.ratings[id(shooter)], keeper_rating)
                 elif roll < PENALTY_SHARE + FREE_KICK_SHARE:
                     play = "falta"
                     shooter = _set_piece_taker(
                         squad, profile, tactics[side].get("free_kick_player_id")
                     )
-                    probability = min(
-                        0.3,
-                        max(
-                            0.04,
-                            0.12 * math.exp(0.05 * (profile.ratings[id(shooter)] - keeper_rating)),
-                        ),
-                    )
+                    probability = _free_kick_conversion(profile.ratings[id(shooter)], keeper_rating)
                 else:
-                    play = None
-                    shooter = generator.choices(
-                        squad, weights=_shooter_weights(squad, profile), k=1
-                    )[0]
-                    probability = conversion(
-                        profile.ratings[id(shooter)], keeper_rating, styles[side][2]
+                    shares = [share for _, share, _ in OPEN_PLAYS]
+                    if behind < 0 or styles[side] == STYLES["counter"]:
+                        shares[-1] *= 2.5  # mais espaço para o contra-ataque
+                    play, _, factor = generator.choices(OPEN_PLAYS, weights=shares, k=1)[0]
+                    if play in {"cabeca", "escanteio"}:
+                        shooter = _pick(squad, HEADER_WEIGHT, profile, generator)
+                    elif play == "fora":
+                        shooter = _pick(squad, LONG_SHOT_WEIGHT, profile, generator)
+                    else:
+                        shooter = generator.choices(
+                            squad, weights=_shooter_weights(squad, profile), k=1
+                        )[0]
+                    probability = min(
+                        MAX_CONVERSION,
+                        conversion(profile.ratings[id(shooter)], keeper_rating, styles[side][2])
+                        * factor,
                     )
                 if generator.random() < probability:
+                    if play not in {"penalti", "falta"} and generator.random() < OFFSIDE_CHANCE:
+                        add(
+                            minute,
+                            stoppage,
+                            "offside",
+                            f"🚩 **Gol anulado!** {_name(shooter)} estava impedido.",
+                            side,
+                            _name(shooter),
+                        )
+                        continue
+                    if play not in {"penalti", "falta"} and generator.random() < OWN_GOAL_CHANCE:
+                        play = "contra"
+                        shooter = _pick(on_pitch[other], DEFENSE_WEIGHT, profiles[other], generator)
                     score[side] += 1
                     goals.append(
                         Goal(minute, side, int(shooter["id"]), _name(shooter), stoppage, play)
                     )
                     assistant = (
-                        _assistant(squad, shooter, profile, generator) if play is None else None
+                        _assistant(squad, shooter, profile, generator)
+                        if play not in {"penalti", "falta", "contra", "rebote"}
+                        else None
                     )
-                    if play == "penalti":
-                        text = PENALTY_GOAL.format(team=team_name, scorer=_name(shooter))
-                    elif play == "falta":
-                        text = FREE_KICK_GOAL.format(team=team_name, scorer=_name(shooter))
-                    else:
-                        text = generator.choice(GOAL_LINES).format(
-                            team=team_name, scorer=_name(shooter)
-                        )
+                    template = PLAY_GOAL_LINES.get(play) or generator.choice(GOAL_LINES)
+                    text = template.format(team=team_name, scorer=_name(shooter))
                     if assistant is not None:
                         text += f" Assistência de {_name(assistant)}."
+                    if minute >= 88:
+                        text += LATE_GOAL
                     add(
                         minute,
                         stoppage,
@@ -505,15 +730,25 @@ def simulate_match(
                         _name(assistant) if assistant is not None else None,
                         play,
                     )
+                    # Quem sofre o gol tenta reagir na hora.
+                    if score[other] <= score[side] and generator.random() < 0.4:
+                        start_pressure(other, step, minute, stoppage)
                 else:
                     # Goleiro bom defende mais; o resto vai na trave ou para fora.
                     save = min(0.75, max(0.3, 0.5 + 0.012 * (keeper_rating - 75)))
                     outcome = generator.random()
-                    lines, kind = (
-                        (SAVE_LINES, "save")
-                        if outcome < save
-                        else (POST_LINES, "post") if outcome < save + 0.12 else (MISS_LINES, "miss")
-                    )
+                    if outcome < save:
+                        kind = (
+                            "miracle"
+                            if probability >= MIRACLE_THRESHOLD
+                            and generator.random() < MIRACLE_SHARE
+                            else "save"
+                        )
+                        lines = MIRACLE_LINES if kind == "miracle" else SAVE_LINES
+                    elif outcome < save + 0.12:
+                        kind, lines = "post", POST_LINES
+                    else:
+                        kind, lines = "miss", MISS_LINES
                     keeper = _name(keeper_player)
                     add(
                         minute,
@@ -524,15 +759,36 @@ def simulate_match(
                         ),
                         side,
                         _name(shooter),
-                        keeper if kind == "save" else None,
+                        keeper if kind in {"save", "miracle"} else None,
                         play,
                     )
-            if generator.random() < YELLOW_CARD_CHANCE:
-                fouler = generator.choice(
-                    [player for player in squad if player["position"] != "GOL"]
+                    if kind in {"post", "miracle"} and generator.random() < 0.35:
+                        start_pressure(side, step, minute, stoppage)
+            outfield = [player for player in squad if player["position"] != "GOL"]
+            if generator.random() < DIRECT_RED_CHANCE * (1 + step / len(timeline)):
+                fouler = generator.choice(outfield)
+                send_off(
+                    side,
+                    fouler,
+                    minute,
+                    stoppage,
+                    f"🟥 **Expulso!** {_name(fouler)} entra duro e recebe o vermelho direto. "
+                    f"{team_name} com um a menos.",
                 )
+            elif generator.random() < YELLOW_CARD_CHANCE:
+                fouler = generator.choice(outfield)
                 key = (side, int(fouler["id"]))
                 if key in booked:
+                    if generator.random() >= SECOND_YELLOW_CHANCE:
+                        continue
+                    send_off(
+                        side,
+                        fouler,
+                        minute,
+                        stoppage,
+                        f"🟨🟥 **Segundo amarelo!** {_name(fouler)} está fora. "
+                        f"{team_name} com um a menos.",
+                    )
                     continue
                 booked.add(key)
                 add(
@@ -543,11 +799,19 @@ def simulate_match(
                     side,
                     _name(fouler),
                 )
-    add(
-        90,
-        second_stoppage,
-        "fulltime",
-        f"🏁 **Fim de jogo:** {home_name} {score['home']} × {score['away']} {away_name}.",
+    ratings = _player_ratings(lineups, profiles, events, score, generator)
+    stats = _match_stats(events, _possession(profiles, home_style, away_style, generator), ratings)
+    events.append(
+        MatchEvent(
+            90,
+            "fulltime",
+            f"🏁 **Fim de jogo:** {home_name} {score['home']} × {score['away']} {away_name}.",
+            None,
+            score["home"],
+            score["away"],
+            second_stoppage,
+            stats=stats,
+        )
     )
     return MatchResult(
         home_name=home_name,
@@ -560,6 +824,7 @@ def simulate_match(
         away_strength=profiles["away"].strength,
         goals=tuple(goals),
         events=tuple(events),
+        stats=stats,
     )
 
 

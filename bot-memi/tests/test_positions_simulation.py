@@ -157,6 +157,8 @@ class PlayerDrivenSimulationTests(unittest.TestCase):
         set_pieces = [
             event
             for result in results
+            # Expulso, o cobrador sai e outro bate.
+            if not any(event.kind == "red" and event.side == "home" for event in result.events)
             for event in result.events
             if event.side == "home" and event.play in {"falta", "penalti"}
         ]

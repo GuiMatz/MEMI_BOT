@@ -431,7 +431,7 @@ def get_team_statistics(
         lineup_key = "home_lineup" if is_home else "away_lineup"
         player_appearances.update(int(player_id) for player_id in events.get(lineup_key, []))
         for goal in events.get("goals", []):
-            if goal["side"] == ("home" if is_home else "away"):
+            if goal["side"] == ("home" if is_home else "away") and goal.get("play") != "contra":
                 player_id = int(goal["scorer_id"])
                 player_goals[player_id] += 1
                 player_names[player_id] = goal["scorer_name"]

@@ -28,7 +28,7 @@ from src.score_image import render_score_card
 from src.simulation import penalty_events, simulate_match
 from src.teams import TeamError, get_team, get_valid_lineup
 
-SET_PIECE_MARK = {"penalti": " (pênalti)", "falta": " (falta)"}
+SET_PIECE_MARK = {"penalti": " (pênalti)", "falta": " (falta)", "contra": " (contra)"}
 
 LOGGER = logging.getLogger("memi.championship")
 
@@ -150,6 +150,7 @@ class MatchesCog(commands.Cog):
             away_style=away["style"],
             home_tactics=home,
             away_tactics=away,
+            home_advantage=True,
         )
         await context.send(f"🏟️ Local: **{venue_name(home)}**")
         await narrate(

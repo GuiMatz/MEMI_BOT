@@ -1,9 +1,9 @@
 """Narração ao vivo das partidas: edita um embed lance a lance.
 
 O placar fica fixo no topo, com uma bolinha na cor de cada time. Embaixo vêm os lances
-mais recentes primeiro, em linhas curtas (minuto, time, jogador). Cartões e chutes para
-fora não poluem o ao vivo: entram no resumo do apito final, que mostra gols, cartões e o
-melhor em campo.
+mais recentes primeiro, em linhas curtas (minuto, time, jogador). Amarelos e chutes para
+fora não poluem o ao vivo: entram no resumo do apito final, que mostra gols, cartões,
+posse, chances e o melhor em campo pela nota.
 """
 
 from __future__ import annotations
@@ -22,9 +22,27 @@ import discord
 # cerca de 5 edições a cada 5 segundos por canal, então não use menos que 1.
 DEFAULT_DELAY = float(os.getenv("MEMI_NARRATION_DELAY", "1.6"))
 VISIBLE_EVENTS = 8
-SLOW_EVENTS = {"goal", "halftime", "penalties", "fulltime"}
-SET_PIECES = {"penalti": " · de pênalti", "falta": " · de falta"}
-SHOT_VERBS = {"penalti": "bate o pênalti", "falta": "cobra a falta"}
+SLOW_EVENTS = {"goal", "halftime", "penalties", "fulltime", "red"}
+# Como o gol saiu (`MatchEvent.play`).
+SET_PIECES = {
+    "penalti": " · de pênalti",
+    "falta": " · de falta",
+    "cabeca": " · de cabeça",
+    "fora": " · de fora da área",
+    "escanteio": " · de escanteio",
+    "rebote": " · no rebote",
+    "contra_ataque": " · no contra-ataque",
+}
+SHOT_VERBS = {
+    "penalti": "bate o pênalti",
+    "falta": "cobra a falta",
+    "cabeca": "cabeceia",
+    "fora": "arrisca de fora",
+    "escanteio": "cabeceia no escanteio",
+    "rebote": "pega o rebote",
+    "contra_ataque": "puxa o contra-ataque",
+}
+SCORER_MARKS = {"penalti": " (pên.)", "contra": " (contra)"}
 # Lances que não aparecem no ao vivo (só contam no resumo).
 QUIET_EVENTS = {"card", "miss"}
 # Bolinha do Discord por faixa de matiz (graus), para cores saturadas.
@@ -79,8 +97,20 @@ def _line(event: dict[str, Any], dots: dict[str, str]) -> str | None:
         text = "🎯 **Disputa de pênaltis!**"
     elif kind == "goal" and player:
         assist = f" · assistência de {event['detail']}" if event.get("detail") else ""
-        play = SET_PIECES.get(event.get("play"), "")
-        text = f"{dot} ⚽ **GOL de {player}**{play} · {score}{assist}"
+        late = " ⏱️" if event["minute"] >= 88 else ""
+        if event.get("play") == "contra":
+            text = f"{dot} ⚽ **GOL CONTRA** de {player} · {score}{late}"
+        else:
+            play = SET_PIECES.get(event.get("play"), "")
+            text = f"{dot} ⚽ **GOL de {player}**{play} · {score}{assist}{late}"
+    elif kind == "miracle" and player:
+        text = f"{dot} 🧤✨ **Milagre de {event.get('detail') or 'goleiro'}** no chute de {player}"
+    elif kind == "red" and player:
+        text = f"{dot} 🟥 **{player} expulso** · time com um a menos"
+    elif kind == "offside" and player:
+        text = f"{dot} 🚩 Gol anulado · {player} impedido"
+    elif kind == "pressure":
+        text = f"{dot} {event['text']}"
     elif kind == "save" and player:
         keeper = event.get("detail")
         # A bolinha é do time que chutou: a frase começa por quem chutou.
@@ -139,12 +169,51 @@ def _best_player(events: Sequence[dict[str, Any]]) -> str | None:
             parts.append(f"{assists[best]} assistência{'s' if assists[best] > 1 else ''}")
         return f"{best} · {', '.join(parts)}"
     saves = Counter(
-        event["detail"] for event in events if event["kind"] == "save" and event.get("detail")
+        event["detail"]
+        for event in events
+        if event["kind"] in {"save", "miracle"} and event.get("detail")
     )
     if saves:
         keeper, count = saves.most_common(1)[0]
         return f"{keeper} · {count} defesa{'s' if count > 1 else ''}"
     return None
+
+
+def _stats_text(stats: dict[str, Any]) -> str:
+    """Posse, chances claras e chutes no gol, mandante × visitante."""
+    rows = (
+        ("Posse", stats["possession"], "%"),
+        ("Chances claras", stats["shots"], ""),
+        ("No gol", stats["on_target"], ""),
+    )
+    return "\n".join(
+        f"{label}: **{home}{unit}** × **{away}{unit}**" for label, (home, away), unit in rows
+    )
+
+
+def _best_from_stats(stats, events, dots) -> str:
+    """Melhor nota da partida, com os gols e as assistências dele."""
+    best = stats["best"]
+    name, side = best["name"], best["side"]
+    goals = sum(
+        1
+        for event in events
+        if event["kind"] == "goal"
+        and event.get("player") == name
+        and event.get("side") == side
+        and event.get("play") != "contra"
+    )
+    assists = sum(
+        1
+        for event in events
+        if event["kind"] == "goal" and event.get("detail") == name and event.get("side") == side
+    )
+    parts = [f"nota **{best['rating']:.1f}**"]
+    if goals:
+        parts.append(f"{goals} gol{'s' if goals > 1 else ''}")
+    if assists:
+        parts.append(f"{assists} assistência{'s' if assists > 1 else ''}")
+    return f"{dots[side]} {name} · {', '.join(parts)}"
 
 
 def match_embed(
@@ -172,17 +241,24 @@ def match_embed(
         )
         goals = [event for event in regular if event["kind"] == "goal"]
         cards = Counter(event.get("side") for event in regular if event["kind"] == "card")
+        reds = Counter(event.get("side") for event in regular if event["kind"] == "red")
         for side, name in (("home", home_name), ("away", away_name)):
             scorers = [
                 f"`{_clock(event)}` {event.get('player') or 'Gol'}"
+                f"{SCORER_MARKS.get(event.get('play'), '')}"
                 for event in goals
                 if event["side"] == side
             ]
             value = "\n".join(scorers) or "—"
             if cards[side]:
                 value += f"\n🟨 {cards[side]} {'cartões' if cards[side] > 1 else 'cartão'}"
+            if reds[side]:
+                value += f"\n🟥 {reds[side]} {'expulsões' if reds[side] > 1 else 'expulsão'}"
             embed.add_field(name=f"{dots[side]} {name}", value=value[:1024], inline=True)
-        best = _best_player(regular)
+        stats = next((event.get("stats") for event in regular if event["kind"] == "fulltime"), None)
+        if stats:
+            embed.add_field(name="📊 Estatísticas", value=_stats_text(stats), inline=False)
+        best = _best_from_stats(stats, regular, dots) if stats else _best_player(regular)
         if best:
             embed.add_field(name="⭐ Melhor em campo", value=best, inline=False)
         if penalties:

@@ -382,6 +382,7 @@ def _play_fixture(
         away_style=away_team["style"],
         home_tactics=home_team,
         away_tactics=away_team,
+        home_advantage=True,
         rng=rng,
     )
     winner_id = None
