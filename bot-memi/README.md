@@ -43,14 +43,15 @@ python -m src.bot
 ```
 
 O bot carrega os comandos de jogo e gerenciamento em `src/cogs/`. `mm!roll`
-oferece 10 rolagens por ciclo de 1 hora, renovadas na hora cheia (horário de Brasília), e
-segue as faixas de raridade do [guia de implementação](docs/guia-ideias-jogo.md).
-Upgrades e tokens de crates podem aumentar os rolls. Duplicatas próprias dão
-uma bola (até 10), +1 overall efetivo e 100 Memilets; acima do limite dão 500
-Memilets. Duplicatas de terceiros oferecem de 100 a 300 Memilets a quem rolou,
-após resgate no botão. Jogadores livres são reivindicados pelo botão: quem rolou
-tem 5 segundos de exclusividade (aumentável até 15), as ofertas expiram em 5
-minutos e cada pessoa tem intervalo fixo de 1 hora entre claims bem-sucedidos.
+oferece 10 rolagens por ciclo de 30 minutos, renovadas na hora cheia e na meia hora
+(horário de Brasília), e segue as faixas de raridade do
+[guia de implementação](docs/guia-ideias-jogo.md). Upgrades, torre e crates podem
+aumentar os rolls. Duplicatas próprias dão uma bola (até 10), +1 overall efetivo e
+100 Memilets; acima do limite dão 500 Memilets. Duplicatas de terceiros oferecem de
+100 a 300 Memilets a quem rolou, após resgate no botão. Jogadores livres são
+reivindicados pelo botão: quem rolou tem 5 segundos de exclusividade (aumentável até
+15), quem tem wish no jogador pode ter segundos de proteção, as ofertas expiram em 5
+minutos e cada pessoa tem um claim por ciclo (renova junto com os rolls).
 Os claims são atômicos e cada jogador só pode ter um dono.
 
 Comandos oficiais do **FUT.AE** incluem `mm!futae`, `mm!left`, `mm!top [categoria]`, `mm!scout <nome>`, `mm!daily`, `mm!upgrade`, `mm!crates`,
@@ -116,6 +117,46 @@ testar a simulação sem alterar times reais.
 
 O FUT.AE é um módulo do MeMi BOT, não um bot separado. O menu geral continua em
 `mm!ajuda`; `mm!fut.ae` e `mm!futae` mostram apenas os comandos do jogo.
+
+### 3.3 — V2: loja, crates, Centro de Treinamento e cosméticos
+
+- **Bônus da conta** (`src/perks.py`): uma só função, `load_perks`, soma loja,
+  torre, prêmios permanentes de crates (`user_bonuses`) e cosméticos equipados, e dá
+  capacidade de rolls, slots de wish/Star Wish, cooldown e teto do daily, proteção
+  de wish, preço da crate, renda e bilheteria. Nada disso altera a chance da roleta.
+- **Loja V2** (`mm!upgrade`): 10 upgrades com limite, ícone redondo de cor própria e
+  confirmação antes da compra. A redução do preço da crate não é vendida: só sai em
+  crate. Migração única (versão 13 do schema): o `daily` antigo (+100 no teto) virou
+  `daily_max`, o bônus de duplicata foi removido e níveis acima dos limites novos
+  foram devolvidos em Memilets.
+- **Crates V2** (`open_crate`): sempre um item Básico (1–3 rolls instantâneos, que
+  valem só no ciclo atual, ou 150–300 Memilets) e, com chance baixa, um item de outra
+  raridade: Incomum 10%, Raro 3,5%, Épico 1,2%, Lendário 0,4%. A caixa vem toda em
+  itens ou toda em Memilets. Cosméticos nunca repetem o que a pessoa já tem; 5% das
+  caixas com item trazem um segundo item da mesma raridade.
+- **Cosméticos** (`src/cosmetics.py`, tabela `user_cosmetics`): emblema, uniforme,
+  estádio, técnico, liga e mascote. Só dá para equipar o que se possui; cada um
+  equipado (menos o estádio) soma +100 ao teto do daily. Itens que já estavam
+  equipados antes da regra viram posse da pessoa na inicialização. Clubes e logos
+  aparecem juntos como **emblemas**. Uniformes de `camisas2`/`camisas3` ganham
+  "(Uniforme 2/3)" no nome.
+- **Centro de Treinamento** (`src/tower.py`): 12 andares em qualquer ordem, 1000
+  Memilets o primeiro e +500 a cada andar construído. Completar os 12 libera uma
+  construção nova, que repete os efeitos. `mm!destruir` devolve tudo, inclusive
+  retirando as bolas do andar 12.
+- **Renda e bilheteria** (`src/income.py`): renda do primeiro amistoso do dia em casa
+  com estádio (100 + 50 por gol, ±100 por vitória/derrota, zero se perder por 3+ sem
+  marcar), com intervalo fixo de 24 h. Andar 5: cada jogo do campeonato guarda 50 (100
+  na vitória) até o limite. O campeão do dia recebe 500 Memilets.
+- **Lendas dos 12 grandes** (`src/seeds/lendas_brasileiras.json`,
+  `seed_club_legends`): 132 nomes; quem já existe como lenda da Enciclopédia (mesmo
+  nome ou apelido e mesmo país) não é duplicado, aposentados já no banco viram a carta,
+  e homônimos ganham o clube no nome, como "Pepe (Santos)". Overall de 83 a 89 com
+  `overall_source = 'Lenda de Clube'`.
+- **Emojis** (`src/icons.py`, `scripts/gerar_icones.py`): moeda Memilets (gato de
+  óculos) e ícones dos upgrades em `assets/emojis/futae/`, enviados como emojis da
+  aplicação pelo MeMi BOT.
+- **Escalação**: emblema embaixo à esquerda e técnico embaixo à direita.
 
 ### 3.2 — enciclopédia, cartas e roleta maior
 
@@ -190,11 +231,16 @@ O FUT.AE é um módulo do MeMi BOT, não um bot separado. O menu geral continua 
 
 ### Economia e coleção pessoal
 
-- `mm!daily` libera uma nova recompensa 24 horas após o último resgate.
+- `mm!daily` paga de 100 a 300 Memilets (mais os bônus) e libera de novo 24 horas
+  depois, menos as reduções de upgrades, torre e crates (mínimo de 8 horas).
 - `mm!wishlist` e `mm!wl` mostram a lista completa de wishes em embed.
 - `mm!starwish` e `mm!sw` identificam Star Wishes com o emoji `⭐`.
-- `mm!upgrade` inclui rolls, wishes, daily, exclusividade, Star Wishes e bônus
-  progressivo para recompensas de duplicatas.
+- `mm!upgrade` tem 10 upgrades com limite (rolls, wishes, Star Wish, daily, proteção
+  de wish, teto do daily, exclusividade, reembolso da demissão, bilheteria e renda), sempre
+  com confirmação.
+- `mm!crates`, `mm!construir`, `mm!destruir`, `mm!renda`, `mm!bilheteria` e
+  `mm!cosmeticos` (com `mm!emblema`, `mm!uniforme`, `mm!estadio`, `mm!tecnico`,
+  `mm!liga` e `mm!mascote`) completam a economia do clube.
 - `mm!demitir` exige confirmação antes de liberar um jogador.
 - `mm!troca` exige confirmação do ofertante e do destinatário antes da conclusão.
 

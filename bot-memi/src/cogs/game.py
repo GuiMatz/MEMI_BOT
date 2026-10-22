@@ -8,6 +8,8 @@ from datetime import datetime
 import discord
 from discord.ext import commands
 
+from src import icons
+from src.cosmetics import COSMETIC_KINDS, LABEL_TO_KIND, free_counts, owners_of
 from src.db import DATABASE_PATH
 from src.economy import get_account_status
 from src.cogs.common import CardPagerView, card_embed, card_file
@@ -22,10 +24,7 @@ from src.game import (
 from src.roll_images import find_image, image_file
 
 PAGE_SIZE = 20
-TOP_CATEGORIES = (
-    "jogadores, cartola, tecnicos, estadios, ligas, clubes, uniformes, emblemas, "
-    "logos ou mascotes"
-)
+TOP_CATEGORIES = "jogadores, cartola, tecnicos, estadios, ligas, emblemas, uniformes ou mascotes"
 
 
 def _thousands(value: int) -> str:
@@ -45,11 +44,22 @@ async def player_embed(player: dict) -> tuple[discord.Embed, discord.File]:
     return card_embed(player, footer="mm!wish <nome> para desejar"), await card_file(player)
 
 
-def catalog_embed(item: dict) -> tuple[discord.Embed, discord.File | None]:
-    """Ficha de técnico, estádio, clube, liga ou asset, com imagem se houver."""
+def catalog_embed(
+    item: dict, database_path=DATABASE_PATH
+) -> tuple[discord.Embed, discord.File | None]:
+    """Ficha de técnico, estádio, emblema, liga, uniforme ou mascote, com imagem."""
+    description = f"**{item['kind']}**"
+    kind = LABEL_TO_KIND.get(item["kind"])
+    if kind:
+        owners = owners_of(kind, item["name"], database_path)
+        description += (
+            "\n🔒 Na coleção de " + ", ".join(f"**{owner}**" for owner in owners[:10])
+            if owners
+            else "\n🟢 Ninguém tem ainda · sai nas crates (`mm!crates`)"
+        )
     embed = discord.Embed(
         title=item["name"],
-        description=f"**{item['kind']}**",
+        description=description,
         color=discord.Color.teal(),
     )
     path = find_image(item.get("image_path"), item.get("entity"), item.get("id"))
@@ -114,8 +124,9 @@ class PagedView(discord.ui.View):
 
 
 class ScoutSelect(discord.ui.Select):
-    def __init__(self, results: list[dict]):
+    def __init__(self, results: list[dict], database_path=DATABASE_PATH):
         self.results = results
+        self.database_path = database_path
         options = []
         for index, result in enumerate(results[:25]):
             if result["type"] == "player":
@@ -143,7 +154,7 @@ class ScoutSelect(discord.ui.Select):
         if result["type"] == "player":
             embed, file = await player_embed(result["data"])
         else:
-            embed, file = catalog_embed(result["data"])
+            embed, file = catalog_embed(result["data"], self.database_path)
         await interaction.response.edit_message(
             content=None,
             embed=embed,
@@ -153,37 +164,45 @@ class ScoutSelect(discord.ui.Select):
 
 
 class ScoutView(discord.ui.View):
-    def __init__(self, results: list[dict]):
+    def __init__(self, results: list[dict], database_path=DATABASE_PATH):
         super().__init__(timeout=180)
-        self.add_item(ScoutSelect(results))
+        self.add_item(ScoutSelect(results, database_path))
 
 
 FUTAE_SECTIONS = (
     (
         "🎲 Coleção",
-        "`mm!roll` — rola um jogador (renova a cada hora cheia, horário de Brasília)\n"
-        "`mm!tu` — seus timers: rolls, claim e daily\n"
-        "`mm!scout <nome>` — ficha com foto de jogador, técnico, estádio, clube, uniforme…\n"
+        "`mm!roll` — 10 rolls a cada 30 min (hora cheia e meia hora, Brasília)\n"
+        "`mm!tu` — seus timers: rolls, claim (30 min) e daily\n"
+        "`mm!scout <nome>` — ficha de jogador, técnico, estádio, emblema, uniforme…\n"
         "`mm!top [categoria]` — catálogo por overall ou nome\n"
-        "`mm!left` — quanto ainda está livre em cada série\n"
-        "`mm!elenco [@pessoa] [filtro]` — uma carta por página, como no Mudae",
-    ),
-    (
-        "🪙 Economia",
-        "`mm!daily` — recompensa diária\n"
-        "`mm!carteira` — saldo, upgrades e limites\n"
-        "`mm!upgrade [tipo]` — consulta ou compra upgrades\n"
-        "`mm!crates` — abre uma crate por 500 Memilets\n"
+        "`mm!left` — jogadores e cosméticos ainda livres\n"
+        "`mm!elenco [@pessoa] [filtro]` — uma carta por página, como no Mudae\n"
         "`mm!wish`, `mm!wishlist`/`mm!wl`, `mm!starwish`/`mm!sw` — wishes",
     ),
     (
+        "🪙 Economia",
+        "`mm!daily` — de 100 a 300 Memilets (+100 por cosmético equipado)\n"
+        "`mm!carteira` — saldo, limites e timers\n"
+        "`mm!upgrade` — loja de upgrades (sempre pede confirmação)\n"
+        "`mm!crates` — caixas com rolls, cosméticos e bônus\n"
+        "`mm!construir [1-12]` / `mm!destruir` — Centro de Treinamento (torre)\n"
+        "`mm!renda` · `mm!bilheteria` — dinheiro do estádio e do campeonato",
+    ),
+    (
+        "🎽 Clube",
+        "`mm!cosmeticos [tipo]` — seus emblemas, uniformes, estádios, técnicos…\n"
+        "`mm!emblema` · `mm!uniforme` · `mm!estadio` · `mm!tecnico` · `mm!liga` · "
+        "`mm!mascote` `<nome>` — equipa o que é seu",
+    ),
+    (
         "⚽ Time e partidas",
-        "`mm!time` — perfil e imagem do time (`mm!time liga <nome>`)\n"
+        "`mm!time` — perfil e imagem do time (`mm!time nome|cor <valor>`)\n"
         "`mm!escalar` — monta o time clicando em cada posição\n"
         "`mm!tatica capitao|falta|penalti <nome>` — capitão e cobradores\n"
         "`mm!troca @pessoa <seu> por <dela>` / `mm!demitir <nome>`\n"
-        "`mm!amistoso @pessoa` — partida narrada minuto a minuto\n"
-        "`mm!campeonato` — campeonato diário com final e pênaltis",
+        "`mm!amistoso @pessoa` — partida narrada; o 1º do dia em casa rende renda\n"
+        "`mm!campeonato` — campeonato diário; o campeão leva 500 Memilets",
     ),
 )
 
@@ -264,17 +283,16 @@ class GameCog(commands.Cog):
             value=f"**{_thousands(counts['jogadores'])}/{_thousands(counts['jogadores_total'])}**",
             inline=True,
         )
-        embed.add_field(
-            name="👕 Uniformes",
-            value=f"**{_thousands(counts['uniformes'])}/{_thousands(counts['uniformes_total'])}**",
-            inline=True,
+        for kind, (free, total) in free_counts(self.database_path).items():
+            label, emoji, *_ = COSMETIC_KINDS[kind]
+            embed.add_field(
+                name=f"{emoji} {label}s",
+                value=f"**{_thousands(free)}/{_thousands(total)}**",
+                inline=True,
+            )
+        embed.set_footer(
+            text="livres/total · séries pelo overall do jogo · cosmético livre = ninguém tem"
         )
-        embed.add_field(
-            name="🛡️ Logos",
-            value=f"**{_thousands(counts['logos'])}/{_thousands(counts['logos_total'])}**",
-            inline=True,
-        )
-        embed.set_footer(text="livres/total · séries pelo overall do jogo")
         await context.reply(embed=embed, mention_author=False)
 
     @commands.command(name="scout", aliases=["im", "info"])
@@ -291,7 +309,7 @@ class GameCog(commands.Cog):
         results += [{"type": "catalog", "data": item} for item in items]
         if not results:
             await context.reply(
-                "Não encontrei jogador, técnico, estádio, clube ou item com esse nome.",
+                "Não encontrei jogador, técnico, estádio, emblema ou item com esse nome.",
                 mention_author=False,
             )
             return
@@ -300,8 +318,8 @@ class GameCog(commands.Cog):
         if first["type"] == "player":
             embed, file = await player_embed(first["data"])
         else:
-            embed, file = catalog_embed(first["data"])
-        view = ScoutView(results) if len(results) > 1 else None
+            embed, file = catalog_embed(first["data"], self.database_path)
+        view = ScoutView(results, self.database_path) if len(results) > 1 else None
         content = (
             f"Encontrei **{len(results)}** resultados; mostrando o mais provável. "
             "Use o menu para ver os outros."
@@ -417,7 +435,7 @@ class GameCog(commands.Cog):
         )
         embed = discord.Embed(
             title=f"🪙 Carteira de {context.author.display_name}",
-            description=f"# {_thousands(status.memilets)} Memilets",
+            description=f"# {icons.memilets()} {_thousands(status.memilets)} Memilets",
             color=discord.Color.gold(),
         )
         embed.set_thumbnail(url=context.author.display_avatar.url)
@@ -439,13 +457,21 @@ class GameCog(commands.Cog):
             inline=True,
         )
         embed.add_field(name="⏱️ Claim", value=_timestamp(status.claim_available_at), inline=True)
-        embed.add_field(name="🎁 Daily", value=_timestamp(status.daily_available_at), inline=True)
         embed.add_field(
-            name="📦 Crates",
-            value=f"Garantia {status.crate_pity}/50",
+            name="🎁 Daily",
+            value=f"{_timestamp(status.daily_available_at)}\nmáx. {status.daily_cap}",
             inline=True,
         )
-        embed.set_footer(text="mm!upgrade para evoluir · mm!tu para ver só os timers")
+        embed.add_field(
+            name="📦 Crate",
+            value=f"{icons.memilets(status.crate_price)}",
+            inline=True,
+        )
+        if status.wish_protection:
+            embed.add_field(
+                name="🛡️ Proteção de wish", value=f"{status.wish_protection} s", inline=True
+            )
+        embed.set_footer(text="mm!upgrade e mm!construir para evoluir · mm!tu para ver os timers")
         await context.reply(embed=embed, mention_author=False)
 
     @commands.command(name="tu", aliases=["timers", "timer"])
@@ -454,12 +480,14 @@ class GameCog(commands.Cog):
             context.author.id, context.author.display_name, self.database_path
         )
         extras = f" (+{status.roll_tokens} extras)" if status.roll_tokens else ""
+        if status.instant_rolls:
+            extras += f" · {status.instant_rolls} instantâneo(s) da crate"
         lines = [
             f"🎲 **{status.rolls_left}/{status.roll_capacity} rolls**{extras} · "
             f"renovam {_timestamp(status.rolls_reset_at)}",
             f"⏱️ Claim: {_timestamp(status.claim_available_at)}",
             f"🎁 Daily: {_timestamp(status.daily_available_at)}",
-            f"🪙 Saldo: **{_thousands(status.memilets)} Memilets**",
+            f"{icons.memilets()} Saldo: **{_thousands(status.memilets)} Memilets**",
         ]
         embed = discord.Embed(
             title=f"Timers de {context.author.display_name}",

@@ -9,6 +9,47 @@ SECOES = ("novidades", "melhorias", "correcoes", "admin")
 
 VERSOES = [
     {
+        "versao": "3.3.0",
+        "data": "22/10/2026",
+        "titulo": "FUT.AE V2 — loja, crates, Centro de Treinamento e cosméticos",
+        "novidades": [
+            "`mm!construir`: Centro de Treinamento, uma torre de 12 andares com upgrades "
+            "eternos (wishes, Star Wish, daily mais rápido, bilheteria, bolas…). `mm!destruir` "
+            "devolve todos os Memilets gastos.",
+            "Cosméticos: emblema, uniforme, estádio, técnico, liga e mascote saem nas crates e "
+            "só dá para equipar o que é seu (`mm!cosmeticos`, `mm!emblema`, `mm!tecnico`…). "
+            "Cada um equipado soma +100 ao máximo do daily.",
+            "Estádio e `mm!renda`: o primeiro amistoso do dia em casa gera renda (gols e "
+            "vitória aumentam, derrota diminui). O mandante confirma antes.",
+            "`mm!bilheteria`: com o andar 5, cada jogo do campeonato guarda Memilets para você.",
+            "O campeão do campeonato diário ganha 500 Memilets.",
+            "73 lendas novas dos 12 grandes clubes brasileiros (overall 83 a 89), sem repetir "
+            "quem já estava no jogo.",
+            "Moeda Memilets com emoji próprio (um gato de óculos) e ícones redondos coloridos "
+            "para cada upgrade.",
+        ],
+        "melhorias": [
+            "`mm!upgrade` refeito: 10 upgrades com limite, Star Wish comprável e confirmação "
+            "antes de cada compra. Nenhum upgrade aumenta a sorte.",
+            "`mm!crates` refeito: toda caixa traz um item Básico e, com sorte, um de outra "
+            "raridade (Incomum, Raro, Épico ou Lendário); 5% de chance de o item vir em dobro.",
+            "Rolls e claims renovam a cada 30 minutos.",
+            "Daily agora paga de 100 a 300 Memilets, mais os bônus de cosméticos e upgrades.",
+            "Clubes e logos viraram **emblemas** no `mm!scout`, `mm!top` e `mm!left`.",
+            "A escalação mostra o emblema embaixo à esquerda e o técnico embaixo à direita.",
+            "Os menus de upgrades, crates, torre, renda e cosméticos explicam o sistema no topo.",
+        ],
+        "correcoes": [
+            "Uniformes 2 e 3 de um mesmo time não sumiam mais atrás do uniforme principal.",
+        ],
+        "admin": [
+            "O bônus de duplicata foi removido e devolvido em Memilets; níveis acima dos "
+            "limites novos também foram devolvidos.",
+            "Quem já tinha técnico, estádio, liga, mascote ou emblema no time passou a possuir "
+            "esse item.",
+        ],
+    },
+    {
         "versao": "3.2.0",
         "data": "21/10/2026",
         "titulo": "FUT.AE — enciclopédia, cartas estilo Mudae e roleta maior",

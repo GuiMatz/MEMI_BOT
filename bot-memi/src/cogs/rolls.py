@@ -7,6 +7,7 @@ from pathlib import Path
 import discord
 from discord.ext import commands
 
+from src import icons
 from src.clock import brasilia_time
 from src.cogs.common import card_file
 from src.db import DATABASE_PATH
@@ -55,16 +56,21 @@ class RollOfferView(discord.ui.View):
             self.database_path,
         )
         if result.status == "player_claimed":
+            bonus = (
+                f" Centro de Treinamento: +{icons.memilets(result.reward_amount)} Memilets."
+                if result.reward_amount
+                else ""
+            )
             await interaction.response.send_message(
-                f"✅ {interaction.user.mention} contratou **{self.player_name}**.",
+                f"✅ {interaction.user.mention} contratou **{self.player_name}**.{bonus}",
             )
             self.stop()
             return
         if result.status == "reward_claimed":
             await interaction.response.edit_message(
                 content=(
-                    f"🪙 {interaction.user.mention} resgatou "
-                    f"**{result.reward_amount} Memilets**."
+                    f"{icons.memilets()} {interaction.user.mention} resgatou "
+                    f"{icons.memilets(result.reward_amount)} Memilets."
                 ),
                 embed=None,
                 view=None,
@@ -80,7 +86,12 @@ class RollOfferView(discord.ui.View):
             "unavailable": "Outra pessoa já reivindicou esse jogador.",
             "not_found": "Essa oportunidade de claim não está mais disponível.",
         }
-        if result.status == "cooldown" and result.retry_at:
+        if result.status == "wish_protected" and result.protected_until:
+            message = (
+                "Esse jogador está na wish de alguém e protegido até "
+                f"<t:{int(result.protected_until.timestamp())}:T>."
+            )
+        elif result.status == "cooldown" and result.retry_at:
             message = "Seu próximo claim libera às " f"**{brasilia_time(result.retry_at)}**."
         else:
             message = messages.get(
@@ -142,6 +153,10 @@ class RollsCog(commands.Cog):
             )
         elif result.kind == "own_duplicate_ball":
             embed.description += f"\nVocê ganhou 1 bola ({result.balls}/10) e 100 Memilets."
+        elif result.kind == "own_duplicate_double_ball":
+            embed.description += (
+                f"\nCentro de Treinamento: **2 bolas** ({result.balls}/10) e 100 Memilets."
+            )
         elif result.kind == "own_duplicate_max_balls":
             embed.description += "\nLimite de bolas atingido: +500 Memilets."
         else:
@@ -155,13 +170,21 @@ class RollsCog(commands.Cog):
                 player_name=player["display_name"] or player["name"],
             )
 
+        content = None
+        if result.wished_by:
+            mentions = " ".join(f"<@{user_id}>" for user_id in result.wished_by[:10])
+            content = f"💫 Na wish de {mentions}"
+            if result.protection_seconds:
+                content += f" · protegido por {result.protection_seconds} s"
         image = await card_file({**player, "effective_overall": overall})
         embed.set_image(url=f"attachment://{image.filename}")
         await context.reply(
+            content=content,
             embed=embed,
             file=image,
             view=view,
             mention_author=False,
+            allowed_mentions=discord.AllowedMentions(users=True, replied_user=False),
         )
 
 

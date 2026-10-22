@@ -40,6 +40,17 @@ class DiscordBotSetupTests(unittest.IsolatedAsyncioTestCase):
                         "tu",
                         "testeamistoso",
                         "testecampeonato",
+                        "construir",
+                        "destruir",
+                        "renda",
+                        "bilheteria",
+                        "cosmeticos",
+                        "emblema",
+                        "uniforme",
+                        "estadio",
+                        "tecnico",
+                        "liga",
+                        "mascote",
                     },
                 )
                 self.assertIs(bot.get_command("ajudajogo"), bot.get_command("futae"))

@@ -3692,11 +3692,11 @@ AJUDA_JOGO = [
     (
         "🎲 FUT.AE · Coleção",
         [
-            ("mm!roll", "rola um jogador (rolls renovam a cada hora cheia, horário de Brasília)"),
-            ("mm!tu", "mostra rolls restantes, claim e daily com horário"),
-            ("mm!scout <nome>", "ficha com foto de jogador, técnico, estádio, clube ou item"),
-            ("mm!top [categoria]", "catálogo: jogadores, cartola, técnicos, uniformes, mascotes…"),
-            ("mm!left", "quanto ainda está livre em cada série (livres/total)"),
+            ("mm!roll", "rola um jogador; 10 rolls a cada 30 min (hora cheia e meia hora)"),
+            ("mm!tu", "mostra rolls restantes, claim (a cada 30 min) e daily com horário"),
+            ("mm!scout <nome>", "ficha de jogador, técnico, estádio, emblema, uniforme ou mascote"),
+            ("mm!top [categoria]", "catálogo: jogadores, cartola, técnicos, emblemas, mascotes…"),
+            ("mm!left", "jogadores e cosméticos (emblemas, uniformes…) ainda livres"),
             (
                 "mm!elenco [@pessoa] [filtro]",
                 "uma carta por página; filtros: posição, overall, clube",
@@ -3708,10 +3708,15 @@ AJUDA_JOGO = [
     (
         "🪙 FUT.AE · Economia",
         [
-            ("mm!daily", "resgata Memilets uma vez por dia"),
-            ("mm!carteira", "saldo, rolls, wishes, timers e garantia das crates"),
-            ("mm!upgrade [tipo]", "rolls, wishes, daily, exclusividade e duplicata"),
-            ("mm!crates", "abre uma crate por 500 Memilets (sempre volta pelo menos 350)"),
+            ("mm!daily", "100 a 300 Memilets; cada cosmético equipado soma +100 ao máximo"),
+            ("mm!carteira", "saldo, rolls, wishes, timers e preço da crate"),
+            ("mm!upgrade", "loja de upgrades (rolls, wishes, Star Wish, daily…), com confirmação"),
+            ("mm!crates", "caixas: rolls instantâneos, cosméticos, bônus e upgrades"),
+            (
+                "mm!construir [1-12] / mm!destruir",
+                "Centro de Treinamento: torre de upgrades eternos",
+            ),
+            ("mm!renda / mm!bilheteria", "dinheiro do estádio (amistoso) e do campeonato"),
             ("mm!demitir <nome>", "libera jogador e recebe reembolso"),
             ("mm!troca @pessoa <seu jogador> por <dela> [moedas]", "propõe troca de jogadores"),
         ],
@@ -3720,17 +3725,19 @@ AJUDA_JOGO = [
         "⚽ FUT.AE · Time e partidas",
         [
             ("mm!escalar", "monta o time clicando na posição e escolhendo o jogador"),
+            ("mm!time [nome|cor valor]", "perfil e imagem do time, com emblema e técnico"),
             (
-                "mm!time [campo valor]",
-                "perfil e imagem do time; `mm!time liga <nome>` define a liga favorita",
+                "mm!cosmeticos · mm!emblema · mm!uniforme · mm!estadio · mm!tecnico · "
+                "mm!liga · mm!mascote",
+                "mostra e equipa seus cosméticos (só os que você possui)",
             ),
             (
                 "mm!tatica capitao|falta|penalti <nome>",
                 "cobradores e capitão pelo nome; também formação e estilo",
             ),
-            ("mm!amistoso @pessoa", "partida narrada minuto a minuto"),
+            ("mm!amistoso @pessoa", "partida narrada; o 1º do dia em casa pode gerar renda"),
             ("mm!campeonato inscrever", "inscreve seu time no campeonato diário"),
-            ("mm!campeonato iniciar", "joga o campeonato; final empatada vai para os pênaltis"),
+            ("mm!campeonato iniciar", "joga o campeonato; o campeão ganha 500 Memilets"),
             ("mm!futae", "mostra só os comandos do FUT.AE"),
         ],
     ),
@@ -3876,6 +3883,7 @@ class MeMiBot(commands.Bot):
         for cog in COGS:
             await self.add_cog(cog(self))
         from src.cogs.admin import AdminCog
+        from src.cogs.club import ClubCog
         from src.cogs.economy import EconomyCog
         from src.cogs.game import GameCog
         from src.cogs.matches import MatchesCog
@@ -3886,7 +3894,16 @@ class MeMiBot(commands.Bot):
 
         initialize_database(GAME_DATABASE_PATH)
         self.database_path = GAME_DATABASE_PATH
-        for cog in (GameCog, EconomyCog, RollsCog, TradesCog, TeamCog, MatchesCog, AdminCog):
+        for cog in (
+            GameCog,
+            EconomyCog,
+            RollsCog,
+            TradesCog,
+            TeamCog,
+            MatchesCog,
+            ClubCog,
+            AdminCog,
+        ):
             await self.add_cog(cog(self))
         try:
             relatorio = await asyncio.to_thread(prepare_game_data, GAME_DATABASE_PATH)

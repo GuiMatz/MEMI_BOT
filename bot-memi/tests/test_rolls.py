@@ -105,12 +105,12 @@ class RollTests(unittest.TestCase):
         c1 = claim_roll_offer(o1, 200, self.database_path, now=NOW + timedelta(seconds=10))
         self.assertEqual(c1.status, "player_claimed")
 
-        # Segundo claim no mesmo ciclo (12:20) deve dar cooldown até o próximo ciclo (13:00)
+        # Segundo claim no mesmo ciclo (12:20) deve dar cooldown até o próximo ciclo (12:30)
         c2 = claim_roll_offer(
             o2, 200, self.database_path, now=NOW + timedelta(minutes=10, seconds=10)
         )
         self.assertEqual(c2.status, "cooldown")
-        self.assertEqual(c2.retry_at, datetime(2026, 10, 18, 13, 0, tzinfo=timezone.utc))
+        self.assertEqual(c2.retry_at, datetime(2026, 10, 18, 12, 30, tzinfo=timezone.utc))
 
         # No ciclo seguinte (13:05, quando os rolls renovam), o claim volta a ficar livre
         c3 = claim_roll_offer(
@@ -227,14 +227,14 @@ class RollTests(unittest.TestCase):
                 now=NOW,
                 rng=random.Random(11),
             )
-        # Ciclos de 1 hora começando na hora cheia: 12:10 renova às 13:00.
-        self.assertEqual(error.exception.reset_at, NOW + timedelta(minutes=50))
+        # Ciclos de 30 minutos na hora cheia e na meia hora: 12:10 renova às 12:30.
+        self.assertEqual(error.exception.reset_at, NOW + timedelta(minutes=20))
 
         next_cycle = roll_player(
             100,
             "Pessoa",
             self.database_path,
-            now=NOW + timedelta(minutes=50),
+            now=NOW + timedelta(minutes=20),
             rng=random.Random(12),
         )
         self.assertEqual(next_cycle.rolls_remaining, 9)

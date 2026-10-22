@@ -10,10 +10,12 @@ from pathlib import Path
 
 from src.clock import BRASILIA
 from src.db import DATABASE_PATH, connect
+from src.income import add_box_office
 from src.simulation import penalty_shootout_kicks, simulate_match
 from src.teams import TeamError, get_valid_lineup
 
 CHAMPIONSHIP_TIMEZONE = BRASILIA
+CHAMPION_PRIZE = 500
 
 
 class ChampionshipError(Exception):
@@ -321,8 +323,20 @@ def play_championship(
                 (championship["id"],),
             ).fetchone()
         )
+    prize_paid = False
     if final_fixture["home_goals"] is None:
         final_fixture = _play_fixture(final_fixture, generator, database_path, final=True)
+        if final_fixture["winner_user_id"]:
+            with connect(database_path) as connection:
+                connection.execute(
+                    """
+                    UPDATE game_users SET memilets = memilets + ?,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE discord_user_id = ?
+                    """,
+                    (CHAMPION_PRIZE, final_fixture["winner_user_id"]),
+                )
+            prize_paid = True
     with connect(database_path) as connection:
         connection.execute(
             """
@@ -339,6 +353,7 @@ def play_championship(
     if result is None:
         raise ChampionshipError("O campeonato desapareceu durante a execução.")
     result["winner_user_id"] = final_fixture["winner_user_id"]
+    result["prize"] = CHAMPION_PRIZE if prize_paid else 0
     return result
 
 
@@ -396,7 +411,18 @@ def _play_fixture(
         for player in (*home_players, *away_players)
     }
     events.update(extra)
+    if final:
+        home_won = winner_id == fixture["home_user_id"]
+        away_won = winner_id == fixture["away_user_id"]
+    else:
+        home_won = result.home_goals > result.away_goals
+        away_won = result.away_goals > result.home_goals
     with connect(database_path) as connection:
+        # Andar 5 da torre: cada jogo oficial enche a bilheteria dos dois times.
+        events["box_office"] = {
+            "home": add_box_office(connection, str(fixture["home_user_id"]), home_won),
+            "away": add_box_office(connection, str(fixture["away_user_id"]), away_won),
+        }
         connection.execute(
             """
             UPDATE championship_fixtures

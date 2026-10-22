@@ -159,6 +159,65 @@ class PlayerChoiceView(discord.ui.View):
         await self.on_choose(interaction, self.players[int(interaction.data["values"][0])])
 
 
+class ConfirmView(discord.ui.View):
+    """Botões Confirmar/Cancelar que só quem pediu pode usar.
+
+    `on_confirm(interaction)` faz a ação e responde à interação; o cancelamento troca a
+    mensagem por `cancel_text`.
+    """
+
+    def __init__(
+        self,
+        author_id: int,
+        on_confirm: Callable[[discord.Interaction], Awaitable[None]],
+        *,
+        confirm_label: str = "Confirmar",
+        cancel_text: str = "Cancelado.",
+        danger: bool = False,
+        timeout: float = 120,
+    ):
+        super().__init__(timeout=timeout)
+        self.author_id = author_id
+        self.on_confirm = on_confirm
+        self.cancel_text = cancel_text
+        self.message: discord.Message | None = None
+        self.confirm.label = confirm_label
+        if danger:
+            self.confirm.style = discord.ButtonStyle.danger
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.author_id:
+            await interaction.response.send_message(
+                "Só quem fez o pedido pode confirmar.", ephemeral=True
+            )
+            return False
+        return True
+
+    @discord.ui.button(label="Confirmar", style=discord.ButtonStyle.success)
+    async def confirm(self, interaction: discord.Interaction, button) -> None:
+        self.stop()
+        await self.on_confirm(interaction)
+
+    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button) -> None:
+        self.stop()
+        await interaction.response.edit_message(content=self.cancel_text, embed=None, view=None)
+
+    async def on_timeout(self) -> None:
+        if self.message:
+            try:
+                await self.message.edit(view=None)
+            except discord.HTTPException:
+                pass
+
+
+def intro_embed(title: str, intro: str, *, color: discord.Color | None = None) -> discord.Embed:
+    """Embed de menu com o parágrafo que explica o sistema logo no topo."""
+    return discord.Embed(
+        title=title, description=f"*{intro}*", color=color or discord.Color.blurple()
+    )
+
+
 def ambiguity_text(query: str, players: list[dict[str, Any]]) -> str:
     if not players:
         return f"Não encontrei nenhum jogador chamado **{query[:60]}**."

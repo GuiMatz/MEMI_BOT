@@ -1,0 +1,760 @@
+{
+ "description": "11 lendas aposentadas de cada um dos 12 grandes do futebol brasileiro. Overall estimado (83 a 89), posição primária na sigla do documento: GL, ZAG, LD, LE, MEI, ATA, PD ou PE. País padrão: Brasil.",
+ "clubs": [
+  {
+   "club": "Flamengo",
+   "players": [
+    {
+     "name": "Raul Plassmann",
+     "position": "GL",
+     "overall": 83
+    },
+    {
+     "name": "Leandro",
+     "position": "LD",
+     "overall": 87
+    },
+    {
+     "name": "Mozer",
+     "position": "ZAG",
+     "overall": 86,
+     "aliases": [
+      "Carlos Mozer"
+     ]
+    },
+    {
+     "name": "Marinho",
+     "position": "ZAG",
+     "overall": 84
+    },
+    {
+     "name": "Júnior",
+     "position": "LE",
+     "overall": 88
+    },
+    {
+     "name": "Zico",
+     "position": "MEI",
+     "overall": 89
+    },
+    {
+     "name": "Andrade",
+     "position": "MEI",
+     "overall": 85
+    },
+    {
+     "name": "Adílio",
+     "position": "MEI",
+     "overall": 84
+    },
+    {
+     "name": "Tita",
+     "position": "PD",
+     "overall": 83
+    },
+    {
+     "name": "Lico",
+     "position": "PE",
+     "overall": 83
+    },
+    {
+     "name": "Nunes",
+     "position": "ATA",
+     "overall": 84
+    }
+   ]
+  },
+  {
+   "club": "Palmeiras",
+   "players": [
+    {
+     "name": "Marcos",
+     "position": "GL",
+     "overall": 87
+    },
+    {
+     "name": "Djalma Santos",
+     "position": "LD",
+     "overall": 87
+    },
+    {
+     "name": "Luís Pereira",
+     "position": "ZAG",
+     "overall": 86
+    },
+    {
+     "name": "Júnior Baiano",
+     "position": "ZAG",
+     "overall": 83
+    },
+    {
+     "name": "Roberto Carlos",
+     "position": "LE",
+     "overall": 89
+    },
+    {
+     "name": "Ademir da Guia",
+     "position": "MEI",
+     "overall": 89
+    },
+    {
+     "name": "Rivaldo",
+     "position": "MEI",
+     "overall": 88
+    },
+    {
+     "name": "Zinho",
+     "position": "MEI",
+     "overall": 85
+    },
+    {
+     "name": "César Sampaio",
+     "position": "MEI",
+     "overall": 84
+    },
+    {
+     "name": "Evair",
+     "position": "ATA",
+     "overall": 85
+    },
+    {
+     "name": "Edmundo",
+     "position": "ATA",
+     "overall": 85
+    }
+   ]
+  },
+  {
+   "club": "Corinthians",
+   "players": [
+    {
+     "name": "Ronaldo Giovanelli",
+     "position": "GL",
+     "overall": 83
+    },
+    {
+     "name": "Alessandro",
+     "position": "LD",
+     "overall": 83
+    },
+    {
+     "name": "Gamarra",
+     "position": "ZAG",
+     "overall": 84,
+     "aliases": [
+      "Carlos Gamarra"
+     ],
+     "country": "Paraguai"
+    },
+    {
+     "name": "Chicão",
+     "position": "ZAG",
+     "overall": 83
+    },
+    {
+     "name": "Wladimir",
+     "position": "LE",
+     "overall": 85
+    },
+    {
+     "name": "Sócrates",
+     "position": "MEI",
+     "overall": 89
+    },
+    {
+     "name": "Rivellino",
+     "position": "MEI",
+     "overall": 88,
+     "aliases": [
+      "Roberto Rivellino"
+     ]
+    },
+    {
+     "name": "Neto",
+     "position": "MEI",
+     "overall": 85
+    },
+    {
+     "name": "Marcelinho Carioca",
+     "position": "MEI",
+     "overall": 85
+    },
+    {
+     "name": "Edílson",
+     "position": "PD",
+     "overall": 83
+    },
+    {
+     "name": "Ronaldo Fenômeno",
+     "position": "ATA",
+     "overall": 89
+    }
+   ]
+  },
+  {
+   "club": "São Paulo",
+   "players": [
+    {
+     "name": "Rogério Ceni",
+     "position": "GL",
+     "overall": 88
+    },
+    {
+     "name": "Cafu",
+     "position": "LD",
+     "overall": 89
+    },
+    {
+     "name": "Ricardo Rocha",
+     "position": "ZAG",
+     "overall": 85
+    },
+    {
+     "name": "Diego Lugano",
+     "position": "ZAG",
+     "overall": 84,
+     "country": "Uruguai"
+    },
+    {
+     "name": "Leonardo",
+     "position": "LE",
+     "overall": 85
+    },
+    {
+     "name": "Kaká",
+     "position": "MEI",
+     "overall": 89
+    },
+    {
+     "name": "Raí",
+     "position": "MEI",
+     "overall": 88
+    },
+    {
+     "name": "Mineiro",
+     "position": "MEI",
+     "overall": 83
+    },
+    {
+     "name": "Pintado",
+     "position": "MEI",
+     "overall": 83
+    },
+    {
+     "name": "Müller",
+     "position": "PE",
+     "overall": 85
+    },
+    {
+     "name": "Careca",
+     "position": "ATA",
+     "overall": 86
+    }
+   ]
+  },
+  {
+   "club": "Santos",
+   "players": [
+    {
+     "name": "Gilmar",
+     "position": "GL",
+     "overall": 87
+    },
+    {
+     "name": "Lima",
+     "position": "LD",
+     "overall": 83
+    },
+    {
+     "name": "Mauro Ramos",
+     "position": "ZAG",
+     "overall": 86
+    },
+    {
+     "name": "Calvet",
+     "position": "ZAG",
+     "overall": 83
+    },
+    {
+     "name": "Dalmo",
+     "position": "LE",
+     "overall": 83
+    },
+    {
+     "name": "Zito",
+     "position": "MEI",
+     "overall": 86
+    },
+    {
+     "name": "Mengálvio",
+     "position": "MEI",
+     "overall": 84
+    },
+    {
+     "name": "Dorval",
+     "position": "PD",
+     "overall": 83
+    },
+    {
+     "name": "Pepe",
+     "position": "PE",
+     "overall": 85
+    },
+    {
+     "name": "Pelé",
+     "position": "ATA",
+     "overall": 89
+    },
+    {
+     "name": "Coutinho",
+     "position": "ATA",
+     "overall": 87
+    }
+   ]
+  },
+  {
+   "club": "Fluminense",
+   "players": [
+    {
+     "name": "Castilho",
+     "position": "GL",
+     "overall": 85
+    },
+    {
+     "name": "Altair",
+     "position": "LD",
+     "overall": 84
+    },
+    {
+     "name": "Pinheiro",
+     "position": "ZAG",
+     "overall": 84
+    },
+    {
+     "name": "Edinho",
+     "position": "ZAG",
+     "overall": 84
+    },
+    {
+     "name": "Marco Antônio",
+     "position": "LE",
+     "overall": 83
+    },
+    {
+     "name": "Deco",
+     "position": "MEI",
+     "overall": 85,
+     "country": "Portugal"
+    },
+    {
+     "name": "Romerito",
+     "position": "MEI",
+     "overall": 84,
+     "country": "Paraguai"
+    },
+    {
+     "name": "Assis",
+     "position": "MEI",
+     "overall": 84
+    },
+    {
+     "name": "Telê Santana",
+     "position": "PD",
+     "overall": 83
+    },
+    {
+     "name": "Fred",
+     "position": "ATA",
+     "overall": 85
+    },
+    {
+     "name": "Washington",
+     "position": "ATA",
+     "overall": 83
+    }
+   ]
+  },
+  {
+   "club": "Vasco da Gama",
+   "players": [
+    {
+     "name": "Barbosa",
+     "position": "GL",
+     "overall": 86,
+     "aliases": [
+      "Moacir Barbosa"
+     ]
+    },
+    {
+     "name": "Augusto",
+     "position": "LD",
+     "overall": 84
+    },
+    {
+     "name": "Ely do Amparo",
+     "position": "ZAG",
+     "overall": 84
+    },
+    {
+     "name": "Mauro Galvão",
+     "position": "ZAG",
+     "overall": 84
+    },
+    {
+     "name": "Felipe",
+     "position": "LE",
+     "overall": 84
+    },
+    {
+     "name": "Juninho Pernambucano",
+     "position": "MEI",
+     "overall": 87
+    },
+    {
+     "name": "Danilo Alvim",
+     "position": "MEI",
+     "overall": 87
+    },
+    {
+     "name": "Ramón Menezes",
+     "position": "MEI",
+     "overall": 84
+    },
+    {
+     "name": "Romário",
+     "position": "ATA",
+     "overall": 89
+    },
+    {
+     "name": "Roberto Dinamite",
+     "position": "ATA",
+     "overall": 87
+    },
+    {
+     "name": "Ademir de Menezes",
+     "position": "ATA",
+     "overall": 87
+    }
+   ]
+  },
+  {
+   "club": "Botafogo",
+   "players": [
+    {
+     "name": "Manga",
+     "position": "GL",
+     "overall": 85
+    },
+    {
+     "name": "Rildo",
+     "position": "LD",
+     "overall": 83
+    },
+    {
+     "name": "Brito",
+     "position": "ZAG",
+     "overall": 83
+    },
+    {
+     "name": "Zé Maria",
+     "position": "ZAG",
+     "overall": 83
+    },
+    {
+     "name": "Nilton Santos",
+     "position": "LE",
+     "overall": 89
+    },
+    {
+     "name": "Gérson",
+     "position": "MEI",
+     "overall": 89
+    },
+    {
+     "name": "Didi",
+     "position": "MEI",
+     "overall": 87
+    },
+    {
+     "name": "Paulo Cézar Caju",
+     "position": "MEI",
+     "overall": 85
+    },
+    {
+     "name": "Garrincha",
+     "position": "PD",
+     "overall": 89
+    },
+    {
+     "name": "Zagallo",
+     "position": "PE",
+     "overall": 85,
+     "aliases": [
+      "Mário Zagallo"
+     ]
+    },
+    {
+     "name": "Quarentinha",
+     "position": "ATA",
+     "overall": 84
+    }
+   ]
+  },
+  {
+   "club": "Grêmio",
+   "players": [
+    {
+     "name": "Danrlei",
+     "position": "GL",
+     "overall": 84
+    },
+    {
+     "name": "Arce",
+     "position": "LD",
+     "overall": 84,
+     "country": "Paraguai"
+    },
+    {
+     "name": "Hugo De León",
+     "position": "ZAG",
+     "overall": 85,
+     "country": "Uruguai"
+    },
+    {
+     "name": "Adílson Batista",
+     "position": "ZAG",
+     "overall": 84
+    },
+    {
+     "name": "Roger Machado",
+     "position": "LE",
+     "overall": 83
+    },
+    {
+     "name": "Ronaldinho Gaúcho",
+     "position": "MEI",
+     "overall": 89
+    },
+    {
+     "name": "Dinho",
+     "position": "MEI",
+     "overall": 83
+    },
+    {
+     "name": "Arílson",
+     "position": "MEI",
+     "overall": 83
+    },
+    {
+     "name": "Renato Gaúcho",
+     "position": "PD",
+     "overall": 86
+    },
+    {
+     "name": "Mário Jardel",
+     "position": "ATA",
+     "overall": 85
+    },
+    {
+     "name": "Paulo Nunes",
+     "position": "ATA",
+     "overall": 84
+    }
+   ]
+  },
+  {
+   "club": "Internacional",
+   "players": [
+    {
+     "name": "Taffarel",
+     "position": "GL",
+     "overall": 87,
+     "aliases": [
+      "Cláudio Taffarel"
+     ]
+    },
+    {
+     "name": "Ceará",
+     "position": "LD",
+     "overall": 83
+    },
+    {
+     "name": "Elías Figueroa",
+     "position": "ZAG",
+     "overall": 87,
+     "country": "Chile"
+    },
+    {
+     "name": "Índio",
+     "position": "ZAG",
+     "overall": 83
+    },
+    {
+     "name": "Vacaria",
+     "position": "LE",
+     "overall": 83
+    },
+    {
+     "name": "Falcão",
+     "position": "MEI",
+     "overall": 88,
+     "aliases": [
+      "Paulo Roberto Falcão"
+     ]
+    },
+    {
+     "name": "Carpegiani",
+     "position": "MEI",
+     "overall": 85
+    },
+    {
+     "name": "Fernandão",
+     "position": "MEI",
+     "overall": 85
+    },
+    {
+     "name": "Valdomiro",
+     "position": "PD",
+     "overall": 85
+    },
+    {
+     "name": "Lula",
+     "position": "PE",
+     "overall": 83
+    },
+    {
+     "name": "Dario",
+     "position": "ATA",
+     "overall": 85
+    }
+   ]
+  },
+  {
+   "club": "Cruzeiro",
+   "players": [
+    {
+     "name": "Dida",
+     "position": "GL",
+     "overall": 86
+    },
+    {
+     "name": "Nelinho",
+     "position": "LD",
+     "overall": 85
+    },
+    {
+     "name": "Piazza",
+     "position": "ZAG",
+     "overall": 85,
+     "aliases": [
+      "Wilson Piazza"
+     ]
+    },
+    {
+     "name": "Tostão",
+     "position": "MEI",
+     "overall": 88
+    },
+    {
+     "name": "Alex",
+     "position": "MEI",
+     "overall": 88
+    },
+    {
+     "name": "Dirceu Lopes",
+     "position": "MEI",
+     "overall": 87
+    },
+    {
+     "name": "Montillo",
+     "position": "MEI",
+     "overall": 83,
+     "country": "Argentina"
+    },
+    {
+     "name": "Joãozinho",
+     "position": "PE",
+     "overall": 84
+    },
+    {
+     "name": "Jairzinho",
+     "position": "ATA",
+     "overall": 87
+    },
+    {
+     "name": "Palhinha",
+     "position": "ATA",
+     "overall": 85
+    },
+    {
+     "name": "Roberto Batata",
+     "position": "ATA",
+     "overall": 83
+    }
+   ]
+  },
+  {
+   "club": "Atlético-MG",
+   "players": [
+    {
+     "name": "João Leite",
+     "position": "GL",
+     "overall": 84
+    },
+    {
+     "name": "Luisinho",
+     "position": "ZAG",
+     "overall": 85,
+     "aliases": [
+      "Luizinho"
+     ]
+    },
+    {
+     "name": "Leonardo Silva",
+     "position": "ZAG",
+     "overall": 83
+    },
+    {
+     "name": "Réver",
+     "position": "ZAG",
+     "overall": 83
+    },
+    {
+     "name": "Toninho Cerezo",
+     "position": "MEI",
+     "overall": 86
+    },
+    {
+     "name": "Gilberto Silva",
+     "position": "MEI",
+     "overall": 85
+    },
+    {
+     "name": "Paulo Isidoro",
+     "position": "MEI",
+     "overall": 84
+    },
+    {
+     "name": "Éder Aleixo",
+     "position": "PE",
+     "overall": 85
+    },
+    {
+     "name": "Reinaldo",
+     "position": "ATA",
+     "overall": 87
+    },
+    {
+     "name": "Dadá Maravilha",
+     "position": "ATA",
+     "overall": 84
+    },
+    {
+     "name": "Diego Tardelli",
+     "position": "ATA",
+     "overall": 83
+    }
+   ]
+  }
+ ]
+}

@@ -22,6 +22,8 @@ MISSING_RAW_OVERALL = 40
 # Lendas da Enciclopédia ficam sempre entre 90 e 99.
 LEGEND_SOURCE = "Lenda"
 LEGEND_MIN_OVERALL = 90
+# Lendas dos 12 grandes clubes brasileiros: a nota estimada (83 a 89) vale como está.
+CLUB_LEGEND_SOURCE = "Lenda de Clube"
 # A única carta 100 do jogo; comparada com o nome normalizado.
 SPECIAL_PLAYER_NAMES = frozenset({"maria sofia"})
 
@@ -64,6 +66,8 @@ def game_overall(
         return CARTOLA_OVERALL
     if source == LEGEND_SOURCE.casefold():
         return max(LEGEND_MIN_OVERALL, min(MAX_REGULAR_OVERALL, int(raw_overall or 0)))
+    if source == CLUB_LEGEND_SOURCE.casefold() and raw_overall is not None:
+        return max(1, min(MAX_REGULAR_OVERALL, int(raw_overall)))
     raw = MISSING_RAW_OVERALL if raw_overall is None else int(raw_overall)
     if raw < BOOST_CEILING:
         raw = round(raw + (BOOST_CEILING - raw) * BOOST_FACTOR)

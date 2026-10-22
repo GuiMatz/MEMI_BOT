@@ -7,8 +7,10 @@ import asyncio
 import discord
 from discord.ext import commands
 
+from src.cosmetics import equipped_name
 from src.db import DATABASE_PATH, normalize_player_name
 from src.cogs.common import PlayerChoiceView, ambiguity_text
+from src.income import venue_name
 from src.game import list_owned_players, resolve_player
 from src.lineup_image import render_lineup
 from src.teams import (
@@ -37,7 +39,9 @@ TEAM_FIELDS = {
     "tecnico": "coach_name",
     "estadio": "stadium_name",
     "logo": "logo_path",
+    "emblema": "logo_path",
     "camisa": "kit_path",
+    "uniforme": "kit_path",
     "liga": "favorite_league",
 }
 
@@ -300,7 +304,8 @@ class TeamCog(commands.Cog):
             key = TEAM_FIELDS.get(normalize_player_name(field))
             if key is None or value is None:
                 await context.reply(
-                    "Use `mm!time nome|cor|liga|mascote|tecnico|estadio|logo|camisa <valor>`.",
+                    "Use `mm!time nome|cor <valor>`. Cosméticos (só os seus): "
+                    "`mm!time emblema|uniforme|estadio|tecnico|liga|mascote <nome>`.",
                     mention_author=False,
                 )
                 return
@@ -327,7 +332,19 @@ class TeamCog(commands.Cog):
         )
         embed.add_field(
             name="Liga favorita",
-            value=team.get("favorite_league") or "`mm!time liga <nome>`",
+            value=team.get("favorite_league") or "`mm!liga <nome>`",
+            inline=True,
+        )
+        embed.add_field(
+            name="Emblema",
+            value=equipped_name("emblema", team.get("logo_path"), self.database_path)
+            or "`mm!emblema <nome>`",
+            inline=True,
+        )
+        embed.add_field(
+            name="Uniforme",
+            value=equipped_name("uniforme", team.get("kit_path"), self.database_path)
+            or "`mm!uniforme <nome>`",
             inline=True,
         )
         embed.add_field(
@@ -342,7 +359,7 @@ class TeamCog(commands.Cog):
         )
         embed.add_field(
             name="Estádio",
-            value=team["stadium_name"] or "Não definido",
+            value=venue_name(team),
             inline=True,
         )
         statistics = get_team_statistics(context.author.id, self.database_path)

@@ -58,7 +58,7 @@ class EconomyTests(unittest.TestCase):
             now=NOW,
             rng=random.Random(2),
         )
-        self.assertGreaterEqual(first.amount, 200)
+        self.assertGreaterEqual(first.amount, 100)
         self.assertLessEqual(first.amount, 300)
         self.assertEqual(
             first.available_at,
@@ -80,20 +80,16 @@ class EconomyTests(unittest.TestCase):
             now=first.available_at,
             rng=random.Random(4),
         )
-        self.assertGreaterEqual(next_day.amount, 200)
+        self.assertGreaterEqual(next_day.amount, 100)
 
-    def test_daily_upgrade_increases_cap_and_costs_are_progressive(self):
+    def test_daily_upgrades_raise_cap_and_cut_cooldown(self):
         self.set_balance(100_000)
-        self.assertEqual(get_upgrade_cost("rolls", 0), 5_000)
-        self.assertEqual(get_upgrade_cost("rolls", 1), 10_000)
-        self.assertEqual(get_upgrade_cost("wishes", 1), 6_000)
-        purchase = buy_upgrade(
-            100,
-            "Jogadora",
-            "daily",
-            self.database_path,
-        )
-        self.assertEqual(purchase.cost, 5_000)
+        self.assertEqual(get_upgrade_cost("rolls", 0), 2_000)
+        self.assertEqual(get_upgrade_cost("rolls", 1), 3_000)
+        self.assertEqual(get_upgrade_cost("wishes", 1), 1_500)
+        cap = buy_upgrade(100, "Jogadora", "daily_max", self.database_path)
+        faster = buy_upgrade(100, "Jogadora", "daily", self.database_path)
+        self.assertEqual((cap.cost, faster.cost), (2_500, 1_000))
         reward = claim_daily(
             100,
             "Jogadora",
@@ -102,7 +98,8 @@ class EconomyTests(unittest.TestCase):
             rng=random.Random(5),
         )
         self.assertEqual(reward.cap, 400)
-        self.assertEqual(get_wallet(100, self.database_path)["memilets"], 95_000 + reward.amount)
+        self.assertEqual(reward.available_at, NOW + timedelta(hours=24) - timedelta(minutes=10))
+        self.assertEqual(get_wallet(100, self.database_path)["memilets"], 96_500 + reward.amount)
 
     def test_upgrade_purchase_rejects_insufficient_balance(self):
         with self.assertRaises(InsufficientFunds):
@@ -129,23 +126,15 @@ class EconomyTests(unittest.TestCase):
 
     def test_crate_costs_500_and_awards_a_valid_prize(self):
         self.set_balance(500)
-        reward = open_crate(
+        result = open_crate(
             100,
             "Jogadora",
             self.database_path,
             rng=random.Random(10),
         )
-        self.assertIn(
-            reward.kind,
-            {"memilets", "roll_tokens", "star_wishes", "wishes", "rolls"},
-        )
-        self.assertGreaterEqual(get_wallet(100, self.database_path)["memilets"], 0)
-        with connect(self.database_path) as connection:
-            self.assertIsNotNone(
-                connection.execute(
-                    "SELECT crate_pity FROM user_upgrades WHERE upgrade_key = 'rolls'"
-                ).fetchone()
-            )
+        self.assertEqual(result.price, 500)
+        self.assertIn(result.prizes[0].kind, {"memilets", "instant_rolls"})
+        self.assertEqual(get_wallet(100, self.database_path)["memilets"], result.memilets)
 
     def test_crates_reject_insufficient_funds(self):
         with self.assertRaises(InsufficientFunds):

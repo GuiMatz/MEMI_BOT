@@ -7,6 +7,7 @@ from pathlib import Path
 
 from src.db import DATABASE_PATH, connect
 from src.game import register_user
+from src.perks import load_perks
 
 TRADE_LIFETIME = timedelta(minutes=15)
 
@@ -46,7 +47,8 @@ def dismiss_player(
             int(player["overall"]),
             player["market_value_eur"],
         )
-        refund = max(1, round(market_value * 0.0005))
+        multiplier = load_perks(connection, user_id).dismiss_refund_multiplier
+        refund = max(1, round(market_value * 0.0005 * multiplier))
         connection.execute(
             """
             DELETE FROM team_lineups

@@ -167,13 +167,6 @@ def render_lineup(
     draw.rectangle((0, 0, WIDTH, 130), fill=(12, 16, 22))
     draw.rectangle((0, 124, WIDTH, 130), fill=color)
     logo_x = 40
-    logo_path = team.get("logo_path")
-    if logo_path and (ROOT / logo_path).is_file():
-        with Image.open(ROOT / logo_path) as logo:
-            logo = logo.convert("RGBA")
-            logo.thumbnail((90, 90))
-            image.alpha_composite(logo, (40, 18))
-            logo_x = 145
     draw.text(
         (logo_x, 22),
         str(team.get("team_name") or "Meu time")[:28],
@@ -234,10 +227,68 @@ def render_lineup(
         _centered(draw, (x, y + AVATAR // 2 + 7), name, font)
         _centered(draw, (x, y + AVATAR // 2 + 38), position, _font(18, True), fill=LINE)
 
+    _draw_emblem(image, team.get("logo_path"))
+    _draw_coach(image, team, color)
+
     buffer = BytesIO()
     image.convert("RGB").save(buffer, format="PNG", optimize=True)
     buffer.seek(0)
     return buffer
+
+
+# Cantos de baixo do campo, fora da grande área: emblema à esquerda, técnico à direita.
+CORNER_SIZE = 116
+CORNER_MARGIN = 18
+
+
+def _draw_emblem(image: Image.Image, logo_path: str | None) -> None:
+    path = find_image(logo_path)
+    if path is None:
+        return
+    left, _, _, bottom = PITCH
+    box = (
+        left + CORNER_MARGIN,
+        bottom - CORNER_MARGIN - CORNER_SIZE,
+        left + CORNER_MARGIN + CORNER_SIZE,
+        bottom - CORNER_MARGIN,
+    )
+    try:
+        with Image.open(path) as opened:
+            emblem = opened.convert("RGBA")
+    except OSError:
+        return
+    emblem.thumbnail((CORNER_SIZE - 16, CORNER_SIZE - 16))
+    ImageDraw.Draw(image).rounded_rectangle(box, 18, fill=(10, 14, 20, 200))
+    image.alpha_composite(
+        emblem,
+        (
+            box[0] + (CORNER_SIZE - emblem.width) // 2,
+            box[1] + (CORNER_SIZE - emblem.height) // 2,
+        ),
+    )
+
+
+def _draw_coach(image: Image.Image, team: dict[str, Any], color: tuple[int, int, int]) -> None:
+    name = team.get("coach_name")
+    if not name:
+        return
+    _, _, right, bottom = PITCH
+    x = right - CORNER_MARGIN - CORNER_SIZE // 2
+    y = bottom - CORNER_MARGIN - 40 - AVATAR // 2
+    avatar = _avatar({"photo_path": team.get("coach_photo_path")}, color)
+    image.alpha_composite(avatar, (x - AVATAR // 2, y - AVATAR // 2))
+    draw = ImageDraw.Draw(image)
+    font = _font(18, True)
+    label = _fit(draw, str(name), font, 150)
+    box = draw.textbbox((0, 0), label, font=font)
+    half = (box[2] - box[0]) / 2 + 10
+    draw.rounded_rectangle(
+        (x - half, y + AVATAR // 2 + 4, x + half, y + AVATAR // 2 + 32),
+        8,
+        fill=(10, 14, 20, 230),
+    )
+    _centered(draw, (x, y + AVATAR // 2 + 7), label, font)
+    _centered(draw, (x, y - AVATAR // 2 - 24), "TÉCNICO", _font(16, True), fill=LINE)
 
 
 def _label_widths(coordinates: dict[int, tuple[int, int]]) -> dict[int, float]:

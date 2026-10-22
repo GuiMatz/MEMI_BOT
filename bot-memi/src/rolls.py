@@ -10,15 +10,18 @@ from pathlib import Path
 from typing import Any
 
 from src.db import DATABASE_PATH, connect
+from src.perks import (
+    BASE_EXCLUSIVE_SECONDS,
+    ROLLS_PER_CYCLE,
+    load_perks,
+)
 from src.ratings import GAME_OVERALL_SQL, POOL_SQL, RARITY_TIERS, effective_overall
 
-ROLLS_PER_CYCLE = 10
-CYCLE_LENGTH = timedelta(hours=1)
-# Os ciclos começam na hora cheia (em Brasília também, já que o fuso é UTC-3).
+CYCLE_LENGTH = timedelta(minutes=30)
+# Os ciclos começam na hora cheia e na meia hora (em Brasília também, já que o fuso é UTC-3).
 CYCLE_OFFSET_SECONDS = 0
-CLAIM_EXCLUSIVE_TIME = timedelta(seconds=5)
+CLAIM_EXCLUSIVE_TIME = timedelta(seconds=BASE_EXCLUSIVE_SECONDS)
 CLAIM_OFFER_LIFETIME = timedelta(minutes=5)
-CLAIM_COOLDOWN = timedelta(hours=1)
 MAX_DUPLICATE_BALLS = 10
 
 RARITY_BANDS = tuple((lower, upper, weight) for _, _, lower, upper, weight in RARITY_TIERS)
@@ -51,7 +54,9 @@ class RollOutcome:
     reward_amount: int | None = None
     balls: int | None = None
     effective_overall: int | None = None
-    exclusive_seconds: int = 5
+    exclusive_seconds: int = BASE_EXCLUSIVE_SECONDS
+    wished_by: tuple[str, ...] = ()
+    protection_seconds: int = 0
 
 
 @dataclass(frozen=True)
@@ -59,6 +64,7 @@ class ClaimOutcome:
     status: str
     reward_amount: int | None = None
     retry_at: datetime | None = None
+    protected_until: datetime | None = None
 
 
 def _utc_now(value: datetime | None) -> datetime:
@@ -146,24 +152,15 @@ def roll_player(
         rolls_used = int(usage["rolls_used"]) if usage else 0
         roll_upgrade = connection.execute(
             """
-            SELECT level, roll_tokens FROM user_upgrades
+            SELECT roll_tokens FROM user_upgrades
             WHERE discord_user_id = ? AND upgrade_key = 'rolls'
             """,
             (user_id,),
         ).fetchone()
-        roll_upgrade_level = int(roll_upgrade["level"]) if roll_upgrade else 0
         roll_tokens = int(roll_upgrade["roll_tokens"]) if roll_upgrade else 0
-        roll_capacity = ROLLS_PER_CYCLE + roll_upgrade_level
-        exclusivity_upgrade = connection.execute(
-            """
-            SELECT level FROM user_upgrades
-            WHERE discord_user_id = ? AND upgrade_key = 'exclusivity'
-            """,
-            (user_id,),
-        ).fetchone()
-        exclusive_seconds = CLAIM_EXCLUSIVE_TIME.seconds + (
-            int(exclusivity_upgrade["level"]) if exclusivity_upgrade else 0
-        )
+        perks = load_perks(connection, user_id)
+        roll_capacity = perks.roll_capacity + cycle_bonus_rolls(connection, user_id, cycle_key)
+        exclusive_seconds = perks.exclusive_seconds
         use_roll_token = rolls_used >= roll_capacity
         if use_roll_token and roll_tokens == 0:
             raise RollLimitReached(reset_at, roll_capacity)
@@ -286,23 +283,28 @@ def roll_player(
         reward_amount = None
         balls = None
         effective = effective_overall(player["overall"], player["balls"])
+        wished_by: tuple[str, ...] = ()
+        protection_seconds = 0
         if player["owner_id"] == user_id:
             balls = int(player["balls"])
             if balls < MAX_DUPLICATE_BALLS:
-                balls += 1
+                # Andar 2 da torre: chance de a bola vir em dobro.
+                gained = 2 if generator.random() < perks.double_ball_chance else 1
+                gained = min(gained, MAX_DUPLICATE_BALLS - balls)
+                balls += gained
                 reward_amount = 100
                 connection.execute(
                     """
                     INSERT INTO player_balls (player_id, balls)
-                    VALUES (?, 1)
+                    VALUES (?, ?)
                     ON CONFLICT(player_id) DO UPDATE SET
-                        balls = player_balls.balls + 1,
+                        balls = player_balls.balls + excluded.balls,
                         updated_at = CURRENT_TIMESTAMP
                     """,
-                    (player["id"],),
+                    (player["id"], gained),
                 )
                 effective = effective_overall(player["overall"], balls)
-                kind = "own_duplicate_ball"
+                kind = "own_duplicate_ball" if gained == 1 else "own_duplicate_double_ball"
             else:
                 reward_amount = 500
                 effective = effective_overall(player["overall"], balls)
@@ -316,13 +318,7 @@ def roll_player(
                 (reward_amount, user_id),
             )
         elif player["owner_id"] is not None:
-            bonus = connection.execute(
-                """SELECT level FROM user_upgrades
-                   WHERE discord_user_id = ? AND upgrade_key = 'duplicate_bonus'""",
-                (user_id,),
-            ).fetchone()
-            bonus_amount = int(bonus["level"]) * 50 if bonus else 0
-            reward_amount = generator.randint(100, 300) + bonus_amount
+            reward_amount = generator.randint(100, 300)
             offer_id = _create_offer(
                 connection,
                 int(player["id"]),
@@ -342,6 +338,7 @@ def roll_player(
                 current_time,
             )
             kind = "unowned"
+            wished_by, protection_seconds = _wish_protection(connection, int(player["id"]), user_id)
 
         return RollOutcome(
             player=player,
@@ -353,7 +350,51 @@ def roll_player(
             balls=balls,
             effective_overall=effective,
             exclusive_seconds=exclusive_seconds,
+            wished_by=wished_by,
+            protection_seconds=protection_seconds,
         )
+
+
+def claimed_at(value: str) -> datetime:
+    """Horário salvo do último claim, sempre em UTC (registros antigos vêm sem fuso)."""
+    moment = datetime.fromisoformat(value)
+    if moment.tzinfo is None:
+        return moment.replace(tzinfo=timezone.utc)
+    return moment.astimezone(timezone.utc)
+
+
+def cycle_bonus_rolls(connection: sqlite3.Connection, user_id: str, cycle_key: str) -> int:
+    """Rolls instantâneos das crates: valem só no ciclo em que foram ganhos."""
+    row = connection.execute(
+        """
+        SELECT amount FROM cycle_bonus_rolls
+        WHERE discord_user_id = ? AND cycle_started_at = ?
+        """,
+        (user_id, cycle_key),
+    ).fetchone()
+    return int(row["amount"]) if row else 0
+
+
+def _wish_protection(
+    connection: sqlite3.Connection, player_id: int, roller_id: str
+) -> tuple[tuple[str, ...], int]:
+    """Quem tem wish no jogador (fora quem rolou) e a maior proteção entre eles."""
+    wishers = tuple(
+        str(row["discord_user_id"])
+        for row in connection.execute(
+            """
+            SELECT discord_user_id FROM user_wishes
+            WHERE player_id = ? AND discord_user_id != ?
+            ORDER BY wish_type DESC, created_at
+            """,
+            (player_id, roller_id),
+        )
+    )
+    protection = max(
+        (load_perks(connection, wisher).wish_protection_seconds for wisher in wishers),
+        default=0,
+    )
+    return wishers, protection
 
 
 def claim_roll_offer(
@@ -412,27 +453,23 @@ def claim_roll_offer(
             )
             return ClaimOutcome("reward_claimed", reward_amount=reward_amount)
 
+        created_at = datetime.fromisoformat(offer["created_at"])
+        has_wish = connection.execute(
+            """
+            SELECT 1 FROM user_wishes
+            WHERE discord_user_id = ? AND player_id = ?
+            """,
+            (user_id, offer["player_id"]),
+        ).fetchone()
+        # Proteção de wish: por alguns segundos só quem tem wish no jogador pode contratar.
+        # Vários donos de wish podem pegar; um ignora a proteção do outro.
+        _, protection = _wish_protection(connection, int(offer["player_id"]), offer["roller_id"])
+        protected_until = created_at + timedelta(seconds=protection)
+        if protection and not has_wish and current_time < protected_until:
+            return ClaimOutcome("wish_protected", protected_until=protected_until)
         if user_id != offer["roller_id"]:
-            exclusivity = connection.execute(
-                """
-                SELECT level FROM user_upgrades
-                WHERE discord_user_id = ? AND upgrade_key = 'exclusivity'
-                """,
-                (offer["roller_id"],),
-            ).fetchone()
-            exclusive_seconds = CLAIM_EXCLUSIVE_TIME.total_seconds() + (
-                int(exclusivity["level"]) if exclusivity else 0
-            )
-            has_wish = connection.execute(
-                """
-                SELECT 1 FROM user_wishes
-                WHERE discord_user_id = ? AND player_id = ?
-                """,
-                (user_id, offer["player_id"]),
-            ).fetchone()
-            exclusivity_end = datetime.fromisoformat(offer["created_at"]) + timedelta(
-                seconds=exclusive_seconds
-            )
+            exclusive_seconds = load_perks(connection, offer["roller_id"]).exclusive_seconds
+            exclusivity_end = created_at + timedelta(seconds=exclusive_seconds)
             if not has_wish and current_time < exclusivity_end:
                 return ClaimOutcome("exclusive")
 
@@ -442,16 +479,11 @@ def claim_roll_offer(
         ).fetchone()
         if account is None:
             raise LookupError("A conta de jogo ainda não foi cadastrada.")
+        claimer_perks = load_perks(connection, user_id)
+        # Um claim por ciclo: o claim renova junto com os rolls (hora cheia e meia hora).
         cycle_start = _cycle_start(current_time)
-        reset_at = cycle_start + CYCLE_LENGTH
-        if account["last_claim_at"]:
-            last_claim = datetime.fromisoformat(account["last_claim_at"])
-            if last_claim.tzinfo is None:
-                last_claim = last_claim.replace(tzinfo=timezone.utc)
-            else:
-                last_claim = last_claim.astimezone(timezone.utc)
-            if last_claim >= cycle_start:
-                return ClaimOutcome("cooldown", retry_at=reset_at)
+        if account["last_claim_at"] and claimed_at(account["last_claim_at"]) >= cycle_start:
+            return ClaimOutcome("cooldown", retry_at=cycle_start + CYCLE_LENGTH)
 
         owner = connection.execute(
             "SELECT discord_user_id FROM player_ownership WHERE player_id = ?",
@@ -483,4 +515,17 @@ def claim_roll_offer(
             """,
             (user_id, current_time.isoformat(timespec="seconds"), offer_id),
         )
-        return ClaimOutcome("player_claimed")
+        # Andar 3 da torre: Memilets iguais ao overall de quem foi contratado.
+        reward = None
+        if claimer_perks.floor(3):
+            overall = connection.execute(
+                f"SELECT {GAME_OVERALL_SQL} AS overall FROM players AS p WHERE p.id = ?",
+                (offer["player_id"],),
+            ).fetchone()["overall"]
+            reward = int(overall or 0) * claimer_perks.floor(3)
+            if reward:
+                connection.execute(
+                    "UPDATE game_users SET memilets = memilets + ? WHERE discord_user_id = ?",
+                    (reward, user_id),
+                )
+        return ClaimOutcome("player_claimed", reward_amount=reward or None)
