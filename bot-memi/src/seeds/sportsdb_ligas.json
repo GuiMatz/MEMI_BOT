@@ -1,5 +1,5 @@
 {
- "scanned_until": 4375,
+ "scanned_until": 5000,
  "leagues": [
   {
    "id": 4328,
@@ -161,6 +161,1763 @@
    "alternates": "",
    "country": "Worldwide",
    "badge": "https://r2.thesportsdb.com/images/media/league/badge/aj163o1682438506.png"
+  },
+  {
+   "id": 4394,
+   "name": "Italian Serie B",
+   "alternates": "Serie BKT",
+   "country": "Italy",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/uf5kph1598011132.png"
+  },
+  {
+   "id": 4395,
+   "name": "Scottish Championship",
+   "alternates": "William Hill Championship",
+   "country": "Scotland",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/i57nok1721301867.png"
+  },
+  {
+   "id": 4396,
+   "name": "English League 1",
+   "alternates": "EFL League One, Sky Bet League One, English Football League One",
+   "country": "England",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/afedb31688770443.png"
+  },
+  {
+   "id": 4397,
+   "name": "English League 2",
+   "alternates": "EFL League Two, Sky Bet League Two, English Football League Two",
+   "country": "England",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/jmb3ms1688770451.png"
+  },
+  {
+   "id": 4398,
+   "name": "Italian Serie C Girone C",
+   "alternates": "Serie C",
+   "country": "Italy",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/m450je1753593640.png"
+  },
+  {
+   "id": 4399,
+   "name": "German 2. Bundesliga",
+   "alternates": "2. Bundesliga",
+   "country": "Germany",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/hl40981534764789.png"
+  },
+  {
+   "id": 4400,
+   "name": "Spanish La Liga 2",
+   "alternates": "Segunda División, LaLiga SmartBank, LaLiga 123",
+   "country": "Spain",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/r7u6821688425700.png"
+  },
+  {
+   "id": 4401,
+   "name": "French Ligue 2",
+   "alternates": "Domino’s Ligue 2, Ligue 2 BKT",
+   "country": "France",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/aofb771742983333.png"
+  },
+  {
+   "id": 4403,
+   "name": "Swedish Superettan",
+   "alternates": "Superettan",
+   "country": "Sweden",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/uvzmu21707459258.png"
+  },
+  {
+   "id": 4404,
+   "name": "Brazilian Serie B",
+   "alternates": "Brazilian Brasileirao B Brasileiro",
+   "country": "Brazil",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/iiz0gf1778446845.png"
+  },
+  {
+   "id": 4406,
+   "name": "Argentinian Primera Division",
+   "alternates": "Liga Profesional de Fútbol",
+   "country": "Argentina",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/rk9xhx1768238251.png"
+  },
+  {
+   "id": 4422,
+   "name": "Polish Ekstraklasa",
+   "alternates": "Ekstraklasa, PKO Bank Polski Ekstraklasa",
+   "country": "Poland",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/l3jovw1516960585.png"
+  },
+  {
+   "id": 4429,
+   "name": "FIFA World Cup",
+   "alternates": "World Cup, World Cup Qualifiers",
+   "country": "Worldwide",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/e7er5g1696521789.png"
+  },
+  {
+   "id": 4432,
+   "name": "Uruguayan Primera Division",
+   "alternates": "Liga AUF Uruguaya",
+   "country": "Uruguay",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/3p98xv1740672448.png"
+  },
+  {
+   "id": 4435,
+   "name": "American NASL",
+   "alternates": "",
+   "country": "United States",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/0un3ta1549878279.png"
+  },
+  {
+   "id": 4457,
+   "name": "Norwegian 1. Divisjon",
+   "alternates": "OBOS-ligaen",
+   "country": "Norway",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/cgyfwu1512823098.png"
+  },
+  {
+   "id": 4472,
+   "name": "Welsh Cymru Premier",
+   "alternates": "Welsh Premier League",
+   "country": "Wales",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/lblj6h1783142395.png"
+  },
+  {
+   "id": 4480,
+   "name": "UEFA Champions League",
+   "alternates": "Champions League, UCL, Ligue des Champions",
+   "country": "Europe",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/facv1u1742998896.png"
+  },
+  {
+   "id": 4481,
+   "name": "UEFA Europa League",
+   "alternates": "Europa League, UEL",
+   "country": "Europe",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/mlsr7d1718774547.png"
+  },
+  {
+   "id": 4482,
+   "name": "FA Cup",
+   "alternates": "Football Association Cup, The Emirates FA Cup",
+   "country": "United Kingdom",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/vk7isd1598802862.png"
+  },
+  {
+   "id": 4483,
+   "name": "Copa del Rey",
+   "alternates": "Spanish Cup",
+   "country": "Spain",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/2ikh3a1671782958.png"
+  },
+  {
+   "id": 4484,
+   "name": "Coupe de France",
+   "alternates": "French Cup",
+   "country": "France",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/l6fitb1546469041.png"
+  },
+  {
+   "id": 4485,
+   "name": "DFB-Pokal",
+   "alternates": "German Pokal, DFB Cup",
+   "country": "Germany",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/tlczpm1780941454.png"
+  },
+  {
+   "id": 4490,
+   "name": "UEFA Nations League",
+   "alternates": "nations league, Ligue des Nations",
+   "country": "Europe",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/cwsp321698386224.png"
+  },
+  {
+   "id": 4496,
+   "name": "African Cup of Nations",
+   "alternates": "AFCON",
+   "country": "Worldwide",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/rhu61x1738628727.png"
+  },
+  {
+   "id": 4497,
+   "name": "Colombian Liga DIMAYOR",
+   "alternates": "Colombia Categoría Primera A",
+   "country": "Colombia",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/sdz1351580833297.png"
+  },
+  {
+   "id": 4498,
+   "name": "Confederations Cup",
+   "alternates": "",
+   "country": "Worldwide",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/a731vj1549452752.png"
+  },
+  {
+   "id": 4499,
+   "name": "Copa America",
+   "alternates": "",
+   "country": "Worldwide",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/n78hen1718080720.png"
+  },
+  {
+   "id": 4500,
+   "name": "Copa Argentina",
+   "alternates": "Argentina Copa AXION energy",
+   "country": "Argentina",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/welbig1655924428.png"
+  },
+  {
+   "id": 4501,
+   "name": "Copa Libertadores",
+   "alternates": "Libertadores, CONMEBOL Libertadores, Taça Libertadores da América",
+   "country": "Worldwide",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/9shr931685425181.png"
+  },
+  {
+   "id": 4502,
+   "name": "UEFA European Championships",
+   "alternates": "EURO2020, EURO2024, UEFA Euro",
+   "country": "Europe",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/bivzlu1635869135.png"
+  },
+  {
+   "id": 4503,
+   "name": "FIFA Club World Cup",
+   "alternates": "Intercontinental Cup",
+   "country": "Worldwide",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/yesbil1731546197.png"
+  },
+  {
+   "id": 4504,
+   "name": "Coupe de la Ligue",
+   "alternates": "French League Cup",
+   "country": "France",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/rae4sv1596208538.png"
+  },
+  {
+   "id": 4505,
+   "name": "International Champions Cup",
+   "alternates": "",
+   "country": "Worldwide",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/4qff241553414228.png"
+  },
+  {
+   "id": 4506,
+   "name": "Coppa Italia",
+   "alternates": "",
+   "country": "Italy",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/hrm1vo1692679408.png"
+  },
+  {
+   "id": 4507,
+   "name": "Supercoppa Italiana",
+   "alternates": "Italian Super Cup",
+   "country": "Italy",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/12hc5x1730129564.png"
+  },
+  {
+   "id": 4509,
+   "name": "Taca de Liga",
+   "alternates": "Portuguese League Cup, Allianz Cup",
+   "country": "Portugal",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/crq7hz1593012623.png"
+  },
+  {
+   "id": 4510,
+   "name": "Taca de Portugal",
+   "alternates": "Taça de Portugal Generali Tranquilidade",
+   "country": "Portugal",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/hyy7lq1593011553.png"
+  },
+  {
+   "id": 4511,
+   "name": "Supercopa de Espana",
+   "alternates": "Spanish Super Cup",
+   "country": "Spain",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/sp4q7d1641378531.png"
+  },
+  {
+   "id": 4512,
+   "name": "UEFA Super Cup",
+   "alternates": "",
+   "country": "Europe",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/1eimvx1551123834.png"
+  },
+  {
+   "id": 4513,
+   "name": "Venezuela Primera Division",
+   "alternates": "Liga Venezolana, Liga FUTVE",
+   "country": "Venezuela",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/z07l5a1639062253.png"
+  },
+  {
+   "id": 4519,
+   "name": "_Defunct Soccer Teams",
+   "alternates": "",
+   "country": "Worldwide",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/bcvsib1550155063.png"
+  },
+  {
+   "id": 4520,
+   "name": "Moroccan Championship",
+   "alternates": "Botola Pro Inwi, Botola Pro",
+   "country": "Morocco",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/bhuork1638558615.png"
+  },
+  {
+   "id": 4521,
+   "name": "American NWSL",
+   "alternates": "NWSL, National Womens Soccer League",
+   "country": "United States",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/ucoihf1770674182.png"
+  },
+  {
+   "id": 4523,
+   "name": "European Cup",
+   "alternates": "",
+   "country": "Europe",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/yo0w811613146700.png"
+  },
+  {
+   "id": 4524,
+   "name": "UEFA Cup",
+   "alternates": "",
+   "country": "Europe",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/4e8atk1554029260.png"
+  },
+  {
+   "id": 4525,
+   "name": "Football League First Division",
+   "alternates": "English Old 1st Division",
+   "country": "England",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/vgooiu1738244272.png"
+  },
+  {
+   "id": 4526,
+   "name": "Football League Super Cup",
+   "alternates": "ScreenSport Super Cup",
+   "country": "England",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/h8vf321639596284.png"
+  },
+  {
+   "id": 4562,
+   "name": "International Friendlies",
+   "alternates": "Friendlies",
+   "country": "Worldwide",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/pdnktx1648659448.png"
+  },
+  {
+   "id": 4565,
+   "name": "FIFA Womens World Cup",
+   "alternates": "Women",
+   "country": "Worldwide",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/q3uyc61774565208.png"
+  },
+  {
+   "id": 4566,
+   "name": "UEFA European Under-21 Championship",
+   "alternates": "UEFA European U21 Championship",
+   "country": "Europe",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/aw6szo1687805102.png"
+  },
+  {
+   "id": 4569,
+   "name": "Club Friendlies",
+   "alternates": "",
+   "country": "Worldwide",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/gb18781565430778.png"
+  },
+  {
+   "id": 4570,
+   "name": "EFL Cup",
+   "alternates": "Carabao Cup, Football League Cup",
+   "country": "England",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/x1va771565372556.png"
+  },
+  {
+   "id": 4571,
+   "name": "FA Community Shield",
+   "alternates": "Community Shield",
+   "country": "United Kingdom",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/c6p4yh1723626286.png"
+  },
+  {
+   "id": 4590,
+   "name": "English National League",
+   "alternates": "National League",
+   "country": "England",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/5mq9v01752167973.png"
+  },
+  {
+   "id": 4616,
+   "name": "Argentinian Primera B Nacional",
+   "alternates": "Nacional B, Primera Nacional",
+   "country": "Argentina",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/u5tbaw1762466392.png"
+  },
+  {
+   "id": 4617,
+   "name": "Albanian Superliga",
+   "alternates": "Superliga, Kategoria Superiore",
+   "country": "Albania",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/torbg81711693424.png"
+  },
+  {
+   "id": 4618,
+   "name": "Andorran 1a Divisió",
+   "alternates": "Primera Divisió, Lliga Multisegur Assegurances",
+   "country": "Andorra",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/fim7xa1786640187.png"
+  },
+  {
+   "id": 4619,
+   "name": "Armenian Premier League",
+   "alternates": "Հայաստանի Պրեմիեր Լիգա, Armenian Fastex Premier League",
+   "country": "Armenia",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/h4o8zq1687710680.png"
+  },
+  {
+   "id": 4620,
+   "name": "Australia ACT NPL",
+   "alternates": "National Premier Leagues Australian Capital Territory",
+   "country": "Australia",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/8tbmrx1771467778.png"
+  },
+  {
+   "id": 4621,
+   "name": "Austrian Bundesliga",
+   "alternates": "Austrian Football Bundesliga, Österreichische Fußball-Bundesliga, ÖFB, OeFB",
+   "country": "Austria",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/vcgyu71686617925.png"
+  },
+  {
+   "id": 4622,
+   "name": "Belarus Vyscha Liga",
+   "alternates": "Belarusian Premier League, Vysheyshaya Liga, Belarusbank Vyšejšaja Liha",
+   "country": "Belarus",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/nb8xtg1656531943.png"
+  },
+  {
+   "id": 4623,
+   "name": "Belgian Challenger Pro League",
+   "alternates": "Belgian First Division B",
+   "country": "Belgium",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/2nwcvo1786316608.png"
+  },
+  {
+   "id": 4624,
+   "name": "Bosnian Premier Liga",
+   "alternates": "Premier League of Bosnia and Herzegovina,  BH Telecom Premijer liga Bosne i Hercegovine,  БХ Телеком Премијер лига Босне и Херцеговине, Liga 12, Wwin League",
+   "country": "Bosnia and Herzegovina",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/kvmxlj1721283327.png"
+  },
+  {
+   "id": 4625,
+   "name": "Brazilian Serie C",
+   "alternates": "Campeonato Brasileiro Série C",
+   "country": "Brazil",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/3hp64j1778447225.png"
+  },
+  {
+   "id": 4626,
+   "name": "Bulgarian First League",
+   "alternates": "efbet League, Първа професионална футболна лига, First Professional Football League, 1 PFG, ",
+   "country": "Bulgaria",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/nujbma1730047938.png"
+  },
+  {
+   "id": 4627,
+   "name": "Chile Primera Division",
+   "alternates": "Chilean Primera División, Liga de Primera",
+   "country": "Chile",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/x9m78e1768232019.png"
+  },
+  {
+   "id": 4628,
+   "name": "China League One",
+   "alternates": "Chinese Jia League, 中国足球甲级联赛, Zhōngguó Zúqiú Xiéhuì Jiǎjí Liánsài",
+   "country": "China",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/hl1oz41729975140.png"
+  },
+  {
+   "id": 4629,
+   "name": "Croatian First Football League",
+   "alternates": "Prva HNL",
+   "country": "Croatia",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/bgo85e1781975278.png"
+  },
+  {
+   "id": 4630,
+   "name": "Cypriot First Division",
+   "alternates": "Πρωτάθλημα Α΄ Κατηγορίας",
+   "country": "Cyprus",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/ivdlve1760652025.png"
+  },
+  {
+   "id": 4631,
+   "name": "Czech First League",
+   "alternates": "Fortuna Liga, Gambrinus, Chance Liga",
+   "country": "Czechia",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/g6dyni1791697685.png"
+  },
+  {
+   "id": 4632,
+   "name": "Danish 2nd Division",
+   "alternates": "",
+   "country": "Denmark",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/iresgl1781198827.png"
+  },
+  {
+   "id": 4633,
+   "name": "Japanese J1 League",
+   "alternates": "J1リーグ",
+   "country": "Japan",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/32tbx81789965722.png"
+  },
+  {
+   "id": 4634,
+   "name": "Estonian Meistriliiga",
+   "alternates": "A. Le Coq Premium Liiga",
+   "country": "Estonia",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/uztem21615840481.png"
+  },
+  {
+   "id": 4635,
+   "name": "Faroe Islands Premier League",
+   "alternates": "Betri deildin menn, Meistaradeildin",
+   "country": "Faroe Islands",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/6wlhkl1579295156.png"
+  },
+  {
+   "id": 4636,
+   "name": "Finnish Veikkausliiga",
+   "alternates": "Tipsligan",
+   "country": "Finland",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/s9v1tg1742782748.png"
+  },
+  {
+   "id": 4637,
+   "name": "French Ligue 3",
+   "alternates": "French Championnat National",
+   "country": "France",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/juz5uk1782148998.png"
+  },
+  {
+   "id": 4638,
+   "name": "Georgian Erovnuli Liga",
+   "alternates": "ეროვნული ლიგა",
+   "country": "Georgia",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/e2w17c1615904677.png"
+  },
+  {
+   "id": 4639,
+   "name": "Germany Liga 3",
+   "alternates": "3. Liga, 3. Fußball-Liga",
+   "country": "Germany",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/scvr7i1578786154.png"
+  },
+  {
+   "id": 4640,
+   "name": "Greek Super League 2",
+   "alternates": "Super League Greece 2, Σούπερ Λιγκ 2, A2 Ethniki Katigoria, Α2 Εθνική Κατηγορία",
+   "country": "Greece",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/kosnhq1698212674.png"
+  },
+  {
+   "id": 4641,
+   "name": "Dutch Eerste Divisie",
+   "alternates": "Keuken Kampioen Divisie",
+   "country": "The Netherlands",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/yx2lbu1579463797.png"
+  },
+  {
+   "id": 4642,
+   "name": "Icelandic Úrvalsdeild karla",
+   "alternates": "Besta deildin, Úrvalsdeild",
+   "country": "Iceland",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/zvg1hs1760654850.png"
+  },
+  {
+   "id": 4643,
+   "name": "Irish Premier Division",
+   "alternates": "SSE Airtricity League Premier Division, Príomhroinn Sraith na hÉireann",
+   "country": "Ireland",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/m3tu3x1738686046.png"
+  },
+  {
+   "id": 4644,
+   "name": "Israeli Premier League",
+   "alternates": "Ligat Ha'al, ליגת העל",
+   "country": "Israel",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/glvhg51664190048.png"
+  },
+  {
+   "id": 4645,
+   "name": "Italy Serie D Girone D",
+   "alternates": "",
+   "country": "Italy",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/h54pin1786766879.png"
+  },
+  {
+   "id": 4646,
+   "name": "English Northern Premier League Premier Division",
+   "alternates": "Northern Premier League",
+   "country": "England",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/0ajsx81659100470.png"
+  },
+  {
+   "id": 4647,
+   "name": "English Isthmian League Premier Division",
+   "alternates": "BetVictor Isthmian League",
+   "country": "England",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/ktaxnf1784588432.png"
+  },
+  {
+   "id": 4648,
+   "name": "English Southern Football League Division South",
+   "alternates": "",
+   "country": "England",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/r8ijep1659099607.png"
+  },
+  {
+   "id": 4649,
+   "name": "Kazakhstan Premier League",
+   "alternates": "Kazakhstan Professional Football League, Қазақстан Премьер Лигасы, Qazaqstan Premer Ligasy",
+   "country": "Kazakhstan",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/bjknzb1751500167.png"
+  },
+  {
+   "id": 4650,
+   "name": "Latvian Higher League",
+   "alternates": "Virslīga, Optibet Virslīga",
+   "country": "Latvia",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/02of1k1725213508.png"
+  },
+  {
+   "id": 4651,
+   "name": "Lithuanian TOPLYGA",
+   "alternates": "Lithuanian A Lyga",
+   "country": "Lithuania",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/tnkdjy1781481655.png"
+  },
+  {
+   "id": 4652,
+   "name": "Macedonian First League",
+   "alternates": "Прва македонска фудбалска лига",
+   "country": "Macedonia",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/uu6jik1781481965.png"
+  },
+  {
+   "id": 4653,
+   "name": "Maltese Premier League",
+   "alternates": "Malta Premier League",
+   "country": "Malta",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/j8ir211776495418.png"
+  },
+  {
+   "id": 4654,
+   "name": "Mexican Liga de Expansión MX",
+   "alternates": "Liga BBVA Expansión MX, Mexican Ascenso MX",
+   "country": "Mexico",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/2h0yz01615330546.png"
+  },
+  {
+   "id": 4655,
+   "name": "Moldovan National Division",
+   "alternates": "Divizia Națională, Liga 7777, Moldovan Liga",
+   "country": "Moldova",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/xqiy7r1682081812.png"
+  },
+  {
+   "id": 4656,
+   "name": "Montenegrin First League",
+   "alternates": "Prva crnogorska fudbalska liga, Prva CFL, CFL",
+   "country": "Montenegro",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/jrtkon1781287825.png"
+  },
+  {
+   "id": 4657,
+   "name": "Moroccan Botola 2",
+   "alternates": "Groupement National de Football 2",
+   "country": "Morocco",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/iqy2rx1614982100.png"
+  },
+  {
+   "id": 4659,
+   "name": "Northern Irish Premiership",
+   "alternates": "NIFL Premiership, Sports Direct Premiership",
+   "country": "Northern Ireland",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/4dhuqx1766774575.png"
+  },
+  {
+   "id": 4661,
+   "name": "Polish I liga",
+   "alternates": "I liga polska, Pierwsza liga, Fortuna I liga, Betclic 1 Liga",
+   "country": "Poland",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/kf2y521760289353.png"
+  },
+  {
+   "id": 4662,
+   "name": "Portuguese LigaPro",
+   "alternates": "Liga Portugal 2, Liga Portugal 2 SABSEG, Liga Portugal Meu Super",
+   "country": "Portugal",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/pns32l1782689191.png"
+  },
+  {
+   "id": 4663,
+   "name": "Qatar Stars League",
+   "alternates": "Q-League, دوري نجوم قطر‎, Qatar Premier League, QPL, QSL,",
+   "country": "Qatar",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/hekdan1784606842.png"
+  },
+  {
+   "id": 4665,
+   "name": "Romanian Liga II",
+   "alternates": "Romanian Liga 2",
+   "country": "Romania",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/m7b7xt1580764061.png"
+  },
+  {
+   "id": 4666,
+   "name": "Russian First League",
+   "alternates": "Первая лига, Pervaya liga, Russian First Division, Первый дивизион, Russian Football National League, Первенство Футбольной Национальной Лиги",
+   "country": "Russia",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/tbbx911752735233.png"
+  },
+  {
+   "id": 4667,
+   "name": "San-Marino Campionato",
+   "alternates": "Campionato Sammarinese di Calcio",
+   "country": "San Marino",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/sbg1u81689796511.png"
+  },
+  {
+   "id": 4668,
+   "name": "Saudi-Arabian Pro League",
+   "alternates": "Saudi Professional League",
+   "country": "Saudi Arabia",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/w67i621701772123.png"
+  },
+  {
+   "id": 4669,
+   "name": "Scottish League 1",
+   "alternates": "Ladbrokes League One, William Hill League One",
+   "country": "Scotland",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/gb4m951721302014.png"
+  },
+  {
+   "id": 4670,
+   "name": "Scottish League 2",
+   "alternates": "William Hill League Two",
+   "country": "Scotland",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/x52tu31721302085.png"
+  },
+  {
+   "id": 4671,
+   "name": "Serbian Super Liga",
+   "alternates": "Serbian SuperLiga, Суперлига Србије, Superliga Srbije, Linglong Tire SuperLiga",
+   "country": "Serbia",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/lu8cvs1578940052.png"
+  },
+  {
+   "id": 4672,
+   "name": "Slovak First Football League",
+   "alternates": "Fortuna liga, Niké Liga",
+   "country": "Slovakia",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/sxh5831689798996.png"
+  },
+  {
+   "id": 4673,
+   "name": "Primera División RFEF Group 1",
+   "alternates": "",
+   "country": "Spain",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/mt34x01578830881.png"
+  },
+  {
+   "id": 4674,
+   "name": "Swedish Division 1 North",
+   "alternates": "Ettan Norra",
+   "country": "Sweden",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/w8f05c1579901188.png"
+  },
+  {
+   "id": 4675,
+   "name": "Swiss Super League",
+   "alternates": "Schweizer Super League, Raiffeisen Super League, Brack Super League",
+   "country": "Switzerland",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/id6q2r1635867584.png"
+  },
+  {
+   "id": 4676,
+   "name": "Turkish 1 Lig",
+   "alternates": "TFF 1. Lig",
+   "country": "Turkey",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/teu8g81784991514.png"
+  },
+  {
+   "id": 4677,
+   "name": "Ukrainian First League",
+   "alternates": "Persha Liha, Перша ліга",
+   "country": "Ukraine",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/z1ab4e1598292674.png"
+  },
+  {
+   "id": 4678,
+   "name": "UAE Pro League",
+   "alternates": "ADNOC Pro League, دوري المحترفين الإماراتي",
+   "country": "United Arab Emirates",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/95pes01643234997.png"
+  },
+  {
+   "id": 4679,
+   "name": "Turkish 2 Lig",
+   "alternates": "TFF 2. Lig",
+   "country": "Turkey",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/umsnft1724738719.png"
+  },
+  {
+   "id": 4681,
+   "name": "English National League North",
+   "alternates": "Conference North",
+   "country": "England",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/hs74ne1781844477.png"
+  },
+  {
+   "id": 4682,
+   "name": "English National League South",
+   "alternates": "Conference South",
+   "country": "England",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/hher911781844403.png"
+  },
+  {
+   "id": 4683,
+   "name": "Danish 1st Division",
+   "alternates": "Danish 1. Division, Viasat Divisionen",
+   "country": "Denmark",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/ugpfcx1781197975.png"
+  },
+  {
+   "id": 4684,
+   "name": "American USL Championship",
+   "alternates": "USLC",
+   "country": "United States",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/uh4zas1688513782.png"
+  },
+  {
+   "id": 4685,
+   "name": "Bolivian Primera División",
+   "alternates": "Primera División de Bolivia, División Profesional del Fútbol Boliviano",
+   "country": "Bolivia",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/uhrjl21778032345.png"
+  },
+  {
+   "id": 4686,
+   "name": "Ecuadorian Serie A",
+   "alternates": "Primera Categoría Serie A",
+   "country": "Ecuador",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/ofjuay1615839163.png"
+  },
+  {
+   "id": 4687,
+   "name": "Paraguayan Primera Division",
+   "alternates": "División Profesional de la Asociación Paraguaya de Fútbol, Copa de Primera TIGO-Visión Banco",
+   "country": "Paraguay",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/k1sbmx1652126723.png"
+  },
+  {
+   "id": 4688,
+   "name": "Peruvian Primera Division",
+   "alternates": "Torneo Descentralizado de Fútbol Profesional, Liga 1, Copa Movistar",
+   "country": "Peru",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/1ujpwc1580040216.png"
+  },
+  {
+   "id": 4689,
+   "name": "South Korean K League 1",
+   "alternates": "K리그",
+   "country": "South Korea",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/zaw2cj1628430843.png"
+  },
+  {
+   "id": 4690,
+   "name": "Hungarian NB I",
+   "alternates": "Fizz Liga, Hungarian Nemzeti Bajnokság I, OTP Bank Liga",
+   "country": "Hungary",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/7o3q3t1616017529.png"
+  },
+  {
+   "id": 4691,
+   "name": "Romanian Liga I",
+   "alternates": "Superliga, Casa Liga 1",
+   "country": "Romania",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/x9ordh1662657856.png"
+  },
+  {
+   "id": 4692,
+   "name": "Slovenian 1. SNL",
+   "alternates": "Prva liga Telekom Slovenije, Slovenian PrvaLiga, Prva liga Telemach",
+   "country": "Slovenia",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/t1v1s91635866998.png"
+  },
+  {
+   "id": 4693,
+   "name": "Azerbaijani Premier League",
+   "alternates": "Azerbaijan Premier League, Azərbaycan Premyer Liqası",
+   "country": "Azerbaijan",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/urt6hw1614346226.png"
+  },
+  {
+   "id": 4694,
+   "name": "Luxembourg National Division",
+   "alternates": "Nationaldivisioun, Division Nationale, Nationaldivision, BGL Ligue",
+   "country": "Luxembourg",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/raduqp1589303531.png"
+  },
+  {
+   "id": 4695,
+   "name": "German Regionalliga Nord",
+   "alternates": "",
+   "country": "Germany",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/vs2x381582561207.png"
+  },
+  {
+   "id": 4713,
+   "name": "Swiss Challenge League",
+   "alternates": "Brack.ch Challenge League, Dieci Challenge League",
+   "country": "Switzerland",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/5816yi1635867610.png"
+  },
+  {
+   "id": 4719,
+   "name": "AFC Champions League Elite",
+   "alternates": "ACL",
+   "country": "Worldwide",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/gsbq4k1719686780.png"
+  },
+  {
+   "id": 4720,
+   "name": "CAF Champions League",
+   "alternates": "CAF Champions League",
+   "country": "Worldwide",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/nxb5g41762186344.png"
+  },
+  {
+   "id": 4721,
+   "name": "CONCACAF Champions Cup",
+   "alternates": "Scotiabank CONCACAF Champions League",
+   "country": "Worldwide",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/njx38y1691129615.png"
+  },
+  {
+   "id": 4723,
+   "name": "Scottish FA Cup",
+   "alternates": "Scottish Cup",
+   "country": "Scotland",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/6m7mow1693378371.png"
+  },
+  {
+   "id": 4724,
+   "name": "Copa Sudamericana",
+   "alternates": "Sudamericana, CONMEBOL Sudamericana",
+   "country": "Worldwide",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/9yynq01685425243.png"
+  },
+  {
+   "id": 4725,
+   "name": "Copa do Brasil",
+   "alternates": "Brazil Cup",
+   "country": "Brazil",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/h38dax1582151151.png"
+  },
+  {
+   "id": 4739,
+   "name": "CONCACAF Central American Cup",
+   "alternates": "Scotiabank CONCACAF League",
+   "country": "Worldwide",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/qp8k4n1719350541.png"
+  },
+  {
+   "id": 4741,
+   "name": "Iranian Azadegan League",
+   "alternates": "Iran Azadegan League, ليگ آزادگان",
+   "country": "Iran",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/rm4c581582290287.png"
+  },
+  {
+   "id": 4742,
+   "name": "Iranian Persian Gulf Pro League",
+   "alternates": "Iranian Persian Gulf Cup, لیگ برتر خلیج فارس",
+   "country": "Iran",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/4o1xer1582291199.png"
+  },
+  {
+   "id": 4743,
+   "name": "Thai Premier League",
+   "alternates": "Toyota Thai League, T1, Thai League 1, ไทยลีก 1",
+   "country": "Thailand",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/u3sarf1644247696.png"
+  },
+  {
+   "id": 4744,
+   "name": "Thai League 2",
+   "alternates": "T2",
+   "country": "Thailand",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/9or6j41644248130.png"
+  },
+  {
+   "id": 4745,
+   "name": "Kenyan Premier League",
+   "alternates": "SportPesa Premier League",
+   "country": "Kenya",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/93vh0s1729441061.png"
+  },
+  {
+   "id": 4746,
+   "name": "German Regionalliga West",
+   "alternates": "",
+   "country": "Germany",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/khq3aw1582561159.png"
+  },
+  {
+   "id": 4747,
+   "name": "German Regionalliga SudWest",
+   "alternates": "Regionalliga Südwest",
+   "country": "Germany",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/iwuc2m1728142585.png"
+  },
+  {
+   "id": 4748,
+   "name": "German Regionalliga Bayern",
+   "alternates": "",
+   "country": "Germany",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/jxmdm71728143121.png"
+  },
+  {
+   "id": 4749,
+   "name": "German Regionalliga Nordost",
+   "alternates": "",
+   "country": "Germany",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/iei25s1582561197.png"
+  },
+  {
+   "id": 4750,
+   "name": "Primera División RFEF Group 2",
+   "alternates": "",
+   "country": "Spain",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/mt34x01578830881.png"
+  },
+  {
+   "id": 4751,
+   "name": "Spanish Segunda División B Group 3",
+   "alternates": "",
+   "country": "Spain",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/mt34x01578830881.png"
+  },
+  {
+   "id": 4752,
+   "name": "Spanish Segunda División B Group 4",
+   "alternates": "",
+   "country": "Spain",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/mt34x01578830881.png"
+  },
+  {
+   "id": 4753,
+   "name": "Algerian Ligue 1",
+   "alternates": "Championnat National de Première Division",
+   "country": "Algeria",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/ac4ga11714895756.png"
+  },
+  {
+   "id": 4754,
+   "name": "Senegal Ligue 1",
+   "alternates": "",
+   "country": "Senegal",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/r2m5o11583947531.png"
+  },
+  {
+   "id": 4755,
+   "name": "Northern Irish Championship",
+   "alternates": "Playr-Fit Championship",
+   "country": "Northern Ireland",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/0bz58t1625851128.png"
+  },
+  {
+   "id": 4756,
+   "name": "Svenska Cupen",
+   "alternates": "Svenska Cupen",
+   "country": "Sweden",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/p37u1n1694211430.png"
+  },
+  {
+   "id": 4757,
+   "name": "Irish First Division",
+   "alternates": "League of Ireland First Division",
+   "country": "Ireland",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/4guctd1738686062.png"
+  },
+  {
+   "id": 4778,
+   "name": "Italy Serie D Girone B",
+   "alternates": "Campionato Nazionale Serie D",
+   "country": "Italy",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/cr3n271786749919.png"
+  },
+  {
+   "id": 4779,
+   "name": "Italy Serie D Girone C",
+   "alternates": "Campionato Nazionale Serie D",
+   "country": "Italy",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/uil64u1786751075.png"
+  },
+  {
+   "id": 4780,
+   "name": "Italy Serie D Girone E",
+   "alternates": "",
+   "country": "Italy",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/ovt8ir1786768310.png"
+  },
+  {
+   "id": 4782,
+   "name": "Italy Serie D Girone F",
+   "alternates": "",
+   "country": "Italy",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/dbzo341786770357.png"
+  },
+  {
+   "id": 4783,
+   "name": "Italy Serie D Girone G",
+   "alternates": "",
+   "country": "Italy",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/9cvi5y1786774647.png"
+  },
+  {
+   "id": 4784,
+   "name": "Italy Serie D Girone H",
+   "alternates": "",
+   "country": "Italy",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/rxlzwd1786776508.png"
+  },
+  {
+   "id": 4785,
+   "name": "Italy Serie D Girone I",
+   "alternates": "",
+   "country": "Italy",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/oeqfbh1786777318.png"
+  },
+  {
+   "id": 4786,
+   "name": "Italy Serie D Girone A",
+   "alternates": "Campionato Nazionale Serie D",
+   "country": "Italy",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/4wv29e1786728145.png"
+  },
+  {
+   "id": 4788,
+   "name": "FA Trophy",
+   "alternates": "Football Association Challenge Trophy, Isuzu FA Trophy",
+   "country": "England",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/b9en1o1776360728.png"
+  },
+  {
+   "id": 4789,
+   "name": "Malaysian Premier League",
+   "alternates": "Malaysia Premier League",
+   "country": "Malaysia",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/sqrd751582980529.png"
+  },
+  {
+   "id": 4790,
+   "name": "Indonesian Super League",
+   "alternates": "Liga 1 Indonesia, BRI Liga 1",
+   "country": "Indonesia",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/qoz13e1630265283.png"
+  },
+  {
+   "id": 4791,
+   "name": "Indian Super League",
+   "alternates": "ISL",
+   "country": "India",
+   "badge": "https://www.thesportsdb.com/images/media/league/badge/ekypmw1792338906.png"
+  },
+  {
+   "id": 4792,
+   "name": "Malaysian Super League",
+   "alternates": "Liga Super Malaysia, Malaysia Super League",
+   "country": "Malaysia",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/laptz91692682937.png"
+  },
+  {
+   "id": 4793,
+   "name": "Cambodian Premier League",
+   "alternates": "Cambodia C-League, ខេមបូឌានព្រីមៀរលីគ",
+   "country": "Cambodia",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/fdhux61655121747.png"
+  },
+  {
+   "id": 4794,
+   "name": "Uzbekistan Super League",
+   "alternates": "Uzbekistan Super League, O",
+   "country": "Uzbekistan",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/ju8uc21782688170.png"
+  },
+  {
+   "id": 4795,
+   "name": "Singapore Premier League",
+   "alternates": "AIA Singapore Premier League, S-League, SPL",
+   "country": "Singapore",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/9fjt9l1583167616.png"
+  },
+  {
+   "id": 4796,
+   "name": "Austrian Erste Liga",
+   "alternates": "Austrian Football Second League, 2. Liga",
+   "country": "Austria",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/cfk37g1583582239.png"
+  },
+  {
+   "id": 4797,
+   "name": "Indian Football League",
+   "alternates": "Indian I-League",
+   "country": "India",
+   "badge": "https://www.thesportsdb.com/images/media/league/badge/a9br0y1792469577.png"
+  },
+  {
+   "id": 4802,
+   "name": "South African Premier Soccer League",
+   "alternates": "South African Premiership",
+   "country": "South Africa",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/e59xj11725174551.png"
+  },
+  {
+   "id": 4803,
+   "name": "Vietnamese V.League 1",
+   "alternates": "Giải Bóng đá Vô Địch Quốc Gia Việt Nam",
+   "country": "Vietnam",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/g47tac1788455832.png"
+  },
+  {
+   "id": 4804,
+   "name": "AFC Champions League Two",
+   "alternates": "AFC Cup",
+   "country": "Worldwide",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/sfg2dl1719686962.png"
+  },
+  {
+   "id": 4805,
+   "name": "Australian A-League Women",
+   "alternates": "Australian W-League, Ninja A-League",
+   "country": "Australia",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/1sk49c1638459590.png"
+  },
+  {
+   "id": 4806,
+   "name": "Nicaragua Primera Division",
+   "alternates": "Liga Primera de Nicaragua",
+   "country": "Nicaragua",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/ah6qbr1596464815.png"
+  },
+  {
+   "id": 4811,
+   "name": "Tajikistan Vysshaya Liga",
+   "alternates": "Tajikistan Higher League, Лигаи Олии Тоҷикистон, Высшая лига Таджикистана, Vysshaya liga Tadzhikistana, Ligai Olii Tojikiston, Tajikistan Top League",
+   "country": "Tajikistan",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/sgkc311727715850.png"
+  },
+  {
+   "id": 4812,
+   "name": "Belarusian First League",
+   "alternates": "Першая ліга чэмпіянату Беларусі па футболе, Pershaya liha chempiyanatu Byelarusi pa futbole, ",
+   "country": "Belarus",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/zyyfcp1656531830.png"
+  },
+  {
+   "id": 4813,
+   "name": "Belarusian Cup",
+   "alternates": "Belarus Coppa",
+   "country": "Belarus",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/oau9pk1694167328.png"
+  },
+  {
+   "id": 4814,
+   "name": "New-Zealand Football Championship",
+   "alternates": "ISPS Handa Premiership, NZFC",
+   "country": "New Zealand",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/ywv7jx1589116267.png"
+  },
+  {
+   "id": 4815,
+   "name": "Costa-Rica Liga FPD",
+   "alternates": "Liga Promérica, Liga de Fútbol de Primera División",
+   "country": "Costa Rica",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/97r4et1716292122.png"
+  },
+  {
+   "id": 4816,
+   "name": "El Salvador Primera Division",
+   "alternates": "Primera División de Fútbol Profesional de El Salvador, Liga Pepsi",
+   "country": "El Salvador",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/2s08ci1752690548.png"
+  },
+  {
+   "id": 4817,
+   "name": "Guatemala Liga Nacional",
+   "alternates": "Liga Nacional de Fútbol de Guatemala, Liga Bantrab",
+   "country": "Guatemala",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/wtr5801717759494.png"
+  },
+  {
+   "id": 4818,
+   "name": "Honduras Liga Nacional de Futbol",
+   "alternates": "Liga Salva Vida, Liga Hondurabet",
+   "country": "Honduras",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/94pogz1646830106.png"
+  },
+  {
+   "id": 4819,
+   "name": "Panama Liga Panamena de Futbol",
+   "alternates": "Asociación Nacional Pro Fútbol",
+   "country": "Panama",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/at4ycu1589140484.png"
+  },
+  {
+   "id": 4820,
+   "name": "Canadian Premier League",
+   "alternates": "CPL, CanPL, Première ligue canadienne",
+   "country": "Canada",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/oxb08k1769615518.png"
+  },
+  {
+   "id": 4821,
+   "name": "Indian I-League 2",
+   "alternates": "Indian I-League 2nd Division",
+   "country": "India",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/yse70l1706108488.png"
+  },
+  {
+   "id": 4822,
+   "name": "South Korean K League 2",
+   "alternates": "K League 2, K리그2",
+   "country": "South Korea",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/p9k1qn1628430716.png"
+  },
+  {
+   "id": 4823,
+   "name": "Kuwait Premier League",
+   "alternates": "STC Premier League, الدوري الكويتي",
+   "country": "Kuwait",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/s2xwxu1589986519.png"
+  },
+  {
+   "id": 4824,
+   "name": "Japanese J2 League",
+   "alternates": " J2リーグ",
+   "country": "Japan",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/qda5h31789965399.png"
+  },
+  {
+   "id": 4825,
+   "name": "Hong-Kong Premier League",
+   "alternates": "Hong Kong Premier League, 香港超級聯賽, BOC Life Hong Kong Premier League, 中銀集團人壽香港超級聯賽",
+   "country": "Hong Kong",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/v1q0yp1785430443.png"
+  },
+  {
+   "id": 4826,
+   "name": "Bahrain Premier League",
+   "alternates": "الدوري البحريني الممتاز, Bahraini Premier League, Nasser bin Hamad Premier League",
+   "country": "Bahrain",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/4wvjoo1589804487.png"
+  },
+  {
+   "id": 4827,
+   "name": "Nigerian NPFL",
+   "alternates": "Nigerian Professional Football League",
+   "country": "Nigeria",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/k4hgin1590183498.png"
+  },
+  {
+   "id": 4828,
+   "name": "Tunisian Ligue 1",
+   "alternates": "CLP-1, Championnat de la Ligue Professionnelle 1, الرابطة المحترفة الأولى لكرة القدم‎",
+   "country": "Tunisia",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/nafgck1791695405.png"
+  },
+  {
+   "id": 4829,
+   "name": "Egyptian Premier League",
+   "alternates": "الدوري المصري الممتاز, El Dawry‎, ORA League",
+   "country": "Egypt",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/v0iz601786057987.png"
+  },
+  {
+   "id": 4834,
+   "name": "_No League Soccer",
+   "alternates": "",
+   "country": "Worldwide",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/xxwwwt1421422891.png"
+  },
+  {
+   "id": 4845,
+   "name": "Swedish Division 1 South",
+   "alternates": "Ettan Södra",
+   "country": "Sweden",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/w8f05c1579901188.png"
+  },
+  {
+   "id": 4847,
+   "name": "EFL Trophy",
+   "alternates": "English Football League Trophy",
+   "country": "England",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/96f97q1791391234.png"
+  },
+  {
+   "id": 4849,
+   "name": "English Womens Super League",
+   "alternates": "WSL, Barclays Women, women",
+   "country": "England",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/lpsm6p1751723311.png"
+  },
+  {
+   "id": 4865,
+   "name": "UEFA Womens Euro",
+   "alternates": "UEFA Womens Championship",
+   "country": "Europe",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/jrcfev1744026201.png"
+  },
+  {
+   "id": 4866,
+   "name": "AFC Asian Cup",
+   "alternates": "亚足联亚洲杯, Piala Asia AFC, एएफसी एशियाई कप, اے ایف سی ایشیائی کپ, AFC 아시안컵, كأس آسيا, جام ملت‌های آسیا, Азийн хөлбөмбөгийн аварга шалгаруулах тэмцээн, এএফসি এশিয়ান কাপ, Cúp bóng đá châu Á, AFCアジアカップ, ",
+   "country": "Worldwide",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/0a86rp1710997941.png"
+  },
+  {
+   "id": 4867,
+   "name": "OFC Nations Cup",
+   "alternates": "",
+   "country": "Worldwide",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/5pw7831600863537.png"
+  },
+  {
+   "id": 4873,
+   "name": "CONCACAF Gold Cup",
+   "alternates": "Copa de Oro CONCACAF, Coupe D",
+   "country": "Worldwide",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/pfx34h1621878481.png"
+  },
+  {
+   "id": 4886,
+   "name": "Spanish Segunda División B Group 5",
+   "alternates": "",
+   "country": "Spain",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/mt34x01578830881.png"
+  },
+  {
+   "id": 4887,
+   "name": "FA Womens League Cup",
+   "alternates": "FA WSL Cup",
+   "country": "United Kingdom",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/p58fif1738310101.png"
+  },
+  {
+   "id": 4888,
+   "name": "Scottish League Cup",
+   "alternates": "Premier Sports Cup, Betfred Cup",
+   "country": "Scotland",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/u3h74h1626185819.png"
+  },
+  {
+   "id": 4889,
+   "name": "UEFA Womens Champions League",
+   "alternates": "UEFA Women",
+   "country": "Europe",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/nsi55h1761838458.png"
+  },
+  {
+   "id": 4899,
+   "name": "Chile Primera B",
+   "alternates": "Chilean Primera B División, Liga de Ascenso",
+   "country": "Chile",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/t1vndf1738858796.png"
+  },
+  {
+   "id": 4900,
+   "name": "Paraguayan División Intermedia",
+   "alternates": "Paraguay 2nd Division",
+   "country": "Paraguay",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/t2gzvr1752734813.png"
+  },
+  {
+   "id": 4901,
+   "name": "French Trophée des Champions",
+   "alternates": "Trophée des Champions",
+   "country": "France",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/vid0js1765815261.png"
+  },
+  {
+   "id": 4902,
+   "name": "Dutch KNVB Cup",
+   "alternates": "KNVB Cup",
+   "country": "The Netherlands",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/to8dpt1757803973.png"
+  },
+  {
+   "id": 4903,
+   "name": "German Super Cup",
+   "alternates": "Franz Beckenbauer Supercup, Germany Super Cup",
+   "country": "Germany",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/uinrh41783491483.png"
+  },
+  {
+   "id": 4904,
+   "name": "Andorran Segona Divisió",
+   "alternates": "Andorran 2a Divisió, Andorran Second Division, Lliga UNIDA",
+   "country": "Andorra",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/75dl801614342165.png"
+  },
+  {
+   "id": 4905,
+   "name": "Andorran Cup",
+   "alternates": "Copa Constitució",
+   "country": "Andorra",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/fd73jy1614342488.png"
+  },
+  {
+   "id": 4906,
+   "name": "Icelandic 1 deild karla",
+   "alternates": "Inkasso-deild karla",
+   "country": "Iceland",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/tzjamk1614355569.png"
+  },
+  {
+   "id": 4907,
+   "name": "Albanian Kategoria e Parë",
+   "alternates": "Albanian Second Division",
+   "country": "Albania",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/u09z9l1614341476.png"
+  },
+  {
+   "id": 4908,
+   "name": "Armenian First League",
+   "alternates": "Հայաստանի ֆուտբոլի առաջնություն (Առաջին խումբ)",
+   "country": "Armenia",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/855ug01791906213.png"
+  },
+  {
+   "id": 4909,
+   "name": "Armenian Cup",
+   "alternates": "Հայաստանի Անկախության Գավաթ, VBET Armenian Cup",
+   "country": "Armenia",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/n1udo21727712810.png"
+  },
+  {
+   "id": 4910,
+   "name": "Bolivian Nacional B Copa Simón Bolívar",
+   "alternates": "Nacional B Bolivia, Copa Simón Bolívar - Nacional B",
+   "country": "Bolivia",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/782g031614351015.png"
+  },
+  {
+   "id": 4911,
+   "name": "Bosnian First League",
+   "alternates": "M:tel First League of the Federation of Bosnia and Herzegovina,  m:tel Prva liga Federacije Bosne i Hercegovine, м:тел Прва лига Федерације Босне и Херцеговине",
+   "country": "Bosnia and Herzegovina",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/ilklgq1614354716.png"
+  },
+  {
+   "id": 4912,
+   "name": "Bosnian First League of Srpska",
+   "alternates": "Prva liga Republike Srpske, Прва лига Републике Српске",
+   "country": "Bosnia and Herzegovina",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/g612yh1614354805.png"
+  },
+  {
+   "id": 4913,
+   "name": "Bulgarian Second League",
+   "alternates": "Втора професионална футболна лига, Втора лига, Second Professional Football League",
+   "country": "Bulgaria",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/5j6cd21614355250.png"
+  },
+  {
+   "id": 4914,
+   "name": "Azerbaijan First Division",
+   "alternates": "Azərbaycan Birinci Divizionu",
+   "country": "Azerbaijan",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/f1w1dr1726245781.png"
+  },
+  {
+   "id": 4915,
+   "name": "Azerbaijan Cup",
+   "alternates": "Azərbaycan Kuboku",
+   "country": "Azerbaijan",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/2iixkj1614345443.png"
+  },
+  {
+   "id": 4951,
+   "name": "Colombian Torneo DIMAYOR",
+   "alternates": "Torneo BetPlay Dimayor, Torneo Águila, Categoría Primera B",
+   "country": "Colombia",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/l2h1ao1615832028.png"
+  },
+  {
+   "id": 4952,
+   "name": "Croatian Druga HNL",
+   "alternates": "Druga HNL, 2. HNL, Croatian Second Football League, Druga hrvatska nogometna liga, Prva NL",
+   "country": "Croatia",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/2bdq071615833896.png"
+  },
+  {
+   "id": 4953,
+   "name": "Cypriot Second Division",
+   "alternates": "Πρωτάθλημα Β΄ Κατηγορίας",
+   "country": "Cyprus",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/9guxil1615835119.png"
+  },
+  {
+   "id": 4954,
+   "name": "Czech National Football League",
+   "alternates": "Chance národní liga, FNL,2. liga, Druhá liga, CHNL",
+   "country": "Czechia",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/k0rw8a1791697410.png"
+  },
+  {
+   "id": 4955,
+   "name": "DR Congo Ligue 1",
+   "alternates": "Linafoot, Vodacom Ligue 1",
+   "country": "DR Congo",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/04mlw61615830761.png"
+  },
+  {
+   "id": 4956,
+   "name": "Dominican LDF",
+   "alternates": "Liga Dominicana de Fútbol, LDF Banco Popular",
+   "country": "Dominican Republic",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/cze64p1615823728.png"
+  },
+  {
+   "id": 4957,
+   "name": "Ecuadorian Serie B",
+   "alternates": "Liga Pro Serie B, Primera Categoría Serie B",
+   "country": "Ecuador",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/8ajrd11615839122.png"
+  },
+  {
+   "id": 4958,
+   "name": "Estonian Esiliiga",
+   "alternates": "",
+   "country": "Estonia",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/p6f30k1615840502.png"
+  },
+  {
+   "id": 4959,
+   "name": "Ethiopian Premier League",
+   "alternates": "የኢትዮጵያ ፕሪምየር ሊግ, BetKing Ethiopian Premier League",
+   "country": "Ethiopia",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/h7n8mg1727714240.png"
+  },
+  {
+   "id": 4960,
+   "name": "Turkish Cup",
+   "alternates": "Türkiye Kupası, Ziraat Türkiye Kupası",
+   "country": "Turkey",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/2qgb1w1764032803.png"
+  },
+  {
+   "id": 4961,
+   "name": "Faroe Islands 1. deild",
+   "alternates": "",
+   "country": "Faroe Islands",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/xi5b7r1615841191.png"
+  },
+  {
+   "id": 4962,
+   "name": "Fijian Premier League",
+   "alternates": "Digicel Premier League",
+   "country": "Fiji",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/tmjst71615830305.png"
+  },
+  {
+   "id": 4963,
+   "name": "Finnish Ykkönen",
+   "alternates": "Ettan, Miesten Ykkönen",
+   "country": "Finland",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/4epdrs1718426957.png"
+  },
+  {
+   "id": 4964,
+   "name": "Gibraltarian National League",
+   "alternates": "Gibraltar Football League",
+   "country": "Gibraltar",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/pxyxqh1683681812.png"
+  },
+  {
+   "id": 4965,
+   "name": "Hungarian NB II",
+   "alternates": "Nemzeti Bajnokság II, Merkantil Bank Liga",
+   "country": "Hungary",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/qjipik1617288269.png"
+  },
+  {
+   "id": 4966,
+   "name": "Israeli Liga Leumit",
+   "alternates": "ליגה לאומית, HaLiga HaLeumit‎",
+   "country": "Israel",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/54hu9p1664190019.png"
+  },
+  {
+   "id": 4967,
+   "name": "Japanese J3 League",
+   "alternates": "J3リーグ, Meiji Yasuda J3 League, 明治安田生命J3リーグ)",
+   "country": "Japan",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/gh1ome1789965377.png"
+  },
+  {
+   "id": 4968,
+   "name": "Kosovan Superleague",
+   "alternates": "Superliga e Futbollit të Kosovës",
+   "country": "Kosovo",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/6h55zm1725173803.png"
+  },
+  {
+   "id": 4969,
+   "name": "Kyrgyz Premier League",
+   "alternates": "Кыргызстан футбол чемпиондугу, Чемпионат Киргизии по футболу, Киргизская премьер-лига, Jogorku Liga",
+   "country": "Kyrgyzstan",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/scwxol1790353871.png"
+  },
+  {
+   "id": 4970,
+   "name": "Lao League 1",
+   "alternates": "ລາວ ພຣີເມຍລີກ, Pepsi Lao Premier League, Lao League 1",
+   "country": "Laos",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/q11qsh1790353212.png"
+  },
+  {
+   "id": 4971,
+   "name": "Emir of Qatar Cup",
+   "alternates": "كأس الأمير (قطر), Amir Cup",
+   "country": "Qatar",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/qjh10v1707589746.png"
+  },
+  {
+   "id": 4972,
+   "name": "Liechtenstein Cup",
+   "alternates": "Liechtensteiner Cup, Aktiv-Cup",
+   "country": "Liechtenstein",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/w0b5an1617290750.png"
+  },
+  {
+   "id": 4973,
+   "name": "Georgian Erovnuli Liga 2",
+   "alternates": "ეროვნული ლიგა 2, National League 2",
+   "country": "Georgia",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/zdiwr81617286887.png"
+  },
+  {
+   "id": 4974,
+   "name": "Ghanaian Premier League",
+   "alternates": "",
+   "country": "Ghana",
+   "badge": "https://r2.thesportsdb.com/images/media/league/badge/fk51ll1691567032.png"
   }
  ]
 }
