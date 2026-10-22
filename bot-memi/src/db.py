@@ -398,6 +398,16 @@ CREATE TABLE IF NOT EXISTS tower_ball_grants (
     granted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS mission_progress (
+    discord_user_id TEXT NOT NULL REFERENCES game_users(discord_user_id)
+        ON DELETE CASCADE,
+    period TEXT NOT NULL,
+    mission_key TEXT NOT NULL,
+    progress INTEGER NOT NULL DEFAULT 0 CHECK (progress >= 0),
+    claimed INTEGER NOT NULL DEFAULT 0 CHECK (claimed IN (0, 1)),
+    PRIMARY KEY (discord_user_id, period, mission_key)
+);
+
 CREATE TABLE IF NOT EXISTS championship_settings (
     guild_id TEXT PRIMARY KEY,
     channel_id TEXT NOT NULL,
@@ -489,6 +499,7 @@ def initialize_database(database_path: str | Path = DATABASE_PATH) -> None:
             "tower_spent": "INTEGER NOT NULL DEFAULT 0",
             "box_office": "INTEGER NOT NULL DEFAULT 0",
             "box_office_total": "INTEGER NOT NULL DEFAULT 0",
+            "last_rt_at": "TEXT",
         }
         for column, definition in game_user_migrations.items():
             if column not in game_user_columns:

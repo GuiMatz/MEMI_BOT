@@ -1,4 +1,6 @@
-"""Gera a moeda Memilets (gato de óculos) e os ícones redondos dos upgrades.
+"""Gera a moeda Memilets (gato de óculos).
+
+Os ícones dos upgrades são SVG (`scripts/renderizar_ilustracoes.py`).
 
 Os PNGs vão para `assets/emojis/futae/` na raiz do repositório; o MeMi BOT os envia
 como emojis da aplicação ao ligar (ver `emojis.py`). Rode de novo depois de mudar cores
@@ -15,7 +17,6 @@ from pathlib import Path
 from PIL import Image, ImageDraw
 
 from src.icons import ICON_DIR
-from src.perks import UPGRADES
 
 SIZE = 128
 SCALE = 4  # desenha 4x maior e reduz, para bordas suaves
@@ -134,157 +135,8 @@ def memilets_coin(path: Path) -> None:
     _finish(image, path)
 
 
-def _binoculars(draw, big):
-    c = big / 2
-    r = big * 0.13
-    for side in (-1, 1):
-        x = c + side * big * 0.13
-        draw.rounded_rectangle((x - r * 0.75, c - big * 0.2, x + r * 0.75, c), r * 0.3, fill=WHITE)
-        draw.ellipse((x - r, c - r * 0.2, x + r, c + r * 1.8), fill=WHITE)
-    draw.rectangle((c - big * 0.06, c - big * 0.08, c + big * 0.06, c + big * 0.03), fill=WHITE)
-
-
-def _eye(draw, big):
-    c = big / 2
-    w, h = big * 0.3, big * 0.17
-    almond = [
-        (c + w * math.cos(math.radians(angle)), c - h * math.sin(math.radians(angle)) ** 1)
-        for angle in range(0, 181, 10)
-    ] + [
-        (c + w * math.cos(math.radians(angle)), c + h * math.sin(math.radians(angle)))
-        for angle in range(180, -1, -10)
-    ]
-    draw.polygon(almond, fill=WHITE)
-    pupil = h * 0.85
-    draw.ellipse((c - pupil, c - pupil, c + pupil, c + pupil), fill=(30, 30, 30, 255))
-    draw.ellipse((c - pupil * 0.45, c - pupil * 0.6, c - pupil * 0.05, c - pupil * 0.2), fill=WHITE)
-
-
-def _star_icon(draw, big):
-    draw.polygon(_star(big / 2, big * 0.52, big * 0.27, big * 0.11), fill=WHITE)
-
-
-def _clock(draw, big):
-    c = big / 2
-    r = big * 0.25
-    draw.ellipse((c - r, c - r, c + r, c + r), outline=WHITE, width=int(big * 0.05))
-    draw.line((c, c, c, c - r * 0.65), fill=WHITE, width=int(big * 0.045))
-    draw.line((c, c, c + r * 0.5, c + r * 0.25), fill=WHITE, width=int(big * 0.045))
-
-
-def _shield(draw, big):
-    c = big / 2
-    draw.polygon(
-        [
-            (c, big * 0.22),
-            (c + big * 0.22, big * 0.3),
-            (c + big * 0.19, big * 0.56),
-            (c, big * 0.78),
-            (c - big * 0.19, big * 0.56),
-            (c - big * 0.22, big * 0.3),
-        ],
-        fill=WHITE,
-    )
-
-
-def _coins(draw, big):
-    c = big / 2
-    w, h = big * 0.2, big * 0.06
-    for index in range(4):
-        y = big * 0.66 - index * h * 1.45
-        draw.ellipse((c - w, y - h, c + w, y + h), fill=WHITE, outline=(0, 0, 0, 60), width=4)
-
-
-def _lock(draw, big):
-    c = big / 2
-    stroke = int(big * 0.065)
-    draw.rounded_rectangle(
-        (c - big * 0.15, big * 0.2, c + big * 0.15, big * 0.56),
-        big * 0.15,
-        outline=WHITE,
-        width=stroke,
-    )
-    draw.rounded_rectangle(
-        (c - big * 0.23, big * 0.42, c + big * 0.23, big * 0.76), big * 0.05, fill=WHITE
-    )
-    draw.ellipse((c - big * 0.04, big * 0.53, c + big * 0.04, big * 0.61), fill=(0, 0, 0, 0))
-
-
-def _hourglass(draw, big):
-    c = big / 2
-    top, bottom, w = big * 0.22, big * 0.78, big * 0.18
-    draw.rectangle((c - w * 1.2, top - big * 0.03, c + w * 1.2, top + big * 0.02), fill=WHITE)
-    draw.rectangle((c - w * 1.2, bottom - big * 0.02, c + w * 1.2, bottom + big * 0.03), fill=WHITE)
-    draw.polygon([(c - w, top), (c + w, top), (c, c)], fill=WHITE)
-    draw.polygon([(c - w, bottom), (c + w, bottom), (c, c)], fill=WHITE)
-
-
-def _contract(draw, big):
-    """Folha de contrato com uma marca de confirmado."""
-    c = big / 2
-    draw.rounded_rectangle(
-        (c - big * 0.19, big * 0.2, c + big * 0.19, big * 0.78), big * 0.03, fill=WHITE
-    )
-    for index in range(3):
-        y = big * (0.31 + index * 0.09)
-        draw.rectangle((c - big * 0.12, y, c + big * 0.12, y + big * 0.03), fill=(0, 0, 0, 0))
-    draw.line(
-        (c - big * 0.08, big * 0.64, c - big * 0.02, big * 0.7, c + big * 0.11, big * 0.57),
-        fill=(0, 0, 0, 0),
-        width=int(big * 0.04),
-    )
-
-
-def _ticket(draw, big):
-    c = big / 2
-    box = (c - big * 0.28, c - big * 0.15, c + big * 0.28, c + big * 0.15)
-    draw.rounded_rectangle(box, big * 0.03, fill=WHITE)
-    for side in (-1, 1):
-        x = c + side * big * 0.28
-        draw.ellipse(
-            (x - big * 0.06, c - big * 0.06, x + big * 0.06, c + big * 0.06), fill=(0, 0, 0, 0)
-        )
-    for y in range(int(c - big * 0.12), int(c + big * 0.12), int(big * 0.05)):
-        draw.rectangle((c + big * 0.08, y, c + big * 0.1, y + big * 0.025), fill=(0, 0, 0, 0))
-
-
-def _chart(draw, big):
-    base = big * 0.72
-    for index, height in enumerate((0.16, 0.26, 0.38)):
-        x = big * (0.28 + index * 0.16)
-        draw.rounded_rectangle(
-            (x, base - big * height, x + big * 0.11, base), big * 0.02, fill=WHITE
-        )
-
-
-PICTOGRAMS = {
-    "rolls": _binoculars,
-    "wishes": _eye,
-    "star_wishes": _star_icon,
-    "daily": _clock,
-    "wish_protection": _shield,
-    "daily_max": _coins,
-    "exclusivity": _lock,
-    "dismiss_refund": _contract,
-    "box_office_cap": _ticket,
-    "match_income": _chart,
-}
-
-
-def upgrade_icon(key: str, path: Path) -> None:
-    image, _, big = _canvas()
-    _disc(image, big, _rgb(UPGRADES[key].color))
-    # Os furos do ingresso usam transparência: desenha o pictograma numa camada própria.
-    layer = Image.new("RGBA", image.size, (0, 0, 0, 0))
-    PICTOGRAMS[key](ImageDraw.Draw(layer), big)
-    image.alpha_composite(layer)
-    _finish(image, path)
-
-
 def main() -> None:
     memilets_coin(ICON_DIR / "memilets.png")
-    for key in UPGRADES:
-        upgrade_icon(key, ICON_DIR / f"upg_{key}.png")
     print(f"Ícones gerados em {ICON_DIR}")
 
 

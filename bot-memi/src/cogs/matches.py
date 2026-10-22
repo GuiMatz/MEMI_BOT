@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -21,11 +22,21 @@ from src.championship import (
 )
 from src.db import DATABASE_PATH, connect, normalize_player_name
 from src.income import IncomeError, collect_income, income_status, venue_name
+from src.missions import record_event
 from src.narration import narrate
+from src.score_image import render_score_card
 from src.simulation import penalty_events, simulate_match
-from src.teams import TeamError, get_valid_lineup
+from src.teams import TeamError, get_team, get_valid_lineup
 
 LOGGER = logging.getLogger("memi.championship")
+
+
+async def score_file(home, away, home_goals, away_goals, goals, **options) -> discord.File:
+    """Imagem do placar final (`src.score_image`)."""
+    image = await asyncio.to_thread(
+        render_score_card, home, away, home_goals, away_goals, list(goals), **options
+    )
+    return discord.File(image, filename="placar.png")
 
 
 class IncomeChoiceView(discord.ui.View):
@@ -144,6 +155,22 @@ class MatchesCog(commands.Cog):
             result.events,
             title="Amistoso",
         )
+        await context.send(
+            file=await score_file(
+                home,
+                away,
+                result.home_goals,
+                result.away_goals,
+                result.goals,
+                title="Amistoso",
+                venue=venue_name(home),
+            )
+        )
+        for user_id in (context.author.id, opponent.id):
+            record_event(user_id, "friendly", self.database_path)
+        if result.home_goals != result.away_goals:
+            winner = context.author.id if result.home_goals > result.away_goals else opponent.id
+            record_event(winner, "friendly_win", self.database_path)
         if not with_income:
             return
         try:
@@ -351,8 +378,7 @@ class MatchesCog(commands.Cog):
     async def before_daily_scheduler(self) -> None:
         await self.bot.wait_until_ready()
 
-    @staticmethod
-    async def _narrate_final(send, table: dict) -> None:
+    async def _narrate_final(self, send, table: dict) -> None:
         """Repete a final lance a lance, com pênaltis se houve empate."""
         final = next((fixture for fixture in table["fixtures"] if fixture["is_final"]), None)
         if final is None or not final.get("events_json"):
@@ -375,6 +401,17 @@ class MatchesCog(commands.Cog):
             timeline,
             title="FINAL do campeonato",
             penalties=penalties,
+        )
+        await send(
+            file=await score_file(
+                get_team(final["home_user_id"], self.database_path) or {"team_name": home},
+                get_team(final["away_user_id"], self.database_path) or {"team_name": away},
+                int(final["home_goals"]),
+                int(final["away_goals"]),
+                events.get("goals", []),
+                title="Final do campeonato",
+                penalties=penalties,
+            )
         )
         if final.get("winner_user_id"):
             winner = names.get(final["winner_user_id"], final["winner_user_id"])

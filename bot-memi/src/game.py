@@ -177,7 +177,7 @@ def list_owned_players(
         rows = connection.execute(
             f"""
             SELECT p.id, COALESCE(NULLIF(p.display_name, ''), p.name) AS name,
-                   p.club_name, p.game_position, p.photo_path,
+                   p.club_name, p.game_position, p.photo_path, p.overall_source,
                    {effective_overall} AS overall,
                    COALESCE(b.balls, 0) AS balls, o.acquired_at
             FROM player_ownership AS o

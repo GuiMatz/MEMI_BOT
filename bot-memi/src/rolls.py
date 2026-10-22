@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from src.db import DATABASE_PATH, connect
+from src.missions import record
 from src.perks import (
     BASE_EXCLUSIVE_SECONDS,
     ROLLS_PER_CYCLE,
@@ -269,6 +270,7 @@ def roll_player(
             (user_id, cycle_key),
         )
 
+        record(connection, user_id, "roll", now=current_time)
         if use_roll_token:
             connection.execute(
                 """
@@ -515,13 +517,16 @@ def claim_roll_offer(
             """,
             (user_id, current_time.isoformat(timespec="seconds"), offer_id),
         )
+        overall = connection.execute(
+            f"SELECT {GAME_OVERALL_SQL} AS overall FROM players AS p WHERE p.id = ?",
+            (offer["player_id"],),
+        ).fetchone()["overall"]
+        record(connection, user_id, "claim", now=current_time)
+        if int(overall or 0) >= 85:
+            record(connection, user_id, "claim_85", now=current_time)
         # Andar 3 da torre: Memilets iguais ao overall de quem foi contratado.
         reward = None
         if claimer_perks.floor(3):
-            overall = connection.execute(
-                f"SELECT {GAME_OVERALL_SQL} AS overall FROM players AS p WHERE p.id = ?",
-                (offer["player_id"],),
-            ).fetchone()["overall"]
             reward = int(overall or 0) * claimer_perks.floor(3)
             if reward:
                 connection.execute(

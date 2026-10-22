@@ -9,6 +9,31 @@ SECOES = ("novidades", "melhorias", "correcoes", "admin")
 
 VERSOES = [
     {
+        "versao": "3.4.0",
+        "data": "22/10/2026",
+        "titulo": "FUT.AE — update visual, missões e temporada",
+        "novidades": [
+            "Cartas com moldura própria para cada raridade, do Base à Única (supernova). Lendas "
+            "ganham uma etiqueta discreta na borda da foto.",
+            "Crates abrem em dois tempos: o pacote treme e depois revela a raridade com animação.",
+            "Placar final em imagem depois do amistoso e da final do campeonato.",
+            "`mm!time` mostra o cartão do clube (cosméticos, forma, títulos, artilheiro); um "
+            "botão alterna para a escalação.",
+            "`mm!construir` mostra o prédio do Centro de Treinamento em imagem.",
+            "`mm!cosmeticos` virou galeria: um item por página, com botão para equipar.",
+            "`mm!missoes`: 3 missões por dia e 2 por semana que pagam Memilets.",
+            "`mm!temporada`: tabela do mês somando todos os campeonatos diários.",
+            "`mm!rt`: zera o claim na hora, a cada 12 h, liberado pelo upgrade Renovação de "
+            "Contrato.",
+            "Chequer (CA, Cheréca FC) entrou na categoria Cartola.",
+        ],
+        "melhorias": [
+            "Garantia nas crates: a cada 40 caixas sem Raro, a seguinte traz um.",
+            "Ícones dos upgrades e medalhões redesenhados em estilo minimalista.",
+            "Técnico sem foto aparece com o medalhão de técnico na escalação.",
+        ],
+    },
+    {
         "versao": "3.3.0",
         "data": "22/10/2026",
         "titulo": "FUT.AE V2 — loja, crates, Centro de Treinamento e cosméticos",

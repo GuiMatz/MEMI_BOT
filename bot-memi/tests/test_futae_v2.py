@@ -476,13 +476,14 @@ class MenuTests(unittest.IsolatedAsyncioTestCase):
         economy = EconomyCog(self.bot)
         embed, view = economy.upgrade_menu(self.user)
         self.assertTrue(embed.description.startswith(f"*{UPGRADES_INTRO}*"))
-        self.assertEqual(len(view.children[0].options), 10)
+        self.assertEqual(len(view.children[0].options), 11)
         embed, _ = economy.crate_menu(self.user)
         self.assertTrue(embed.description.startswith(f"*{CRATES_INTRO}*"))
         club = ClubCog(self.bot)
         embed = club.tower_embed(self.user)
         self.assertTrue(embed.description.startswith(f"*{TOWER_INTRO}*"))
-        self.assertIn("**12.**", embed.description)
+        self.assertIn("**12**", embed.fields[0].value)
+        self.assertEqual(embed.image.url, "attachment://torre.png")
 
     async def test_purchase_prompt_asks_before_buying(self):
         from src.cogs.economy import EconomyCog, resolve_upgrade

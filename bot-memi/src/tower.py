@@ -18,6 +18,7 @@ from typing import Any
 
 from src.db import DATABASE_PATH, connect
 from src.game import register_user
+from src.missions import record
 from src.perks import TOWER_FIRST_PRICE, TOWER_FLOORS, TOWER_PRICE_STEP
 from src.rolls import MAX_DUPLICATE_BALLS
 
@@ -143,6 +144,7 @@ def build_floor(
             """,
             (user_id, floor),
         )
+        record(connection, user_id, "tower")
         return BuildResult(floor, price, status.construction, ball_player)
 
 

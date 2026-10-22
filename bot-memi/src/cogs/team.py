@@ -10,8 +10,8 @@ from discord.ext import commands
 from src.cosmetics import equipped_name
 from src.db import DATABASE_PATH, normalize_player_name
 from src.cogs.common import PlayerChoiceView, ambiguity_text
-from src.income import venue_name
 from src.game import list_owned_players, resolve_player
+from src.club_card import render_club_card
 from src.lineup_image import render_lineup
 from src.teams import (
     FORMATIONS,
@@ -268,11 +268,55 @@ class LineupBuilderView(discord.ui.View):
                 pass
 
 
+async def club_file(user_id, team: dict, lineup: list[dict], database_path) -> discord.File:
+    """Cartão do clube (`src.club_card`) com cosméticos, forma e números do time."""
+    statistics = get_team_statistics(user_id, database_path)
+    ratings = [
+        int(player["effective_overall"]) for player in lineup if player.get("effective_overall")
+    ]
+    owned = list_owned_players(user_id, database_path, limit=5000)
+    scorer = statistics["top_scorer"]
+    info = {
+        "liga": team.get("favorite_league"),
+        "estadio": team.get("stadium_name"),
+        "tecnico": team.get("coach_name"),
+        "mascote": team.get("mascot"),
+        "uniforme": equipped_name("uniforme", team.get("kit_path"), database_path),
+        "elenco": f"{len(owned)} jogadores",
+        "form": statistics["form"],
+        "trophies": statistics["trophies"],
+        "matches": statistics["matches"],
+        "ovr": round(sum(ratings) / len(ratings)) if ratings else None,
+        "top_scorer": f"{scorer[0]} · {scorer[1]} gols" if scorer else None,
+        "style": STYLE_LABELS[team["style"]],
+    }
+    image = await asyncio.to_thread(render_club_card, team, info)
+    return discord.File(image, filename="clube.png")
+
+
 class TeamProfileView(discord.ui.View):
     def __init__(self, owner: discord.abc.User, database_path):
         super().__init__(timeout=300)
         self.owner = owner
         self.database_path = database_path
+        self.showing_lineup = False
+
+    @discord.ui.button(label="Ver escalação", emoji="📋", style=discord.ButtonStyle.secondary)
+    async def toggle(self, interaction: discord.Interaction, button) -> None:
+        team = get_team(self.owner.id, self.database_path)
+        lineup = get_lineup(self.owner.id, self.database_path)
+        self.showing_lineup = not self.showing_lineup
+        await interaction.response.defer()
+        embed = interaction.message.embeds[0]
+        if self.showing_lineup:
+            file = await lineup_file(team, lineup)
+            embed.set_image(url="attachment://escalacao.png")
+            button.label, button.emoji = "Ver cartão do clube", "🛡️"
+        else:
+            file = await club_file(self.owner.id, team, lineup, self.database_path)
+            embed.set_image(url="attachment://clube.png")
+            button.label, button.emoji = "Ver escalação", "📋"
+        await interaction.edit_original_response(embed=embed, attachments=[file], view=self)
 
     @discord.ui.button(label="Editar escalação", emoji="✏️", style=discord.ButtonStyle.primary)
     async def edit(self, interaction: discord.Interaction, button) -> None:
@@ -320,83 +364,20 @@ class TeamCog(commands.Cog):
                 await context.reply(str(error), mention_author=False)
                 return
         team = get_team(context.author.id, self.database_path)
-        embed = discord.Embed(
-            title=team["team_name"],
-            color=discord.Color.from_str(team["color"]),
-        )
-        embed.add_field(name="Formação", value=team["formation"], inline=True)
-        embed.add_field(
-            name="Estilo",
-            value=STYLE_LABELS[team["style"]],
-            inline=True,
-        )
-        embed.add_field(
-            name="Liga favorita",
-            value=team.get("favorite_league") or "`mm!liga <nome>`",
-            inline=True,
-        )
-        embed.add_field(
-            name="Emblema",
-            value=equipped_name("emblema", team.get("logo_path"), self.database_path)
-            or "`mm!emblema <nome>`",
-            inline=True,
-        )
-        embed.add_field(
-            name="Uniforme",
-            value=equipped_name("uniforme", team.get("kit_path"), self.database_path)
-            or "`mm!uniforme <nome>`",
-            inline=True,
-        )
-        embed.add_field(
-            name="Mascote",
-            value=team["mascot"] or "Não definido",
-            inline=True,
-        )
-        embed.add_field(
-            name="Técnico",
-            value=team["coach_name"] or "Não definido",
-            inline=True,
-        )
-        embed.add_field(
-            name="Estádio",
-            value=venue_name(team),
-            inline=True,
-        )
-        statistics = get_team_statistics(context.author.id, self.database_path)
-        embed.add_field(
-            name="Jogos / títulos",
-            value=f"{statistics['matches']} jogos · {statistics['trophies']} títulos",
-            inline=True,
-        )
-        if statistics["form"]:
-            embed.add_field(
-                name="Forma (últimos 5)",
-                value=" · ".join(statistics["form"]),
-                inline=True,
-            )
-        if statistics["top_scorer"]:
-            name, goals = statistics["top_scorer"]
-            embed.add_field(
-                name="Artilheiro",
-                value=f"{name} · {goals} gols",
-                inline=True,
-            )
-        if statistics["most_appearances"]:
-            name, appearances = statistics["most_appearances"]
-            embed.add_field(
-                name="Mais partidas",
-                value=f"{name} · {appearances}",
-                inline=True,
-            )
         lineup = get_lineup(context.author.id, self.database_path)
         status = (
             "✅ Escalação completa."
             if len(lineup) == 11
             else f"Escalação: {len(lineup)}/11 titulares. Clique em **Editar escalação**."
         )
-        embed.description = ("Perfil do time atualizado.\n" if field else "") + status
-        file = await lineup_file(team, lineup)
-        embed.set_image(url="attachment://escalacao.png")
+        embed = discord.Embed(
+            title=team["team_name"],
+            description=("Perfil do time atualizado.\n" if field else "") + status,
+            color=discord.Color.from_str(team["color"]),
+        )
+        file = await club_file(context.author.id, team, lineup, self.database_path)
+        embed.set_image(url="attachment://clube.png")
+        embed.set_footer(text="Escalação no botão · cosméticos em mm!cosmeticos")
         await context.reply(
             embed=embed,
             file=file,

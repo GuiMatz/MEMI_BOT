@@ -498,6 +498,37 @@ def seed_club_legends(database_path: str | Path = DATABASE_PATH) -> dict[str, in
     return report
 
 
+CARTOLA_EXTRA_PATH = Path(__file__).with_name("seeds") / "cartola_extra.json"
+
+
+def seed_cartola_extra(database_path: str | Path = DATABASE_PATH) -> int:
+    """Cartas extras da categoria Cartola; quem já existe (mesmo nome, Cartola) não repete."""
+    players = json.loads(CARTOLA_EXTRA_PATH.read_text(encoding="utf-8"))["players"]
+    added = 0
+    with connect(database_path) as connection:
+        existing = {
+            normalize_player_name(row["name"])
+            for row in connection.execute(
+                "SELECT name FROM players WHERE overall_source = 'Cartola'"
+            )
+        }
+        for player in players:
+            if normalize_player_name(player["name"]) in existing:
+                continue
+            connection.execute(
+                """
+                INSERT INTO players (
+                    name, display_name, club_name, game_position, overall, overall_source,
+                    activity_status, phase2_candidate
+                ) VALUES (?, ?, ?, ?, 90, 'Cartola', 'active', 0)
+                """,
+                (player["name"], player["name"], player["club"], player["position"]),
+            )
+            existing.add(normalize_player_name(player["name"]))
+            added += 1
+    return added
+
+
 def prepare_game_data(database_path: str | Path = DATABASE_PATH) -> dict[str, int]:
     """Tudo que o bot sincroniza ao iniciar: enciclopédia, lendas, escudos e fotos."""
     from src.cosmetics import grandfather_equipped
@@ -506,6 +537,7 @@ def prepare_game_data(database_path: str | Path = DATABASE_PATH) -> dict[str, in
 
     report = seed_encyclopedia(database_path)
     report.update(seed_club_legends(database_path))
+    report["cartola_extra"] = seed_cartola_extra(database_path)
     report["cosmetics_grandfathered"] = grandfather_equipped(database_path)
     logos = sync_club_logos(database_path)
     report["club_logos_linked"] = logos["linked"]

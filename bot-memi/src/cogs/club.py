@@ -2,10 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
+from typing import Any
+
 import discord
 from discord.ext import commands
 
 from src import icons
+from src.boards_image import render_missions, render_season
+from src.cosmetic_card import render_cosmetic_card
+from src.missions import board, claim_rewards
+from src.season import month_label, parse_month, season_table
+from src.tower_image import render_tower
 from src.cogs.common import ConfirmView, intro_embed
 from src.cosmetics import (
     COSMETIC_KINDS,
@@ -56,6 +64,16 @@ COSMETICS_INTRO = (
     "mascote. Eles saem nas crates e só dá para equipar o que é seu. Cada um equipado (menos "
     "o estádio) soma +100 ao máximo do daily; o estádio libera a renda do amistoso."
 )
+MISSIONS_INTRO = (
+    "Missões dão Memilets por coisas que você já faz no jogo: rolar, contratar, jogar e abrir "
+    "crates. São 3 diárias, que viram à meia-noite, e 2 semanais, que viram na segunda. O "
+    "progresso conta sozinho; quando a barra encher, resgate no botão."
+)
+SEASON_INTRO = (
+    "A temporada soma todos os campeonatos diários do mês: 3 pontos por vitória e 1 por "
+    "empate, com os títulos como primeiro desempate. Use `mm!temporada 9/2026` para ver um "
+    "mês anterior."
+)
 REMOVE_WORDS = {"remover", "tirar", "nenhum", "nenhuma", "limpar"}
 
 
@@ -68,6 +86,125 @@ def _relative(moment) -> str:
     return f"<t:{unix}:R> (<t:{unix}:t>)"
 
 
+class CosmeticGalleryView(discord.ui.View):
+    """Um cosmético por página, com a carta grande; ◀ ▶ navegam e Equipar equipa o item."""
+
+    def __init__(self, cog: "ClubCog", owner, items: list[dict[str, Any]], intro: str):
+        super().__init__(timeout=300)
+        self.cog = cog
+        self.owner = owner
+        self.items = items
+        self.intro = intro
+        self.index = 0
+        self.message: discord.Message | None = None
+        self._sync()
+
+    def _sync(self) -> None:
+        self.previous.disabled = self.index == 0
+        self.next.disabled = self.index >= len(self.items) - 1
+
+    def _equipped(self, item: dict[str, Any]) -> bool:
+        team = get_team(self.owner.id, self.cog.database_path)
+        column = COSMETIC_KINDS[item["kind"]][2]
+        name = equipped_name(item["kind"], team.get(column), self.cog.database_path)
+        return name == item["name"]
+
+    async def _page(self, notice: str = "") -> tuple[discord.Embed, discord.File]:
+        item = self.items[self.index]
+        equipped = self._equipped(item)
+        self.equip.disabled = equipped
+        self.equip.label = "Equipado" if equipped else "Equipar"
+        image = await asyncio.to_thread(
+            render_cosmetic_card, item, equipped=equipped, owner=self.owner.display_name
+        )
+        embed = discord.Embed(
+            title=f"🎽 Cosméticos de {self.owner.display_name}",
+            description=(notice + "\n\n" if notice else "") + self.intro,
+            color=discord.Color.from_str(get_team(self.owner.id, self.cog.database_path)["color"]),
+        )
+        embed.set_image(url="attachment://cosmetico.png")
+        embed.set_footer(text=f"{self.index + 1}/{len(self.items)} · mm!cosmeticos <tipo> filtra")
+        return embed, discord.File(image, filename="cosmetico.png")
+
+    async def send(self, send) -> None:
+        embed, file = await self._page()
+        self.message = await send(embed=embed, file=file, view=self)
+
+    async def _show(self, interaction: discord.Interaction, notice: str = "") -> None:
+        self._sync()
+        await interaction.response.defer()
+        embed, file = await self._page(notice)
+        await interaction.edit_original_response(embed=embed, attachments=[file], view=self)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner.id:
+            await interaction.response.send_message(
+                "Use `mm!cosmeticos` para ver os seus.", ephemeral=True
+            )
+            return False
+        return True
+
+    @discord.ui.button(label="◀", style=discord.ButtonStyle.secondary)
+    async def previous(self, interaction: discord.Interaction, button) -> None:
+        self.index -= 1
+        await self._show(interaction)
+
+    @discord.ui.button(label="▶", style=discord.ButtonStyle.secondary)
+    async def next(self, interaction: discord.Interaction, button) -> None:
+        self.index += 1
+        await self._show(interaction)
+
+    @discord.ui.button(label="Equipar", style=discord.ButtonStyle.success)
+    async def equip(self, interaction: discord.Interaction, button) -> None:
+        item = self.items[self.index]
+        try:
+            equip(self.owner.id, item["kind"], item["name"], self.cog.database_path)
+        except CosmeticError as error:
+            await interaction.response.send_message(str(error), ephemeral=True)
+            return
+        await self._show(interaction, f"✅ **{item['name']}** equipado.")
+
+    @discord.ui.button(label="Lista", emoji="📋", style=discord.ButtonStyle.primary)
+    async def show_list(self, interaction: discord.Interaction, button) -> None:
+        lines = [f"{COSMETIC_KINDS[item['kind']][1]} {item['name']}" for item in self.items[:60]]
+        await interaction.response.send_message("\n".join(lines)[:1900], ephemeral=True)
+
+    async def on_timeout(self) -> None:
+        if self.message:
+            try:
+                await self.message.edit(view=None)
+            except discord.HTTPException:
+                pass
+
+
+class MissionsView(discord.ui.View):
+    def __init__(self, cog: "ClubCog", owner):
+        super().__init__(timeout=300)
+        self.cog = cog
+        self.owner = owner
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner.id:
+            await interaction.response.send_message(
+                "Use `mm!missoes` para ver as suas.", ephemeral=True
+            )
+            return False
+        return True
+
+    @discord.ui.button(label="Resgatar prontas", emoji="🎁", style=discord.ButtonStyle.success)
+    async def collect(self, interaction: discord.Interaction, button) -> None:
+        total, count = claim_rewards(self.owner.id, self.cog.database_path)
+        embed, file = await self.cog.missions_message(self.owner)
+        notice = (
+            f"🎁 {count} missão(ões) resgatada(s): +{icons.memilets(total)} Memilets."
+            if count
+            else "Nenhuma missão pronta para resgatar ainda."
+        )
+        embed.description = notice + "\n\n" + embed.description
+        button.disabled = True
+        await interaction.response.edit_message(embed=embed, attachments=[file], view=self)
+
+
 class ClubCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -76,34 +213,36 @@ class ClubCog(commands.Cog):
     # Centro de Treinamento ---------------------------------------------------------------
 
     def tower_embed(self, user: discord.abc.User) -> discord.Embed:
+        """Texto do menu da torre; o prédio vem na imagem (`tower_file`)."""
         status = tower_status(user.id, self.database_path)
-        construction = status.construction
-        lines = []
-        for floor, effect in TOWER_FLOORS.items():
-            times = status.floors.get(floor, 0)
-            mark = "✅" if status.built_in_current(floor) else "⬜"
-            extra = f" ·×{times}" if times > 1 else ""
-            lines.append(f"{mark} **{floor}.** {effect}{extra}")
         embed = intro_embed("🏗️ Centro de Treinamento", TOWER_INTRO, color=discord.Color.teal())
-        embed.description += "\n\n" + "\n".join(lines)
-        built_now = sum(1 for floor in TOWER_FLOORS if status.built_in_current(floor))
-        embed.add_field(
-            name="Construção", value=f"nº {construction} · {built_now}/12 andares", inline=True
-        )
+        effects = " · ".join(f"**{floor}** {effect}" for floor, effect in TOWER_FLOORS.items())
+        embed.add_field(name="Andares", value=effects[:1024], inline=False)
         embed.add_field(
             name="Próximo andar", value=f"{icons.memilets(status.next_price)}", inline=True
         )
         embed.add_field(
             name="Investido", value=f"{icons.memilets(status.spent)} (volta inteiro)", inline=True
         )
+        embed.set_image(url="attachment://torre.png")
         embed.set_footer(text="mm!construir <1-12> constrói · mm!destruir devolve tudo")
         return embed
 
+    async def tower_file(self, user: discord.abc.User) -> discord.File:
+        status = tower_status(user.id, self.database_path)
+        team = get_team(user.id, self.database_path)
+        image = await asyncio.to_thread(render_tower, status, team)
+        return discord.File(image, filename="torre.png")
+
     @commands.command(name="construir", aliases=["torre", "ct"])
     async def build(self, context: commands.Context, floor: str | None = None) -> None:
-        register_user(context.author.id, context.author.display_name, self.database_path)
+        ensure_team(context.author.id, context.author.display_name, self.database_path)
         if floor is None:
-            await context.reply(embed=self.tower_embed(context.author), mention_author=False)
+            await context.reply(
+                embed=self.tower_embed(context.author),
+                file=await self.tower_file(context.author),
+                mention_author=False,
+            )
             return
         if not floor.isdigit() or int(floor) not in TOWER_FLOORS:
             await context.reply(
@@ -133,7 +272,9 @@ class ClubCog(commands.Cog):
             )
             if result.ball_player:
                 text += f"\n⚽ **{result.ball_player['name']}** ganhou 1 bola."
-            await interaction.response.edit_message(content=text, view=None)
+            await interaction.response.edit_message(
+                content=text, view=None, attachments=[await self.tower_file(author)]
+            )
 
         view = ConfirmView(
             author.id, confirm, confirm_label="Construir", cancel_text="Construção cancelada."
@@ -253,6 +394,62 @@ class ClubCog(commands.Cog):
         )
         await context.reply(embed=embed, mention_author=False)
 
+    # Missões e temporada ------------------------------------------------------------------
+
+    async def missions_message(self, user) -> tuple[discord.Embed, discord.File]:
+        rows = board(user.id, self.database_path)
+        image = await asyncio.to_thread(render_missions, rows, user.display_name)
+        ready = sum(1 for row in rows if row["progress"] >= row["goal"] and not row["claimed"])
+        embed = intro_embed(
+            "🎯 Missões", MISSIONS_INTRO, color=discord.Color.from_rgb(63, 198, 216)
+        )
+        if ready:
+            embed.description += f"\n\n**{ready} pronta(s) para resgatar.**"
+        embed.set_image(url="attachment://missoes.png")
+        return embed, discord.File(image, filename="missoes.png")
+
+    @commands.command(name="missoes", aliases=["missões", "missao", "missão", "quests"])
+    async def missions(self, context: commands.Context, action: str | None = None) -> None:
+        register_user(context.author.id, context.author.display_name, self.database_path)
+        notice = ""
+        if action and normalize_player_name(action) in {"resgatar", "coletar", "claim"}:
+            total, count = claim_rewards(context.author.id, self.database_path)
+            notice = (
+                f"🎁 {count} missão(ões) resgatada(s): +{icons.memilets(total)} Memilets.\n\n"
+                if count
+                else "Nenhuma missão pronta para resgatar ainda.\n\n"
+            )
+        embed, file = await self.missions_message(context.author)
+        embed.description = notice + embed.description
+        await context.reply(
+            embed=embed, file=file, view=MissionsView(self, context.author), mention_author=False
+        )
+
+    @commands.command(name="temporada", aliases=["season"])
+    async def season(self, context: commands.Context, *, month: str | None = None) -> None:
+        if context.guild is None:
+            await context.reply("A temporada é de cada servidor.", mention_author=False)
+            return
+        try:
+            chosen = parse_month(month)
+        except ValueError as error:
+            await context.reply(str(error), mention_author=False)
+            return
+        table = season_table(context.guild.id, chosen, self.database_path)
+        title = month_label(chosen)
+        image = await asyncio.to_thread(render_season, table, title)
+        embed = intro_embed(f"🗓️ Temporada · {title}", SEASON_INTRO, color=discord.Color.gold())
+        if table:
+            leader = table[0]
+            embed.description += (
+                f"\n\nLíder: **{leader['team_name']}** com {leader['points']} pontos "
+                f"e {leader['titles']} título(s)."
+            )
+        embed.set_image(url="attachment://temporada.png")
+        await context.reply(
+            embed=embed, file=discord.File(image, filename="temporada.png"), mention_author=False
+        )
+
     # Cosméticos ---------------------------------------------------------------------------
 
     @commands.command(name="cosmeticos", aliases=["cosméticos", "inventario", "inventário", "inv"])
@@ -271,6 +468,10 @@ class ClubCog(commands.Cog):
             COSMETICS_INTRO,
             color=discord.Color.from_str(team["color"]),
         )
+        if owned:
+            view = CosmeticGalleryView(self, context.author, owned, embed.description)
+            await view.send(lambda **kwargs: context.reply(mention_author=False, **kwargs))
+            return
         for key, (label, emoji, column, _) in COSMETIC_KINDS.items():
             if wanted and key != wanted:
                 continue

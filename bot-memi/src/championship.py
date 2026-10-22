@@ -11,6 +11,7 @@ from pathlib import Path
 from src.clock import BRASILIA
 from src.db import DATABASE_PATH, connect
 from src.income import add_box_office
+from src.missions import record
 from src.simulation import penalty_shootout_kicks, simulate_match
 from src.teams import TeamError, get_valid_lineup
 
@@ -423,6 +424,8 @@ def _play_fixture(
             "home": add_box_office(connection, str(fixture["home_user_id"]), home_won),
             "away": add_box_office(connection, str(fixture["away_user_id"]), away_won),
         }
+        for user_id in (fixture["home_user_id"], fixture["away_user_id"]):
+            record(connection, str(user_id), "championship_match")
         connection.execute(
             """
             UPDATE championship_fixtures

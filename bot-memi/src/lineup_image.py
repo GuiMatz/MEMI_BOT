@@ -275,7 +275,11 @@ def _draw_coach(image: Image.Image, team: dict[str, Any], color: tuple[int, int,
     _, _, right, bottom = PITCH
     x = right - CORNER_MARGIN - CORNER_SIZE // 2
     y = bottom - CORNER_MARGIN - 40 - AVATAR // 2
-    avatar = _avatar({"photo_path": team.get("coach_photo_path")}, color)
+    avatar = (
+        _avatar({"photo_path": team.get("coach_photo_path")}, color)
+        if find_image(team.get("coach_photo_path")) is not None
+        else coach_placeholder(AVATAR + 8, color)
+    )
     image.alpha_composite(avatar, (x - AVATAR // 2, y - AVATAR // 2))
     draw = ImageDraw.Draw(image)
     font = _font(18, True)
@@ -289,6 +293,18 @@ def _draw_coach(image: Image.Image, team: dict[str, Any], color: tuple[int, int,
     )
     _centered(draw, (x, y + AVATAR // 2 + 7), label, font)
     _centered(draw, (x, y - AVATAR // 2 - 24), "TÉCNICO", _font(16, True), fill=LINE)
+
+
+def coach_placeholder(size: int, color: tuple[int, int, int]) -> Image.Image:
+    """Técnico sem foto: o medalhão de técnico, ou um círculo na cor do time."""
+    from src.art import artwork
+
+    medal = artwork("tecnico")
+    if medal is not None:
+        return medal.resize((size, size), Image.LANCZOS)
+    tile = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    ImageDraw.Draw(tile).ellipse((0, 0, size - 1, size - 1), fill=(*color, 255))
+    return tile
 
 
 def _label_widths(coordinates: dict[int, tuple[int, int]]) -> dict[int, float]:
