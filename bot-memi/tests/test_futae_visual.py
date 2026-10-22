@@ -111,6 +111,27 @@ class ImageTests(unittest.TestCase):
         self.assertTrue(is_png(render_missions([], "Pessoa")))
         self.assertTrue(is_png(render_season([], "Outubro de 2026")))
 
+    def test_squad_image_is_vertical_for_every_formation(self):
+        from src.squad_image import render_squad, squad_coordinates
+
+        for formation, positions in FORMATIONS.items():
+            with self.subTest(formation=formation):
+                self.assertEqual(len(squad_coordinates(formation)), 11)
+                players = [
+                    {
+                        "slot_order": slot,
+                        "position": position,
+                        "id": 0,
+                        "name": f"J{slot}",
+                        "effective_overall": 80,
+                    }
+                    for slot, position in enumerate(positions, start=1)
+                    if slot != 5
+                ]
+                image = render_squad({"team_name": "Time", "formation": formation}, players)
+                with Image.open(BytesIO(image.getvalue())) as opened:
+                    self.assertGreater(opened.height, opened.width)
+
     def test_crate_gifs_loop_only_while_opening(self):
         with Image.open(BytesIO(opening_gif())) as image:
             self.assertEqual(image.format, "GIF")
