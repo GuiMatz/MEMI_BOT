@@ -10,6 +10,7 @@ from typing import Any
 
 from src.db import DATABASE_PATH, connect
 from src.game import register_user
+from src.positions import fit, slot_rating
 from src.ratings import EFFECTIVE_OVERALL_SQL, GAME_OVERALL_SQL
 
 FORMATIONS: dict[str, tuple[str, ...]] = {
@@ -279,22 +280,21 @@ def scale_player(
                 (user_id,),
             )
         }
-        slot_order = next(
-            (
-                index
-                for index, required in enumerate(positions, start=1)
-                if required == position and index not in occupied
-            ),
-            None,
-        )
-        if slot_order is None:
+        # Vaga livre da própria posição; senão, a vaga livre onde ele rende mais.
+        free = [
+            (fit(position, required), -index, index, required)
+            for index, required in enumerate(positions, start=1)
+            if index not in occupied and fit(position, required)
+        ]
+        if not free:
             raise TeamError(f"A formação {team['formation']} não tem vaga para mais um {position}.")
+        _, _, slot_order, required = max(free)
         connection.execute(
             """
             INSERT INTO team_lineups (discord_user_id, slot_order, player_id, position)
             VALUES (?, ?, ?, ?)
             """,
-            (user_id, slot_order, player_id, position),
+            (user_id, slot_order, player_id, required),
         )
         return slot_order
 
@@ -354,6 +354,7 @@ def get_lineup(
             f"""
             SELECT l.slot_order, l.position, p.id, p.name, p.display_name,
                    {GAME_OVERALL_SQL} AS overall, p.club_name, p.photo_path,
+                   p.game_position AS natural_position,
                    {EFFECTIVE_OVERALL_SQL} AS effective_overall
             FROM team_lineups AS l
             JOIN players AS p ON p.id = l.player_id
@@ -363,7 +364,17 @@ def get_lineup(
             """,
             (str(discord_user_id),),
         ).fetchall()
-    return [dict(row) for row in rows]
+    lineup = []
+    for row in rows:
+        player = dict(row)
+        # Quanto ele rende nessa vaga (igual ao overall quando joga na própria posição).
+        player["slot_overall"] = (
+            slot_rating(player["effective_overall"], player["natural_position"], player["position"])
+            if player["effective_overall"] is not None
+            else None
+        )
+        lineup.append(player)
+    return lineup
 
 
 def get_team_statistics(
@@ -516,9 +527,10 @@ def set_lineup_slot(
         ).fetchone()
         if player is None:
             raise TeamError("Esse jogador não pertence ao seu elenco.")
-        if player["game_position"] != required:
+        if not fit(player["game_position"], required):
             raise TeamError(
-                f"{player['name']} joga de {player['game_position']}; essa vaga pede {required}."
+                f"{player['name']} joga de {player['game_position']} e não pode atuar de "
+                f"{required}."
             )
         connection.execute(
             "DELETE FROM team_lineups WHERE discord_user_id = ? AND (slot_order = ? OR player_id = ?)",
@@ -547,14 +559,82 @@ def clear_lineup_slot(
     return cursor.rowcount > 0
 
 
+def best_assignment(scores: list[list[float | None]]) -> list[tuple[int, int]]:
+    """Linha -> coluna com a maior soma de pontos, cada coluna usada uma vez (húngaro).
+
+    `None` = combinação proibida. Linhas sem nenhuma coluna possível ficam de fora.
+    Devolve pares `(linha, coluna)`.
+    """
+    rows = len(scores)
+    columns = len(scores[0]) if scores else 0
+    if not rows or not columns:
+        return []
+    forbidden = 10**6
+    # Colunas fictícias garantem colunas >= linhas (vaga que fica vazia).
+    width = max(columns, rows) + rows
+    cost = [
+        [
+            (-value if value is not None else forbidden) if column < columns else forbidden / 2
+            for column, value in enumerate(row + [None] * (width - columns))
+        ]
+        for row in scores
+    ]
+    # Implementação clássica O(n²·m), índices a partir de 1.
+    u = [0.0] * (rows + 1)
+    v = [0.0] * (width + 1)
+    match = [0] * (width + 1)
+    way = [0] * (width + 1)
+    for row in range(1, rows + 1):
+        match[0] = row
+        column0 = 0
+        minimum = [float("inf")] * (width + 1)
+        used = [False] * (width + 1)
+        while True:
+            used[column0] = True
+            row0 = match[column0]
+            delta = float("inf")
+            column1 = 0
+            for column in range(1, width + 1):
+                if used[column]:
+                    continue
+                current = cost[row0 - 1][column - 1] - u[row0] - v[column]
+                if current < minimum[column]:
+                    minimum[column] = current
+                    way[column] = column0
+                if minimum[column] < delta:
+                    delta = minimum[column]
+                    column1 = column
+            for column in range(width + 1):
+                if used[column]:
+                    u[match[column]] += delta
+                    v[column] -= delta
+                else:
+                    minimum[column] -= delta
+            column0 = column1
+            if match[column0] == 0:
+                break
+        while column0:
+            column1 = way[column0]
+            match[column0] = match[column1]
+            column0 = column1
+    pairs = []
+    for column in range(1, width + 1):
+        row = match[column]
+        if row and column <= columns and scores[row - 1][column - 1] is not None:
+            pairs.append((row - 1, column - 1))
+    return pairs
+
+
 def auto_fill_lineup(
     discord_user_id: int | str,
     database_path: str | Path = DATABASE_PATH,
 ) -> int:
-    """Remonta a escalação com os maiores overalls (com bolas) de cada posição.
+    """Monta a escalação que rende mais, aceitando jogadores fora de posição.
 
-    Troca também titulares mais fracos, não só vagas vazias. Quem sai do time perde a
-    função de capitão/falta/pênalti; quem continua fica na mesma vaga. Devolve quantos
+    Cada jogador vale `overall com bolas × rendimento na vaga` (`src.positions`): um
+    ponta-esquerda bem melhor pode ocupar a vaga do ponta-direita fraco. A distribuição
+    é a de maior soma (algoritmo húngaro), sem repetir jogador. Quem continua no time
+    fica na mesma vaga; quem sai perde capitão/falta/pênalti. Devolve quantos
     jogadores entraram no time.
     """
     user_id = str(discord_user_id)
@@ -573,39 +653,50 @@ def auto_fill_lineup(
                 (user_id,),
             )
         }
-        candidates: dict[str, list[int]] = {}
-        for row in connection.execute(
-            f"""
-            SELECT p.id, p.game_position
-            FROM player_ownership AS o
-            JOIN players AS p ON p.id = o.player_id
-            LEFT JOIN player_balls AS b ON b.player_id = p.id
-            WHERE o.discord_user_id = ? AND p.game_position IS NOT NULL
-            ORDER BY {EFFECTIVE_OVERALL_SQL} DESC, p.id
-            """,
-            (user_id,),
-        ):
-            candidates.setdefault(row["game_position"], []).append(int(row["id"]))
-        slots_by_position: dict[str, list[int]] = {}
-        for slot, position in enumerate(FORMATIONS[team["formation"]], start=1):
-            slots_by_position.setdefault(position, []).append(slot)
-        best: dict[int, tuple[int, str]] = {}
-        for position, slots in slots_by_position.items():
-            chosen = candidates.get(position, [])[: len(slots)]
-            # Quem continua no time fica na mesma vaga; os reforços ocupam as que sobram.
-            free = []
-            for slot in slots:
-                if current.get(slot) in chosen:
-                    best[slot] = (current[slot], position)
-                else:
-                    free.append(slot)
-            newcomers = [
-                player_id
-                for player_id in chosen
-                if player_id not in {kept for kept, _ in best.values()}
+        roster = [
+            (int(row["id"]), row["game_position"], int(row["rating"] or 0))
+            for row in connection.execute(
+                f"""
+                SELECT p.id, p.game_position, {EFFECTIVE_OVERALL_SQL} AS rating
+                FROM player_ownership AS o
+                JOIN players AS p ON p.id = o.player_id
+                LEFT JOIN player_balls AS b ON b.player_id = p.id
+                WHERE o.discord_user_id = ? AND p.game_position IS NOT NULL
+                """,
+                (user_id,),
+            )
+        ]
+        slots = list(enumerate(FORMATIONS[team["formation"]], start=1))
+        # Só os 8 melhores de cada vaga entram na conta: o resultado é o mesmo e fica rápido.
+        pool: dict[int, tuple[str, int]] = {}
+        for _, position in slots:
+            ranked = sorted(
+                (
+                    (slot_rating(rating, natural, position), player_id, natural, rating)
+                    for player_id, natural, rating in roster
+                    if fit(natural, position)
+                ),
+                reverse=True,
+            )
+            for _, player_id, natural, rating in ranked[:8]:
+                pool[player_id] = (natural, rating)
+        players = sorted(pool)
+        scores = [
+            [
+                (
+                    slot_rating(pool[player_id][1], pool[player_id][0], position)
+                    + (0.01 if current.get(slot) == player_id else 0.0)
+                    if fit(pool[player_id][0], position)
+                    else None
+                )
+                for player_id in players
             ]
-            for slot, player_id in zip(free, newcomers):
-                best[slot] = (player_id, position)
+            for slot, position in slots
+        ]
+        best: dict[int, tuple[int, str]] = {}
+        for row, column in best_assignment(scores):
+            slot, position = slots[row]
+            best[slot] = (players[column], position)
         changed = len({player_id for player_id, _ in best.values()} - set(current.values()))
         connection.execute("DELETE FROM team_lineups WHERE discord_user_id = ?", (user_id,))
         connection.executemany(

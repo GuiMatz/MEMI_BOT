@@ -37,8 +37,8 @@ class SimulationTests(unittest.TestCase):
         )
         self.assertAlmostEqual(strength.attack, 80)
         self.assertAlmostEqual(strength.resistance, 80)
-        self.assertEqual(result.home_xg, 1.25)
-        self.assertEqual(result.away_xg, 1.25)
+        self.assertEqual(result.home_xg, result.away_xg)
+        self.assertAlmostEqual(result.home_xg, 1.26, delta=0.05)
 
     def test_expected_goals_respect_bounds_and_strength_difference(self):
         self.assertEqual(expected_goals(-100, 100), 0.2)

@@ -28,6 +28,8 @@ from src.score_image import render_score_card
 from src.simulation import penalty_events, simulate_match
 from src.teams import TeamError, get_team, get_valid_lineup
 
+SET_PIECE_MARK = {"penalti": " (pênalti)", "falta": " (falta)"}
+
 LOGGER = logging.getLogger("memi.championship")
 
 
@@ -146,6 +148,8 @@ class MatchesCog(commands.Cog):
             away_players,
             home_style=home["style"],
             away_style=away["style"],
+            home_tactics=home,
+            away_tactics=away,
         )
         await context.send(f"🏟️ Local: **{venue_name(home)}**")
         await narrate(
@@ -439,13 +443,13 @@ class MatchesCog(commands.Cog):
             f"{result.away_goals} {result.away_name}**",
             (
                 f"xG: {result.home_xg:.2f} × {result.away_xg:.2f} · "
-                f"ataque/resistência: "
+                f"ataque/defesa: "
                 f"{result.home_strength.attack:.1f}/{result.home_strength.resistance:.1f} "
                 f"× {result.away_strength.attack:.1f}/{result.away_strength.resistance:.1f}"
             ),
         ]
         lines.extend(
-            f"`{goal.minute:02d}'` ⚽ {goal.scorer_name} "
+            f"`{goal.minute:02d}'` ⚽ {goal.scorer_name}{SET_PIECE_MARK.get(goal.play, '')} "
             f"({'mandante' if goal.side == 'home' else 'visitante'})"
             for goal in result.goals
         )

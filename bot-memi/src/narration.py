@@ -23,6 +23,8 @@ import discord
 DEFAULT_DELAY = float(os.getenv("MEMI_NARRATION_DELAY", "1.6"))
 VISIBLE_EVENTS = 8
 SLOW_EVENTS = {"goal", "halftime", "penalties", "fulltime"}
+SET_PIECES = {"penalti": " · de pênalti", "falta": " · de falta"}
+SHOT_VERBS = {"penalti": "bate o pênalti", "falta": "cobra a falta"}
 # Lances que não aparecem no ao vivo (só contam no resumo).
 QUIET_EVENTS = {"card", "miss"}
 # Bolinha do Discord por faixa de matiz (graus), para cores saturadas.
@@ -77,14 +79,16 @@ def _line(event: dict[str, Any], dots: dict[str, str]) -> str | None:
         text = "🎯 **Disputa de pênaltis!**"
     elif kind == "goal" and player:
         assist = f" · assistência de {event['detail']}" if event.get("detail") else ""
-        text = f"{dot} ⚽ **GOL de {player}** · {score}{assist}"
+        play = SET_PIECES.get(event.get("play"), "")
+        text = f"{dot} ⚽ **GOL de {player}**{play} · {score}{assist}"
     elif kind == "save" and player:
         keeper = event.get("detail")
         # A bolinha é do time que chutou: a frase começa por quem chutou.
+        verb = SHOT_VERBS.get(event.get("play"), "chuta")
         text = (
-            f"{dot} 🧤 {player} chuta, {keeper} defende"
+            f"{dot} 🧤 {player} {verb}, {keeper} defende"
             if keeper
-            else (f"{dot} 🧤 {player} chuta e o goleiro defende")
+            else (f"{dot} 🧤 {player} {verb} e o goleiro defende")
         )
     elif kind == "post" and player:
         text = f"{dot} 🥅 {player} acerta a trave"
