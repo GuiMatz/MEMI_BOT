@@ -1,11 +1,16 @@
-"""Cartão do placar final: emblemas, placar, pênaltis e artilheiros dos dois times."""
+"""Cartão do placar final: emblemas, placar, pênaltis e artilheiros dos dois times.
+
+`render_score_card` gera o PNG; `render_score_gif`, a versão animada enviada no fim das
+partidas (uma para amistoso, outra dourada para campeonato).
+"""
 
 from __future__ import annotations
 
+import random
 from io import BytesIO
 from typing import Any, Iterable
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 from src.visual import (
     MUTED,
@@ -143,3 +148,253 @@ def render_score_card(
     draw.rectangle((WIDTH // 2, HEIGHT - 10, WIDTH, HEIGHT), fill=away_color)
     text_center(draw, (WIDTH // 2, HEIGHT - 34), "FUT.AE", 22, True, (190, 198, 210))
     return to_png(image)
+
+
+# --- Versão animada ---------------------------------------------------------------------
+#
+# Mesmo layout do cartão, montado em camadas: o fundo é desenhado uma vez e cada quadro
+# só recompõe o que se mexe (escudos entrando, placar estourando, artilheiros subindo).
+# Amistoso termina com um brilho discreto passando pelo centro; campeonato tem poeira
+# dourada caindo no fim e o selo de campeão no vencedor.
+
+GIF_SCALE = 0.8  # 960 × 504: cabe folgado no limite de anexo do Discord
+FRAME_MS = 45
+HOLD_MS = 4000
+INTRO_FRAMES = 12  # escudos e nomes
+SCORE_FRAMES = (8, 18)  # placar: começa e termina
+SCORER_STEP = 3  # quadros entre um artilheiro e o próximo
+OUTRO_FRAMES = 16  # brilho / selo de campeão
+
+
+def _ease(value: float) -> float:
+    value = min(1.0, max(0.0, value))
+    return 1 - (1 - value) ** 3
+
+
+def _faded(layer: Image.Image, alpha: float) -> Image.Image:
+    if alpha >= 1:
+        return layer
+    faded = layer.copy()
+    faded.putalpha(layer.getchannel("A").point(lambda value: int(value * max(0.0, alpha))))
+    return faded
+
+
+def _layer() -> Image.Image:
+    return Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
+
+
+def _gif_background(home_color, away_color, title, venue, championship) -> Image.Image:
+    accent = GOLD if championship else (235, 240, 245)
+    image = horizontal_gradient((WIDTH, HEIGHT), shade(home_color, 0.55), shade(away_color, 0.55))
+    middle = _layer()
+    ImageDraw.Draw(middle).polygon(
+        [(470, 0), (730, 0), (680, HEIGHT), (520, HEIGHT)], fill=(*NIGHT, 235)
+    )
+    image.alpha_composite(middle)
+    image.alpha_composite(
+        glow((WIDTH, HEIGHT), (230, 250), 190, mix(home_color, (255, 255, 255), 0.2), 120)
+    )
+    image.alpha_composite(
+        glow((WIDTH, HEIGHT), (970, 250), 190, mix(away_color, (255, 255, 255), 0.2), 120)
+    )
+    if championship:
+        image.alpha_composite(glow((WIDTH, HEIGHT), (600, 240), 170, GOLD, 70))
+    image = apply_grain(image, 10)
+    vignette(image, 120)
+    draw = ImageDraw.Draw(image)
+    pill(draw, (WIDTH // 2, 60), title.upper(), 30, accent)
+    if venue:
+        text_center(draw, (WIDTH // 2, 114), fit(draw, venue, font(26), 440), 26, False, MUTED)
+    draw.rectangle((0, HEIGHT - 10, WIDTH // 2, HEIGHT), fill=home_color)
+    draw.rectangle((WIDTH // 2, HEIGHT - 10, WIDTH, HEIGHT), fill=away_color)
+    text_center(draw, (WIDTH // 2, HEIGHT - 34), "FUT.AE", 22, True, (190, 198, 210))
+    return image
+
+
+def _team_layer(team: dict[str, Any], center_x: int) -> Image.Image:
+    layer = _layer()
+    badge = shadowed(emblem(team, 210), blur=12)
+    layer.alpha_composite(badge, (center_x - badge.width // 2, 255 - badge.height // 2))
+    draw = ImageDraw.Draw(layer)
+    name = str(team.get("team_name") or "Time")
+    size = 44
+    while size > 30 and draw.textlength(name, font=font(size, True)) > 430:
+        size -= 1
+    text_center(draw, (center_x, 400), fit(draw, name, font(size, True), 430), size)
+    return layer
+
+
+def _scorer_layers(goals: list[Any]) -> list[tuple[Image.Image, int]]:
+    """Uma camada por artilheiro, na ordem em que aparecem (alternando os lados)."""
+    rows: list[tuple[Image.Image, int]] = []
+    for side, center_x in (("home", 230), ("away", 970)):
+        entries = _goals_by_side(goals, side)
+        y = 458
+        for index, (minute, scorer) in enumerate(entries[:MAX_SCORERS]):
+            layer = _layer()
+            draw = ImageDraw.Draw(layer)
+            label = fit(draw, f"{minute}  {scorer}", font(30, True), 400)
+            width = draw.textlength(label, font=font(30, True))
+            left = center_x - (width + 36) / 2
+            _ball(draw, left + 11, y, 11)
+            draw.text((left + 32, y), label, font=font(30, True), fill="white", anchor="lm")
+            rows.append((layer, index * 2 + (0 if side == "home" else 1)))
+            y += 40
+        if len(entries) > MAX_SCORERS:
+            layer = _layer()
+            text_center(
+                ImageDraw.Draw(layer),
+                (center_x, y),
+                f"+{len(entries) - MAX_SCORERS} gols",
+                24,
+                False,
+                MUTED,
+            )
+            rows.append((layer, MAX_SCORERS * 2 + (0 if side == "home" else 1)))
+    rows.sort(key=lambda row: row[1])
+    return rows
+
+
+def _digit_layer(text: str, center, scale: float, fill) -> Image.Image:
+    layer = _layer()
+    size = max(10, round(150 * scale))
+    text_center(ImageDraw.Draw(layer), center, text, size, fill=fill)
+    return layer
+
+
+def _sweep(progress: float) -> Image.Image:
+    """Faixa de luz diagonal que atravessa a área do placar."""
+    layer = _layer()
+    x = -200 + (WIDTH + 400) * progress
+    band = Image.new("L", (WIDTH, HEIGHT), 0)
+    ImageDraw.Draw(band).polygon([(x, 0), (x + 90, 0), (x - 60, HEIGHT), (x - 150, HEIGHT)], 60)
+    center = Image.new("L", (WIDTH, HEIGHT), 0)
+    ImageDraw.Draw(center).rectangle((430, 150, 770, 380), fill=255)
+    layer.putalpha(ImageChops.multiply(band, center).filter(ImageFilter.GaussianBlur(18)))
+    return layer
+
+
+def _dust(frame: int, seed: str) -> Image.Image:
+    """Poeira dourada caindo devagar (sempre igual para a mesma partida)."""
+    layer = _layer()
+    draw = ImageDraw.Draw(layer)
+    generator = random.Random(seed)
+    for _ in range(28):
+        x = generator.uniform(0, WIDTH)
+        speed = generator.uniform(3, 7)
+        y = (generator.uniform(-HEIGHT, HEIGHT) + frame * speed) % (HEIGHT + 40) - 20
+        radius = generator.uniform(1.5, 3.5)
+        alpha = int(generator.uniform(90, 200))
+        draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=(*GOLD, alpha))
+    return layer
+
+
+def render_score_gif(
+    home: dict[str, Any],
+    away: dict[str, Any],
+    home_goals: int,
+    away_goals: int,
+    goals: Iterable[Any] = (),
+    *,
+    title: str = "Amistoso",
+    venue: str | None = None,
+    penalties: tuple[int, int] | None = None,
+) -> BytesIO:
+    """O placar final animado. Campeonato (título com "final" ou "campeonato") é dourado."""
+    folded = title.casefold()
+    championship = "final" in folded or "campeonato" in folded
+    accent = GOLD if championship else (235, 240, 245)
+    home_color = rgb(home.get("color") or "#2E8B57")
+    away_color = rgb(away.get("color") or "#3B6FD8")
+    background = _gif_background(home_color, away_color, title, venue, championship)
+    teams = [(_team_layer(home, 230), -1), (_team_layer(away, 970), 1)]
+    scorers = _scorer_layers(list(goals))
+
+    home_won = home_goals > away_goals or (
+        penalties is not None and home_goals == away_goals and penalties[0] > penalties[1]
+    )
+    away_won = away_goals > home_goals or (
+        penalties is not None and home_goals == away_goals and penalties[1] > penalties[0]
+    )
+    dim = (200, 205, 215)
+    digits = (
+        (str(home_goals), (WIDTH // 2 - 95, 250), "white" if home_won or not away_won else dim),
+        (str(away_goals), (WIDTH // 2 + 95, 250), "white" if away_won or not home_won else dim),
+    )
+    status = _layer()
+    if penalties:
+        text_center(
+            ImageDraw.Draw(status),
+            (WIDTH // 2, 355),
+            f"pênaltis {penalties[0]} × {penalties[1]}",
+            32,
+            True,
+            accent,
+        )
+    else:
+        text_center(ImageDraw.Draw(status), (WIDTH // 2, 355), "FIM DE JOGO", 28, True, MUTED)
+    dash = _layer()
+    text_center(ImageDraw.Draw(dash), (WIDTH // 2, 245), "–", 90, fill=(150, 158, 172))
+    champion = None
+    if championship and (home_won or away_won):
+        champion = _layer()
+        pill(ImageDraw.Draw(champion), (230 if home_won else 970, 140), "CAMPEÃO", 24, GOLD)
+
+    scorers_start = SCORE_FRAMES[1]
+    scorers_end = scorers_start + SCORER_STEP * len(scorers) + 4
+    total = scorers_end + OUTRO_FRAMES
+    frames: list[Image.Image] = []
+    for frame in range(total):
+        image = background.copy()
+        if championship and frame >= scorers_end:
+            dust_seed = f"{home.get('team_name')}{away.get('team_name')}"
+            image.alpha_composite(_dust(frame - scorers_end, dust_seed))
+        intro = _ease(frame / INTRO_FRAMES)
+        for layer, direction in teams:
+            shifted = _layer()
+            shifted.alpha_composite(_faded(layer, intro), (round(direction * 140 * (1 - intro)), 0))
+            image.alpha_composite(shifted)
+        image.alpha_composite(_faded(dash, _ease((frame - 6) / 6)))
+        start, end = SCORE_FRAMES
+        for index, (text, center, fill) in enumerate(digits):
+            progress = (frame - start - index * 3) / (end - start - 3)
+            if progress <= 0:
+                continue
+            eased = _ease(progress)
+            scale = 1 + 0.6 * (1 - eased)
+            image.alpha_composite(_faded(_digit_layer(text, center, scale, fill), eased))
+        image.alpha_composite(_faded(status, _ease((frame - end) / 6)))
+        for index, (layer, _) in enumerate(scorers):
+            progress = _ease((frame - scorers_start - index * SCORER_STEP) / 5)
+            if progress <= 0:
+                continue
+            moved = _layer()
+            moved.alpha_composite(_faded(layer, progress), (0, round(14 * (1 - progress))))
+            image.alpha_composite(moved)
+        outro = (frame - scorers_end) / OUTRO_FRAMES
+        if 0 <= outro <= 1:
+            if not championship:
+                image.alpha_composite(_sweep(outro))
+        if champion is not None:
+            image.alpha_composite(_faded(champion, _ease((frame - scorers_end) / 8)))
+        frames.append(
+            image.resize(
+                (round(WIDTH * GIF_SCALE), round(HEIGHT * GIF_SCALE)), Image.LANCZOS
+            ).convert("RGB")
+        )
+
+    palette = frames[-1].quantize(colors=255, method=Image.Quantize.MEDIANCUT)
+    indexed = [frame.quantize(palette=palette, dither=Image.Dither.NONE) for frame in frames]
+    buffer = BytesIO()
+    indexed[0].save(
+        buffer,
+        format="GIF",
+        save_all=True,
+        append_images=indexed[1:],
+        duration=[FRAME_MS] * (len(indexed) - 1) + [HOLD_MS],
+        loop=0,
+        optimize=False,
+        disposal=1,
+    )
+    buffer.seek(0)
+    return buffer

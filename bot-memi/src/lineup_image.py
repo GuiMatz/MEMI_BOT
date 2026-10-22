@@ -8,6 +8,7 @@ from typing import Any
 
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
+from src.crests import team_logo_path
 from src.db import ROOT
 from src.ratings import rarity_index
 from src.roll_images import find_image
@@ -227,7 +228,7 @@ def render_lineup(
         _centered(draw, (x, y + AVATAR // 2 + 7), name, font)
         _centered(draw, (x, y + AVATAR // 2 + 38), position, _font(18, True), fill=LINE)
 
-    _draw_emblem(image, team.get("logo_path"))
+    _draw_emblem(image, team_logo_path(team))
     _draw_coach(image, team, color)
 
     buffer = BytesIO()

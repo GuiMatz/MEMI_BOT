@@ -8,6 +8,7 @@ import discord
 from discord.ext import commands
 
 from src.cosmetics import equipped_name
+from src.crests import MAX_BYTES, CrestError, remove_custom_crest, save_custom_crest
 from src.db import DATABASE_PATH, normalize_player_name
 from src.cogs.common import PlayerChoiceView, ambiguity_text
 from src.game import list_owned_players, resolve_player
@@ -408,6 +409,64 @@ class TeamCog(commands.Cog):
         await context.reply(view=layout, file=file, mention_author=False)
         if field:
             await context.send("Perfil do time atualizado.", delete_after=8)
+
+    @commands.command(name="escudo", aliases=["crest"])
+    async def crest(
+        self,
+        context: commands.Context,
+        operation: str | None = None,
+        member: discord.Member | None = None,
+    ) -> None:
+        """`mm!escudo` com uma imagem anexada troca o escudo; `remover` volta ao emblema."""
+        ensure_team(context.author.id, context.author.display_name, self.database_path)
+        if operation and normalize_player_name(operation) in {"remover", "tirar", "reset"}:
+            target = member or context.author
+            if target != context.author and not context.author.guild_permissions.manage_guild:
+                await context.reply(
+                    "Só a moderação pode remover o escudo de outra pessoa.", mention_author=False
+                )
+                return
+            removed = await asyncio.to_thread(remove_custom_crest, target.id, self.database_path)
+            await context.reply(
+                (
+                    "🛡️ Escudo custom removido; o time volta ao emblema equipado."
+                    if removed
+                    else "Esse time não tem escudo custom."
+                ),
+                mention_author=False,
+            )
+            return
+        images = [
+            attachment
+            for attachment in context.message.attachments
+            if (attachment.content_type or "").startswith("image/")
+        ]
+        if not images:
+            await context.reply(
+                "Anexe uma imagem na mensagem do `mm!escudo` para usar como escudo do time "
+                "(PNG com fundo transparente fica melhor). `mm!escudo remover` volta ao emblema.",
+                mention_author=False,
+            )
+            return
+        if images[0].size > MAX_BYTES:
+            await context.reply("A imagem passa de 8 MB. Envie uma menor.", mention_author=False)
+            return
+        try:
+            data = await images[0].read()
+            await asyncio.to_thread(save_custom_crest, context.author.id, data, self.database_path)
+        except (CrestError, discord.HTTPException) as error:
+            message = (
+                str(error) if isinstance(error, CrestError) else "Não consegui baixar a imagem."
+            )
+            await context.reply(message, mention_author=False)
+            return
+        team = get_team(context.author.id, self.database_path)
+        lineup = get_lineup(context.author.id, self.database_path)
+        await context.reply(
+            "🛡️ Escudo atualizado! Ele aparece no time, nas partidas e no placar.",
+            file=await lineup_file(team, lineup),
+            mention_author=False,
+        )
 
     @commands.command(name="escalar", aliases=["escalacao", "lineup"])
     async def scale(

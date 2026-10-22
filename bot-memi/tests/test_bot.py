@@ -32,6 +32,7 @@ class DiscordBotSetupTests(unittest.IsolatedAsyncioTestCase):
                         "demitir",
                         "troca",
                         "time",
+                        "escudo",
                         "escalar",
                         "tatica",
                         "amistoso",

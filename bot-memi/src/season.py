@@ -78,7 +78,7 @@ def season_table(
         teams = {
             row["discord_user_id"]: dict(row)
             for row in connection.execute(
-                "SELECT discord_user_id, team_name, color, logo_path FROM game_teams"
+                "SELECT discord_user_id, team_name, color, logo_path, custom_logo_path FROM game_teams"
             )
         }
     table: dict[str, dict[str, Any]] = {}
@@ -91,6 +91,7 @@ def season_table(
                 "team_name": team.get("team_name") or "Time",
                 "color": team.get("color") or "#2E8B57",
                 "logo_path": team.get("logo_path"),
+                "custom_logo_path": team.get("custom_logo_path"),
                 "points": 0,
                 "played": 0,
                 "wins": 0,
