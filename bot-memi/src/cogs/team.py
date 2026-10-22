@@ -12,7 +12,7 @@ from src.db import DATABASE_PATH, normalize_player_name
 from src.cogs.common import PlayerChoiceView, ambiguity_text
 from src.game import list_owned_players, resolve_player
 from src.club_card import render_club_card
-from src.lineup_image import render_lineup
+from src.squad_image import render_squad
 from src.teams import (
     FORMATIONS,
     STYLE_LABELS,
@@ -60,7 +60,7 @@ POSITION_NAMES = {
 
 
 async def lineup_file(team: dict, lineup: list[dict]) -> discord.File:
-    image = await asyncio.to_thread(render_lineup, team, lineup)
+    image = await asyncio.to_thread(render_squad, team, lineup)
     return discord.File(image, filename="escalacao.png")
 
 
@@ -294,40 +294,66 @@ async def club_file(user_id, team: dict, lineup: list[dict], database_path) -> d
     return discord.File(image, filename="clube.png")
 
 
-class TeamProfileView(discord.ui.View):
-    def __init__(self, owner: discord.abc.User, database_path):
+def team_summary(team: dict, lineup: list[dict], database_path) -> str:
+    """Linha curta embaixo da escalação: forma, títulos e artilheiro."""
+    statistics = get_team_statistics(team["discord_user_id"], database_path)
+    parts = []
+    if statistics["form"]:
+        icons = {"V": "🟩", "E": "⬜", "D": "🟥"}
+        parts.append("Forma " + "".join(icons.get(result, "⬜") for result in statistics["form"]))
+    parts.append(f"🏆 {statistics['trophies']}")
+    if statistics["top_scorer"]:
+        name, goals = statistics["top_scorer"]
+        parts.append(f"⚽ {name} ({goals})")
+    if len(lineup) < 11:
+        parts.append(f"⚠️ {len(lineup)}/11 titulares")
+    return " · ".join(parts)
+
+
+class TeamLayout(discord.ui.LayoutView):
+    """`mm!time` em Components V2: a escalação ocupa a largura toda da mensagem."""
+
+    def __init__(self, owner: discord.abc.User, team: dict, lineup: list[dict], database_path):
         super().__init__(timeout=300)
         self.owner = owner
         self.database_path = database_path
-        self.showing_lineup = False
+        card = discord.ui.Button(
+            label="Cartão do clube", emoji="🛡️", style=discord.ButtonStyle.secondary
+        )
+        card.callback = self._show_card
+        edit = discord.ui.Button(
+            label="Editar escalação", emoji="✏️", style=discord.ButtonStyle.primary
+        )
+        edit.callback = self._edit
+        container = discord.ui.Container(
+            discord.ui.TextDisplay(f"## {team['team_name']}"),
+            discord.ui.MediaGallery(discord.MediaGalleryItem("attachment://escalacao.png")),
+            discord.ui.TextDisplay(team_summary(team, lineup, database_path)),
+            discord.ui.ActionRow(card, edit),
+            accent_colour=discord.Color.from_str(team["color"]),
+        )
+        self.add_item(container)
 
-    @discord.ui.button(label="Ver escalação", emoji="📋", style=discord.ButtonStyle.secondary)
-    async def toggle(self, interaction: discord.Interaction, button) -> None:
+    async def _show_card(self, interaction: discord.Interaction) -> None:
         team = get_team(self.owner.id, self.database_path)
         lineup = get_lineup(self.owner.id, self.database_path)
-        self.showing_lineup = not self.showing_lineup
-        await interaction.response.defer()
-        embed = interaction.message.embeds[0]
-        if self.showing_lineup:
-            file = await lineup_file(team, lineup)
-            embed.set_image(url="attachment://escalacao.png")
-            button.label, button.emoji = "Ver cartão do clube", "🛡️"
-        else:
-            file = await club_file(self.owner.id, team, lineup, self.database_path)
-            embed.set_image(url="attachment://clube.png")
-            button.label, button.emoji = "Ver escalação", "📋"
-        await interaction.edit_original_response(embed=embed, attachments=[file], view=self)
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        file = await club_file(self.owner.id, team, lineup, self.database_path)
+        await interaction.followup.send(file=file, ephemeral=True)
 
-    @discord.ui.button(label="Editar escalação", emoji="✏️", style=discord.ButtonStyle.primary)
-    async def edit(self, interaction: discord.Interaction, button) -> None:
+    async def _edit(self, interaction: discord.Interaction) -> None:
         if interaction.user.id != self.owner.id:
             await interaction.response.send_message(
                 "Use `mm!escalar` para editar o seu time.", ephemeral=True
             )
             return
         builder = LineupBuilderView(self.owner, self.database_path)
-        builder.message = interaction.message
-        await builder.refresh(interaction)
+        team, lineup = builder._state()
+        await interaction.response.defer()
+        file = await lineup_file(team, lineup)
+        builder.message = await interaction.followup.send(
+            embed=builder.embed(team, lineup), file=file, view=builder, wait=True
+        )
 
 
 class TeamCog(commands.Cog):
@@ -365,25 +391,11 @@ class TeamCog(commands.Cog):
                 return
         team = get_team(context.author.id, self.database_path)
         lineup = get_lineup(context.author.id, self.database_path)
-        status = (
-            "✅ Escalação completa."
-            if len(lineup) == 11
-            else f"Escalação: {len(lineup)}/11 titulares. Clique em **Editar escalação**."
-        )
-        embed = discord.Embed(
-            title=team["team_name"],
-            description=("Perfil do time atualizado.\n" if field else "") + status,
-            color=discord.Color.from_str(team["color"]),
-        )
-        file = await club_file(context.author.id, team, lineup, self.database_path)
-        embed.set_image(url="attachment://clube.png")
-        embed.set_footer(text="Escalação no botão · cosméticos em mm!cosmeticos")
-        await context.reply(
-            embed=embed,
-            file=file,
-            view=TeamProfileView(context.author, self.database_path),
-            mention_author=False,
-        )
+        file = await lineup_file(team, lineup)
+        layout = TeamLayout(context.author, team, lineup, self.database_path)
+        await context.reply(view=layout, file=file, mention_author=False)
+        if field:
+            await context.send("Perfil do time atualizado.", delete_after=8)
 
     @commands.command(name="escalar", aliases=["escalacao", "lineup"])
     async def scale(

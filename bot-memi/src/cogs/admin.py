@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 import random
+from io import BytesIO
 
 import discord
 from discord.ext import commands
@@ -157,6 +158,7 @@ class AdminCog(commands.Cog):
             description=(
                 "`mm!testeamistoso` — partida de teste narrada (empate vai aos pênaltis)\n"
                 "`mm!testecampeonato <n>` — campeonato de teste com final narrada\n"
+                "`mm!testeimagem` — a escalação em embed, anexo e Components V2\n"
                 "`mm!admin duplicados` — procura e remove jogadores duplicados"
             ),
             color=discord.Color.red(),
@@ -244,6 +246,38 @@ class AdminCog(commands.Cog):
     @commands.command(name="testecampeonato", hidden=True)
     async def test_championship_shortcut(self, context: commands.Context, teams: int = 6) -> None:
         await self.test_championship(context, teams)
+
+    @admin.command(name="testeimagem")
+    async def test_image(self, context: commands.Context) -> None:
+        """Manda a mesma escalação de três jeitos, para comparar o tamanho no Discord."""
+        from src.squad_image import render_squad
+        from src.teams import get_lineup, get_team
+
+        team = get_team(context.author.id, self.database_path)
+        lineup = get_lineup(context.author.id, self.database_path) if team else []
+        if team is None:
+            team = {"team_name": "Time de teste", "color": "#2E8B57", "formation": "4-3-3"}
+        image = (await asyncio.to_thread(render_squad, team, lineup)).getvalue()
+
+        def file() -> discord.File:
+            return discord.File(BytesIO(image), filename="escalacao.png")
+
+        embed = discord.Embed(title="1 · Dentro de embed", color=discord.Color.blurple())
+        embed.set_image(url="attachment://escalacao.png")
+        await context.send(embed=embed, file=file())
+        await context.send("**2 · Anexo solto** (sem embed)", file=file())
+        layout = discord.ui.LayoutView()
+        layout.add_item(
+            discord.ui.Container(
+                discord.ui.TextDisplay("**3 · Components V2** (galeria de mídia)"),
+                discord.ui.MediaGallery(discord.MediaGalleryItem("attachment://escalacao.png")),
+            )
+        )
+        await context.send(view=layout, file=file())
+
+    @commands.command(name="testeimagem", hidden=True)
+    async def test_image_shortcut(self, context: commands.Context) -> None:
+        await self.test_image(context)
 
     @admin.command(name="duplicados", aliases=["duplicatas"])
     async def duplicates(self, context: commands.Context) -> None:

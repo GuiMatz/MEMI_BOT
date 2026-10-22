@@ -55,6 +55,7 @@ class DiscordBotSetupTests(unittest.IsolatedAsyncioTestCase):
                         "temporada",
                         "temporadas",
                         "rt",
+                        "testeimagem",
                     },
                 )
                 self.assertIs(bot.get_command("ajudajogo"), bot.get_command("futae"))
