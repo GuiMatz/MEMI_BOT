@@ -13,6 +13,7 @@ from typing import Any
 
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageOps
 
+from src.crests import team_logo_path
 from src.lineup_image import _fit, _font, _rgb
 from src.roll_images import find_image
 
@@ -140,8 +141,8 @@ def monogram(name: str, color, size: int) -> Image.Image:
 
 
 def emblem(team: dict[str, Any], size: int) -> Image.Image:
-    """Emblema equipado do time, ou um monograma na cor do time."""
-    picture = load_picture(team.get("logo_path"))
+    """Escudo custom ou emblema equipado do time, ou um monograma na cor do time."""
+    picture = load_picture(team_logo_path(team))
     if picture is not None:
         return contain(picture, (size, size))
     return monogram(team.get("team_name") or "?", rgb(team.get("color") or "#2E8B57"), size)

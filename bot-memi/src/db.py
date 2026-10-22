@@ -250,6 +250,7 @@ CREATE TABLE IF NOT EXISTS game_teams (
     coach_name TEXT,
     stadium_name TEXT,
     logo_path TEXT,
+    custom_logo_path TEXT,
     kit_path TEXT,
     favorite_league TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -532,7 +533,13 @@ def initialize_database(database_path: str | Path = DATABASE_PATH) -> None:
 
         _migrate_roll_cycle_limit(connection)
         team_columns = {row["name"] for row in connection.execute("PRAGMA table_info(game_teams)")}
-        for column in ("coach_name", "stadium_name", "kit_path", "favorite_league"):
+        for column in (
+            "coach_name",
+            "stadium_name",
+            "kit_path",
+            "favorite_league",
+            "custom_logo_path",
+        ):
             if column not in team_columns:
                 connection.execute(f"ALTER TABLE game_teams ADD COLUMN {_identifier(column)} TEXT")
         _migrate_upgrade_keys(connection)

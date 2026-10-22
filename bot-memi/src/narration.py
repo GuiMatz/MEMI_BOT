@@ -1,7 +1,8 @@
 """Narração ao vivo das partidas: edita um embed lance a lance.
 
-O placar fica fixo no topo, com uma bolinha na cor de cada time. Embaixo vêm os lances
-mais recentes primeiro, em linhas curtas (minuto, time, jogador). Amarelos e chutes para
+O placar fica fixo no topo, com uma bolinha na cor de cada time. Embaixo os lances correm
+de cima para baixo, como um feed: o mais novo entra no fim, em linhas curtas (minuto,
+time, jogador). Amarelos e chutes para
 fora não poluem o ao vivo: entram no resumo do apito final, que mostra gols, cartões,
 posse, chances e o melhor em campo pela nota.
 """
@@ -267,7 +268,7 @@ def match_embed(
     lines = [line for line in (_line(event, dots) for event in events) if line]
     embed = discord.Embed(
         title=f"🏟️ {title}",
-        description=f"{board}\n{status}\n\n" + "\n".join(reversed(lines[-VISIBLE_EVENTS:])),
+        description=f"{board}\n{status}\n\n" + "\n".join(lines[-VISIBLE_EVENTS:]),
         color=color or discord.Color.red(),
     )
     return embed
