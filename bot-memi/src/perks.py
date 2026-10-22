@@ -86,6 +86,15 @@ UPGRADES: dict[str, UpgradeSpec] = {
         "#64748B",
         "⚪",
     ),
+    "claim_reset": UpgradeSpec(
+        "Renovação de Contrato",
+        "libera o mm!rt: zera o claim na hora, a cada 12 h",
+        1,
+        12_000,
+        0,
+        "#EC4899",
+        "🩷",
+    ),
     "box_office_cap": UpgradeSpec(
         "Ampliar a Bilheteria",
         "+250 no limite da bilheteria (andar 5)",
@@ -96,7 +105,7 @@ UPGRADES: dict[str, UpgradeSpec] = {
         "🟤",
     ),
     "match_income": UpgradeSpec(
-        "Patrocínio Master", "+25 na renda do amistoso", 4, 1_500, 1_000, "#111827", "⚫"
+        "Patrocínio Master", "+25 na renda do amistoso", 4, 1_500, 1_000, "#0EA5E9", "🔷"
     ),
 }
 
@@ -114,6 +123,21 @@ TOWER_FLOORS: dict[int, str] = {
     10: "+1 s de proteção de wish",
     11: "+100 no máximo do daily",
     12: "+1 bola em um jogador aleatório dos 11 escalados",
+}
+# Rótulo curto de cada andar, para a imagem da torre.
+TOWER_SHORT: dict[int, str] = {
+    1: "+2 wishes",
+    2: "Bola em dobro",
+    3: "Memilets por contratação",
+    4: "Crate -25",
+    5: "Bilheteria",
+    6: "Renda +50",
+    7: "+1 roll",
+    8: "+1 Star Wish",
+    9: "Daily -1 h",
+    10: "Proteção de wish +1 s",
+    11: "Daily máx. +100",
+    12: "+1 bola no time",
 }
 TOWER_FIRST_PRICE = 1_000
 TOWER_PRICE_STEP = 500

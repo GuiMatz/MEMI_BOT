@@ -1,0 +1,6 @@
+{
+ "description": "Jogadores extras da categoria Cartola (overall 90 no jogo). Posição na sigla do jogo: GOL, ZAG, LD, LE, MC, MEI, PE, PD ou CA.",
+ "players": [
+  {"name": "Chequer", "position": "CA", "club": "Cheréca FC"}
+ ]
+}

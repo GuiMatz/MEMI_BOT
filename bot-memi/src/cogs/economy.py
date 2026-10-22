@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
+from io import BytesIO
+
 import discord
 from discord.ext import commands
 
 from src import icons
 from src.db import DATABASE_PATH, normalize_player_name
+from src.crate_animation import opening_gif, reveal_gif
 from src.economy import (
     CRATE_DOUBLE_CHANCE,
+    CRATE_PITY_LIMIT,
     CRATE_EXTRA_CHANCES,
     CRATE_MEMILETS,
     RARITY_LABELS,
@@ -25,6 +30,7 @@ from src.economy import (
     get_upgrade_levels,
     list_wishes,
     open_crate,
+    reset_claim,
 )
 from src.cogs.common import ConfirmView, PlayerChoiceView, ambiguity_text, intro_embed
 from src.game import find_player, get_wallet, list_owned_players, register_user, resolve_player
@@ -174,10 +180,13 @@ class CrateMenuView(discord.ui.View):
 
     @discord.ui.button(label="Abrir crate", emoji="📦", style=discord.ButtonStyle.success)
     async def open_button(self, interaction: discord.Interaction, button) -> None:
-        embed = self.cog.open_crate_embed(interaction.user)
         price = get_crate_price(interaction.user.id, self.cog.database_path)
         button.label = f"Abrir outra ({_thousands(price)})"
-        await interaction.response.send_message(embed=embed)
+        await self.cog.open_with_animation(
+            interaction.user,
+            interaction.response.send_message,
+            interaction.edit_original_response,
+        )
 
 
 class DismissConfirmationView(discord.ui.View):
@@ -342,6 +351,9 @@ class EconomyCog(commands.Cog):
             f"🎁 {_percent(CRATE_DOUBLE_CHANCE)} de chance de o item vir em dobro "
             "(não vale para Memilets)."
         )
+        lines.append(
+            f"🛡️ Garantia: a cada {CRATE_PITY_LIMIT} caixas sem Raro, a seguinte traz um Raro."
+        )
         embed.description += "\n\n" + "\n".join(lines)
         balance = get_wallet(author.id, self.database_path)["memilets"]
         embed.add_field(name="Preço", value=f"{icons.memilets(price)} Memilets")
@@ -349,11 +361,30 @@ class EconomyCog(commands.Cog):
         embed.set_footer(text="mm!crates abrir abre direto · mm!cosmeticos mostra o que você tem")
         return embed, CrateMenuView(self, author, price)
 
-    def open_crate_embed(self, author: discord.abc.User) -> discord.Embed:
+    async def open_with_animation(self, author, send, edit) -> None:
+        """Abre a crate em dois tempos: o pacote treme e depois revela a raridade.
+
+        `send(**kwargs)` manda a primeira mensagem; `edit(**kwargs)` a troca pela revelação.
+        """
         try:
             result = open_crate(author.id, author.display_name, self.database_path)
         except InsufficientFunds as error:
-            return discord.Embed(description=str(error), color=discord.Color.red())
+            await send(embed=discord.Embed(description=str(error), color=discord.Color.red()))
+            return
+        opening = await asyncio.to_thread(opening_gif)
+        waiting = discord.Embed(
+            title="📦 Abrindo a crate…", color=discord.Color.from_rgb(230, 181, 74)
+        )
+        waiting.set_image(url="attachment://abrindo.gif")
+        message = await send(embed=waiting, file=discord.File(BytesIO(opening), "abrindo.gif"))
+        reveal = await asyncio.to_thread(reveal_gif, result.best_rarity)
+        await asyncio.sleep(1.6)
+        embed = self.crate_result_embed(author, result)
+        embed.set_image(url="attachment://revelacao.gif")
+        target = edit if edit is not None else message.edit
+        await target(embed=embed, attachments=[discord.File(BytesIO(reveal), "revelacao.gif")])
+
+    def crate_result_embed(self, author: discord.abc.User, result) -> discord.Embed:
         emoji, color = RARITY_STYLE[result.best_rarity]
         lines = [
             f"{RARITY_STYLE[prize.rarity][0]} **{RARITY_LABELS[prize.rarity]}** · "
@@ -374,9 +405,12 @@ class EconomyCog(commands.Cog):
         balance = get_wallet(author.id, self.database_path)["memilets"]
         embed.add_field(name="Pagou", value=f"{icons.memilets(result.price)}")
         embed.add_field(name="Saldo", value=f"{icons.memilets(balance)} Memilets")
+        if result.guaranteed:
+            embed.description += "\n🛡️ **Garantia ativada:** 40 caixas sem Raro, esta veio com um."
+        embed.add_field(name="Garantia de Raro", value=f"{result.pity}/{CRATE_PITY_LIMIT} caixas")
         if any(prize.kind.startswith("cosmetic:") for prize in result.prizes):
             embed.set_footer(
-                text="Equipe com mm!cosmeticos · cada cosmético equipado: +100 no daily"
+                text="Veja e equipe em mm!cosmeticos · cada cosmético equipado: +100 no daily"
             )
         return embed
 
@@ -384,10 +418,37 @@ class EconomyCog(commands.Cog):
     async def crates(self, context: commands.Context, action: str | None = None) -> None:
         register_user(context.author.id, context.author.display_name, self.database_path)
         if action and normalize_player_name(action) in {"abrir", "open", "1"}:
-            await context.reply(embed=self.open_crate_embed(context.author), mention_author=False)
+            await self.open_with_animation(
+                context.author,
+                lambda **kwargs: context.reply(mention_author=False, **kwargs),
+                None,
+            )
             return
         embed, view = self.crate_menu(context.author)
         await context.reply(embed=embed, view=view, mention_author=False)
+
+    @commands.command(name="rt")
+    async def reset_claim_command(self, context: commands.Context) -> None:
+        try:
+            available_at = reset_claim(
+                context.author.id, context.author.display_name, self.database_path
+            )
+        except DailyCooldown as error:
+            unix = int(error.available_at.timestamp())
+            await context.reply(
+                f"Você já usou o `mm!rt`. Ele volta <t:{unix}:R> (<t:{unix}:t>).",
+                mention_author=False,
+            )
+            return
+        except EconomyError as error:
+            await context.reply(str(error), mention_author=False)
+            return
+        unix = int(available_at.timestamp())
+        await context.reply(
+            f"{icons.upgrade('claim_reset')} Claim liberado! Pode contratar agora. "
+            f"O `mm!rt` volta <t:{unix}:R>.",
+            mention_author=False,
+        )
 
     @commands.command(name="demitir")
     async def dismiss(self, context: commands.Context, *, query: str) -> None:

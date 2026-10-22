@@ -187,7 +187,8 @@ FUTAE_SECTIONS = (
         "`mm!upgrade` — loja de upgrades (sempre pede confirmação)\n"
         "`mm!crates` — caixas com rolls, cosméticos e bônus\n"
         "`mm!construir [1-12]` / `mm!destruir` — Centro de Treinamento (torre)\n"
-        "`mm!renda` · `mm!bilheteria` — dinheiro do estádio e do campeonato",
+        "`mm!renda` · `mm!bilheteria` — dinheiro do estádio e do campeonato\n"
+        "`mm!missoes` — missões diárias e semanais · `mm!rt` — zera o claim (upgrade)",
     ),
     (
         "🎽 Clube",
@@ -202,7 +203,8 @@ FUTAE_SECTIONS = (
         "`mm!tatica capitao|falta|penalti <nome>` — capitão e cobradores\n"
         "`mm!troca @pessoa <seu> por <dela>` / `mm!demitir <nome>`\n"
         "`mm!amistoso @pessoa` — partida narrada; o 1º do dia em casa rende renda\n"
-        "`mm!campeonato` — campeonato diário; o campeão leva 500 Memilets",
+        "`mm!campeonato` — campeonato diário; o campeão leva 500 Memilets\n"
+        "`mm!temporada [mês]` — tabela do mês · `mm!temporadas` — campeão de cada mês",
     ),
 )
 

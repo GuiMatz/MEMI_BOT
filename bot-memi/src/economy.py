@@ -12,6 +12,7 @@ from src.clock import BRASILIA
 from src.cosmetics import COSMETIC_KINDS, grant, random_new_item
 from src.db import DATABASE_PATH, connect
 from src.game import register_user
+from src.missions import record
 from src.perks import (
     BONUS_LIMITS,
     CRATE_BASE_PRICE,
@@ -41,6 +42,8 @@ CRATE_MEMILETS = {
     "epico": (800, 800),
     "lendario": (1_000, 1_000),
 }
+# Garantia: a cada 40 caixas sem Raro (ou melhor), a seguinte traz pelo menos um Raro.
+CRATE_PITY_LIMIT = 40
 CRATE_ITEM_CHANCE = 0.5
 CRATE_DOUBLE_CHANCE = 0.05
 CRATE_INSTANT_ROLLS = (1, 3)
@@ -114,6 +117,8 @@ class CrateResult:
     price: int
     prizes: tuple[CratePrize, ...] = field(default_factory=tuple)
     doubled: bool = False
+    pity: int = 0
+    guaranteed: bool = False
 
     @property
     def memilets(self) -> int:
@@ -230,6 +235,7 @@ def claim_daily(
             """,
             (amount, current_time.isoformat(timespec="seconds"), user_id),
         )
+        record(connection, user_id, "daily", now=current_time)
         return DailyReward(amount, current_time + perks.daily_cooldown, cap)
 
 
@@ -310,6 +316,46 @@ def list_wishes(
     return [dict(row) for row in rows]
 
 
+CLAIM_RESET_COOLDOWN = timedelta(hours=12)
+
+
+def reset_claim(
+    discord_user_id: int | str,
+    display_name: str,
+    database_path: str | Path = DATABASE_PATH,
+    *,
+    now: datetime | None = None,
+) -> datetime:
+    """`mm!rt`: zera o claim do ciclo na hora; devolve quando o comando volta."""
+    from src.rolls import claimed_at
+
+    current_time = _utc_now(now)
+    user_id = str(discord_user_id)
+    register_user(user_id, display_name, database_path)
+    with connect(database_path) as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        if not load_perks(connection, user_id).upgrades["claim_reset"]:
+            raise EconomyError(
+                "O `mm!rt` é liberado pelo upgrade **Renovação de Contrato** (`mm!upgrade`)."
+            )
+        account = connection.execute(
+            "SELECT last_claim_at, last_rt_at FROM game_users WHERE discord_user_id = ?",
+            (user_id,),
+        ).fetchone()
+        if account["last_rt_at"]:
+            available_at = datetime.fromisoformat(account["last_rt_at"]) + CLAIM_RESET_COOLDOWN
+            if current_time < available_at:
+                raise DailyCooldown(available_at)
+        cycle_start = cycle_start_for(current_time)
+        if not account["last_claim_at"] or claimed_at(account["last_claim_at"]) < cycle_start:
+            raise EconomyError("Seu claim já está disponível; guarde o `mm!rt` para depois.")
+        connection.execute(
+            "UPDATE game_users SET last_claim_at = NULL, last_rt_at = ? WHERE discord_user_id = ?",
+            (current_time.isoformat(timespec="seconds"), user_id),
+        )
+        return current_time + CLAIM_RESET_COOLDOWN
+
+
 def get_crate_price(discord_user_id: int | str, database_path: str | Path = DATABASE_PATH) -> int:
     with connect(database_path) as connection:
         return load_perks(connection, discord_user_id).crate_price
@@ -359,6 +405,23 @@ def open_crate(
             if draw < cumulative:
                 extra = rarity
                 break
+        pity_row = connection.execute(
+            "SELECT crate_pity FROM user_upgrades WHERE discord_user_id = ? AND upgrade_key = 'rolls'",
+            (user_id,),
+        ).fetchone()
+        pity = int(pity_row["crate_pity"]) if pity_row else 0
+        guaranteed = pity + 1 >= CRATE_PITY_LIMIT and extra in (None, "incomum")
+        if guaranteed:
+            extra = "raro"
+        pity = 0 if extra in ("raro", "epico", "lendario") else min(CRATE_PITY_LIMIT, pity + 1)
+        connection.execute(
+            """
+            INSERT INTO user_upgrades (discord_user_id, upgrade_key, crate_pity) VALUES (?, 'rolls', ?)
+            ON CONFLICT(discord_user_id, upgrade_key) DO UPDATE SET crate_pity = excluded.crate_pity
+            """,
+            (user_id, pity),
+        )
+        record(connection, user_id, "crate", now=current_time)
 
         prizes: list[CratePrize] = []
         doubled = False
@@ -398,7 +461,7 @@ def open_crate(
                 """,
                 (total, user_id),
             )
-        return CrateResult(price, tuple(prizes), doubled)
+        return CrateResult(price, tuple(prizes), doubled, pity, guaranteed)
 
 
 def _give_instant_rolls(connection, user_id: str, amount: int, now: datetime) -> None:
