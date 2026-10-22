@@ -27,6 +27,8 @@ GRASS = ((26, 70, 46), (29, 77, 50))
 LINES = (255, 255, 255, 60)
 STYLE_LABELS = {"balanced": "equilibrado", "attack": "ataque total", "counter": "contra-ataque"}
 
+OFF_POSITION = (232, 176, 75)  # jogador fora da posição natural
+
 
 def squad_coordinates(formation: str) -> dict[int, tuple[int, int]]:
     """Centro de cada vaga (1-11): goleiro embaixo, ataque em cima."""
@@ -75,9 +77,15 @@ def _pitch(image: Image.Image) -> None:
 
 
 def _tile(player: dict[str, Any], position: str) -> Image.Image:
-    """Mini-carta: foto, overall na cor da série e posição."""
-    rating = int(player.get("effective_overall") or player.get("overall") or 0)
-    color = TIER_COLORS[rarity_index(rating) or 0] if rating else (120, 120, 120)
+    """Mini-carta: foto, rendimento na vaga na cor da série e posição.
+
+    Fora da posição natural, o número é o que ele rende na vaga e a posição aparece
+    como "PE›PD" (natural › vaga), em âmbar.
+    """
+    overall = int(player.get("effective_overall") or player.get("overall") or 0)
+    rating = int(player.get("slot_overall") or overall)
+    natural = player.get("natural_position") or position
+    color = TIER_COLORS[rarity_index(overall) or 0] if overall else (120, 120, 120)
     tile = Image.new("RGBA", (TILE_W, TILE_H), (0, 0, 0, 0))
     body = Image.new("RGBA", (TILE_W, TILE_H), (14, 18, 25, 255))
     picture = load_picture(player.get("photo_path"), "players", player.get("id"))
@@ -89,7 +97,12 @@ def _tile(player: dict[str, Any], position: str) -> Image.Image:
     draw = ImageDraw.Draw(body)
     draw.rectangle((0, PHOTO_H, TILE_W, TILE_H), fill=(14, 18, 25))
     draw.text((14, PHOTO_H + 26), str(rating or "—"), font=font(34, True), fill=color, anchor="lm")
-    draw.text((TILE_W - 14, PHOTO_H + 27), position, font=font(22, True), fill=MUTED, anchor="rm")
+    label, label_color = (
+        (position, MUTED) if natural == position else (f"{natural}›{position}", OFF_POSITION)
+    )
+    draw.text(
+        (TILE_W - 14, PHOTO_H + 27), label, font=font(22, True), fill=label_color, anchor="rm"
+    )
     mask = Image.new("L", (TILE_W, TILE_H), 0)
     ImageDraw.Draw(mask).rounded_rectangle((0, 0, TILE_W - 1, TILE_H - 1), 16, fill=255)
     tile.paste(body, (0, 0), mask)
@@ -122,7 +135,11 @@ def render_squad(team: dict[str, Any], players: list[dict[str, Any]]) -> BytesIO
     draw = ImageDraw.Draw(image)
 
     # Cabeçalho: nome, formação e OVR médio.
-    ratings = [int(p["effective_overall"]) for p in players if p.get("effective_overall")]
+    ratings = [
+        int(p.get("slot_overall") or p["effective_overall"])
+        for p in players
+        if p.get("effective_overall")
+    ]
     average = round(sum(ratings) / len(ratings)) if ratings else 0
     name = str(team.get("team_name") or "Meu time")
     size = 56

@@ -12,6 +12,7 @@ from src.db import DATABASE_PATH, normalize_player_name
 from src.cogs.common import PlayerChoiceView, ambiguity_text
 from src.game import list_owned_players, resolve_player
 from src.club_card import render_club_card
+from src.positions import compatible_naturals, fit, slot_rating
 from src.squad_image import render_squad
 from src.teams import (
     FORMATIONS,
@@ -65,7 +66,7 @@ async def lineup_file(team: dict, lineup: list[dict]) -> discord.File:
 
 
 class LineupBuilderView(discord.ui.View):
-    """Monta o time: escolhe a formação, clica na vaga e escolhe o jogador da posição."""
+    """Monta o time: escolhe a formação, clica na vaga e escolhe quem pode jogar nela."""
 
     def __init__(self, owner: discord.abc.User, database_path):
         super().__init__(timeout=600)
@@ -110,7 +111,7 @@ class LineupBuilderView(discord.ui.View):
         for slot, position in enumerate(positions, start=1):
             player = by_slot.get(slot)
             label = (
-                f"{position} · {player['name']} ({player['effective_overall']})"
+                f"{position} · {player['name']} ({player.get('slot_overall') or player['effective_overall']})"
                 if player
                 else f"{position} · vaga livre"
             )
@@ -131,23 +132,34 @@ class LineupBuilderView(discord.ui.View):
             position = positions[self.selected_slot - 1]
             current = by_slot.get(self.selected_slot)
             elsewhere = {int(player["id"]): int(player["slot_order"]) for player in lineup}
-            players = list_owned_players(
-                self.owner.id,
-                self.database_path,
-                limit=24,
-                position=position,
-                sort_by="overall",
-            )
+            players = [
+                {**player, "slot": slot_rating(player["overall"], natural, position)}
+                for natural in compatible_naturals(position)
+                for player in list_owned_players(
+                    self.owner.id,
+                    self.database_path,
+                    limit=24,
+                    position=natural,
+                    sort_by="overall",
+                )
+            ]
+            players.sort(key=lambda player: (-player["slot"], player["name"]))
             options = []
-            for player in players:
+            for player in players[:24]:
                 description = player["club_name"] or "Passe livre"
+                natural = player["game_position"]
+                if natural != position:
+                    description = (
+                        f"{natural} {player['overall']} · rende "
+                        f"{round(fit(natural, position) * 100)}% de {position}"
+                    )
                 if int(player["id"]) in elsewhere and int(player["id"]) != (current or {}).get(
                     "id"
                 ):
                     description = "já escalado em outra vaga (muda de lugar)"
                 options.append(
                     discord.SelectOption(
-                        label=f"{player['overall']} · {player['name']}"[:100],
+                        label=f"{player['slot']} · {player['name']}"[:100],
                         value=str(player["id"]),
                         description=description[:100],
                         default=current is not None and int(current["id"]) == int(player["id"]),
@@ -166,7 +178,7 @@ class LineupBuilderView(discord.ui.View):
                 picker.callback = self._on_player
             else:
                 picker = discord.ui.Select(
-                    placeholder=f"Você não tem nenhum {position} no elenco",
+                    placeholder=f"Ninguém do elenco joga de {position}",
                     options=[discord.SelectOption(label="—", value="none")],
                     disabled=True,
                     row=2,
@@ -243,11 +255,11 @@ class LineupBuilderView(discord.ui.View):
         await self.refresh(interaction)
 
     async def _on_auto(self, interaction: discord.Interaction) -> None:
-        filled = auto_fill_lineup(self.owner.id, self.database_path)
+        changed = auto_fill_lineup(self.owner.id, self.database_path)
         self.notice = (
-            f"🪄 {filled} vaga(s) preenchidas com seus maiores overalls."
-            if filled
-            else "Não há jogadores livres das posições que faltam."
+            f"🪄 Time montado com quem mais rende em cada vaga: {changed} jogador(es) entraram."
+            if changed
+            else "🪄 Seu time já é o mais forte possível para essa formação."
         )
         self.selected_slot = None
         await self.refresh(interaction)

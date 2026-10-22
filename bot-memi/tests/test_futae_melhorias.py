@@ -140,6 +140,39 @@ class LineupTests(DatabaseCase):
         self.assertEqual(len(lineup), 11)
         self.assertEqual(lineup[0]["id"], best_keeper)
 
+    def test_auto_fill_replaces_weaker_starters(self):
+        for position in FORMATIONS["4-3-3"]:
+            self.own(position, 60)
+        auto_fill_lineup(100, self.database_path)
+        # Os dois zagueiros têm 60; no empate fica o de menor ID, então sai o outro.
+        weak = max(
+            (p for p in get_lineup(100, self.database_path) if p["position"] == "ZAG"),
+            key=lambda player: player["id"],
+        )
+        with connect(self.database_path) as connection:
+            connection.execute(
+                "UPDATE team_tactics SET captain_player_id = ? WHERE discord_user_id = '100'",
+                (weak["id"],),
+            )
+        better = self.own("ZAG", 85, "Zagueiro novo")
+        self.assertEqual(auto_fill_lineup(100, self.database_path), 1)
+        ids = {player["id"] for player in get_lineup(100, self.database_path)}
+        self.assertIn(better, ids)
+        self.assertNotIn(weak["id"], ids)
+        with connect(self.database_path) as connection:
+            captain = connection.execute(
+                "SELECT captain_player_id FROM team_tactics WHERE discord_user_id = '100'"
+            ).fetchone()[0]
+        self.assertIsNone(captain)  # quem saiu do time perde a braçadeira
+        # Trocar à mão pelo mais fraco e rodar de novo traz o melhor de volta.
+        slot = next(
+            p["slot_order"] for p in get_lineup(100, self.database_path) if p["id"] == better
+        )
+        set_lineup_slot(100, slot, weak["id"], self.database_path)
+        self.assertEqual(auto_fill_lineup(100, self.database_path), 1)
+        self.assertIn(better, {p["id"] for p in get_lineup(100, self.database_path)})
+        self.assertEqual(auto_fill_lineup(100, self.database_path), 0)
+
     def test_formation_change_can_drop_players_without_slot(self):
         for position in FORMATIONS["4-3-3"]:
             self.own(position, 70)

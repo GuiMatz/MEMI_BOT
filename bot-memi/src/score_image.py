@@ -38,7 +38,8 @@ def _goals_by_side(goals: Iterable[Any], side: str) -> list[str]:
         if data.get("side") != side:
             continue
         minute = f"{data['minute']}'" + (f"+{data['stoppage']}" if data.get("stoppage") else "")
-        lines.append((minute, str(data.get("scorer_name") or "—")))
+        own_goal = " (contra)" if data.get("play") == "contra" else ""
+        lines.append((minute, str(data.get("scorer_name") or "—") + own_goal))
     return lines
 
 
