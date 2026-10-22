@@ -31,7 +31,7 @@ from src.game import claim_player, register_user
 from src.missions import DAILY, WEEKLY, assigned, board, claim_rewards, periods, record_event
 from src.rolls import claim_roll_offer, roll_player
 from src.score_image import render_score_card
-from src.season import parse_month, season_table
+from src.season import parse_month, season_history, season_table
 from src.teams import FORMATIONS, ensure_team, scale_player
 from src.tower import TowerStatus
 from src.tower_image import render_tower
@@ -235,6 +235,9 @@ class SeasonTests(Case):
         self.assertEqual(sum(team["titles"] for team in table), 2)
         self.assertEqual(sum(team["played"] for team in table), 8)  # 2 jogos por dia, por time
         self.assertEqual(season_table(555, "2026-09", self.database_path), [])
+        history = season_history(555, self.database_path)
+        self.assertEqual([entry["month"] for entry in history], ["2026-10"])
+        self.assertEqual(history[0]["leader"]["team_name"], table[0]["team_name"])
         self.assertEqual(parse_month("10/2026"), "2026-10")
         self.assertEqual(parse_month("outubro", NOW), "2026-10")
 

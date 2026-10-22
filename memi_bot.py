@@ -3744,6 +3744,7 @@ AJUDA_JOGO = [
             ("mm!campeonato inscrever", "inscreve seu time no campeonato diário"),
             ("mm!campeonato iniciar", "joga o campeonato; o campeão ganha 500 Memilets"),
             ("mm!temporada [mês]", "tabela do mês somando todos os campeonatos diários"),
+            ("mm!temporadas", "histórico: o campeão de cada mês"),
             ("mm!futae", "mostra só os comandos do FUT.AE"),
         ],
     ),

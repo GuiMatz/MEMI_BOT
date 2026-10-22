@@ -12,7 +12,7 @@ from src import icons
 from src.boards_image import render_missions, render_season
 from src.cosmetic_card import render_cosmetic_card
 from src.missions import board, claim_rewards
-from src.season import month_label, parse_month, season_table
+from src.season import current_month, month_label, parse_month, season_history, season_table
 from src.tower_image import render_tower
 from src.cogs.common import ConfirmView, intro_embed
 from src.cosmetics import (
@@ -424,6 +424,31 @@ class ClubCog(commands.Cog):
         await context.reply(
             embed=embed, file=file, view=MissionsView(self, context.author), mention_author=False
         )
+
+    @commands.command(name="temporadas", aliases=["seasons", "historico"])
+    async def seasons(self, context: commands.Context) -> None:
+        if context.guild is None:
+            await context.reply("A temporada é de cada servidor.", mention_author=False)
+            return
+        history = season_history(context.guild.id, self.database_path)
+        embed = intro_embed("🗓️ Temporadas", SEASON_INTRO, color=discord.Color.gold())
+        if not history:
+            embed.description += "\n\nNenhuma temporada com campeonato terminado ainda."
+        current = current_month()
+        lines = []
+        for entry in history[:24]:
+            leader = entry["leader"]
+            status = "em andamento" if entry["month"] == current else "campeão"
+            lines.append(
+                f"**{month_label(entry['month'])}** · {status}: **{leader['team_name']}** "
+                f"({leader['points']} pts, {leader['titles']} título(s)) · {entry['teams']} times"
+            )
+        if lines:
+            embed.description += "\n\n" + "\n".join(lines)
+        embed.set_footer(
+            text="mm!temporada <mês> mostra a tabela completa, ex.: mm!temporada 9/2026"
+        )
+        await context.reply(embed=embed, mention_author=False)
 
     @commands.command(name="temporada", aliases=["season"])
     async def season(self, context: commands.Context, *, month: str | None = None) -> None:

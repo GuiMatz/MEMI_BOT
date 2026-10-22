@@ -140,3 +140,27 @@ def season_table(
             team["team_name"].casefold(),
         ),
     )
+
+
+def season_history(
+    guild_id: int | str, database_path: str | Path = DATABASE_PATH
+) -> list[dict[str, Any]]:
+    """Meses com campeonato terminado, do mais novo ao mais antigo, com o líder de cada um."""
+    with connect(database_path) as connection:
+        months = [
+            row["month"]
+            for row in connection.execute(
+                """
+                SELECT DISTINCT substr(competition_date, 1, 7) AS month FROM championships
+                WHERE guild_id = ? AND status = 'completed'
+                ORDER BY month DESC
+                """,
+                (str(guild_id),),
+            )
+        ]
+    history = []
+    for month in months:
+        table = season_table(guild_id, month, database_path)
+        if table:
+            history.append({"month": month, "leader": table[0], "teams": len(table)})
+    return history

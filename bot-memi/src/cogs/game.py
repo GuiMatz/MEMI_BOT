@@ -204,7 +204,7 @@ FUTAE_SECTIONS = (
         "`mm!troca @pessoa <seu> por <dela>` / `mm!demitir <nome>`\n"
         "`mm!amistoso @pessoa` — partida narrada; o 1º do dia em casa rende renda\n"
         "`mm!campeonato` — campeonato diário; o campeão leva 500 Memilets\n"
-        "`mm!temporada [mês]` — tabela do mês com todos os campeonatos",
+        "`mm!temporada [mês]` — tabela do mês · `mm!temporadas` — campeão de cada mês",
     ),
 )
 

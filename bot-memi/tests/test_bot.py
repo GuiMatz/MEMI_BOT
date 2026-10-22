@@ -53,6 +53,7 @@ class DiscordBotSetupTests(unittest.IsolatedAsyncioTestCase):
                         "mascote",
                         "missoes",
                         "temporada",
+                        "temporadas",
                         "rt",
                     },
                 )
