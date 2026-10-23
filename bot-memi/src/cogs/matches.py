@@ -28,6 +28,7 @@ from src.missions import record_event
 from src.narration import narrate
 from src.positions import slot_rating
 from src.pve import PveError, opponent_for, record_result
+from src.pve_crests import crest_for
 from src.cogs.pve_views import PveHubView, hub_embed
 from src.score_image import render_score_gif
 from src.simulation import penalty_events, penalty_shootout_kicks, simulate_match
@@ -445,6 +446,11 @@ class MatchesCog(commands.Cog):
             await send(str(error))
             return None
         away = team.as_team()
+        # Escudo real (clube, federação ou o da Seleção Mundial); sem ele, o gerado de sempre.
+        try:
+            away["logo_path"] = await asyncio.to_thread(crest_for, team.key, self.database_path)
+        except Exception:
+            away["logo_path"] = None
         away_players = list(team.players)
         result = simulate_match(
             home["team_name"],

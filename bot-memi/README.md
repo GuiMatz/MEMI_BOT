@@ -369,7 +369,11 @@ O FUT.AE é um módulo do MeMi BOT, não um bot separado. O menu geral continua 
     aberto, ele saca sozinho o que já foi ganho.
 - `mm!desafio` (`pve`, `lendas`) abre os desafios contra times lendários, montados na hora
   com as lendas da enciclopédia (12 clubes brasileiros, seleções lendárias e a Seleção
-  Mundial), cada um na formação em que rende mais:
+  Mundial), cada um na formação em que rende mais. No placar, os clubes usam o escudo real
+  (o que o bot já baixou para a tabela `clubs`), as seleções usam o escudo da federação
+  (baixado do TheSportsDB na primeira partida para `data/photos/selecoes/`; sem
+  `THESPORTSDB_API_KEY`, usa a chave pública de teste `123`) e a Seleção Mundial tem um
+  escudo próprio (globo dourado). Sem escudo encontrado, fica o escudo gerado:
   - **Escada**: 28 degraus do mais fácil (times do mercado, força ~62) à Seleção Mundial
     (~97); vencer libera o próximo e paga 400 + 200 por degrau (só na primeira vez), com
     uma caixa a cada 5 degraus.
