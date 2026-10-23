@@ -857,6 +857,28 @@ def resolve_player(
     return None, partial
 
 
+def top_player_cards(database_path=DATABASE_PATH, limit: int = 100) -> list[dict[str, Any]]:
+    """Os melhores jogadores da roleta com os dados da carta (para o `mm!topi`)."""
+    with connect(database_path) as connection:
+        rows = connection.execute(
+            f"""
+            SELECT p.id, p.name, p.display_name, p.club_name, p.nationality,
+                   p.game_position, {GAME_OVERALL_SQL} AS overall, p.overall_source,
+                   p.photo_path, COALESCE(b.balls, 0) AS balls,
+                   o.discord_user_id AS owner_id, owner.display_name AS owner_name
+            FROM players AS p
+            LEFT JOIN player_balls AS b ON b.player_id = p.id
+            LEFT JOIN player_ownership AS o ON o.player_id = p.id
+            LEFT JOIN game_users AS owner ON owner.discord_user_id = o.discord_user_id
+            WHERE {POOL_SQL}
+            ORDER BY overall DESC, COALESCE(NULLIF(p.display_name, ''), p.name) COLLATE NOCASE, p.id
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def find_player(
     query: str,
     database_path=DATABASE_PATH,

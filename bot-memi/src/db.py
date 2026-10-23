@@ -332,6 +332,18 @@ CREATE TABLE IF NOT EXISTS trade_items (
 
 CREATE INDEX IF NOT EXISTS idx_trades_pending ON trades(recipient_id, status, expires_at);
 
+-- Galeria do mm!img: a principal é players.photo_path; a original fica como 'original'.
+CREATE TABLE IF NOT EXISTS player_images (
+    id INTEGER PRIMARY KEY,
+    player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+    image_path TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'custom' CHECK (source IN ('original', 'custom')),
+    added_by TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_player_images_player ON player_images(player_id);
+
 CREATE TABLE IF NOT EXISTS championships (
     id INTEGER PRIMARY KEY,
     guild_id TEXT NOT NULL,
@@ -428,7 +440,9 @@ CREATE TABLE IF NOT EXISTS tower_ball_grants (
     discord_user_id TEXT NOT NULL REFERENCES game_users(discord_user_id)
         ON DELETE CASCADE,
     player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
-    granted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    granted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- 0 = a torre foi destruída e a bola saiu; ao reconstruir, ela volta para este jogador.
+    active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1))
 );
 
 CREATE TABLE IF NOT EXISTS mission_progress (
@@ -575,6 +589,14 @@ def initialize_database(database_path: str | Path = DATABASE_PATH) -> None:
                 connection.execute(
                     f"ALTER TABLE player_ownership ADD COLUMN {_identifier(column)} {definition}"
                 )
+        grant_columns = {
+            row["name"] for row in connection.execute("PRAGMA table_info(tower_ball_grants)")
+        }
+        if "active" not in grant_columns:
+            connection.execute(
+                "ALTER TABLE tower_ball_grants ADD COLUMN active INTEGER NOT NULL DEFAULT 1 "
+                "CHECK (active IN (0, 1))"
+            )
         team_columns = {row["name"] for row in connection.execute("PRAGMA table_info(game_teams)")}
         for column in (
             "coach_name",

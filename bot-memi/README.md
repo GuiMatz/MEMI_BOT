@@ -285,6 +285,13 @@ O FUT.AE é um módulo do MeMi BOT, não um bot separado. O menu geral continua 
 - `mm!crates 5|10` abre várias caixas; os rolls da caixa ficam guardados (não expiram).
 - `mm!pacote` dá uma carta livre do mercado (nunca Base); carta de pacote vende por 25%
   e fica 7 dias sem poder ser vendida, doada ou trocada.
+- `mm!topi` mostra o top dos jogadores em cartas (◀ ▶ e lista).
+- `mm!img <jogador>` abre a galeria de imagens do jogador (cada página é a carta com
+  aquela imagem); com uma imagem ou GIF anexado, cadastra uma nova, sempre cortada no
+  formato da foto da carta. ⭐ deixa a imagem como principal (GIF vira carta animada).
+  Só o dono do jogador ou a moderação adiciona, troca a principal ou apaga.
+- A torre não sorteia de novo a bola do andar 12: destruir tira a bola, e reconstruir
+  devolve ao mesmo jogador. O andar 12 exige os 11 titulares.
 - `mm!personalizar` (ou o botão no `mm!time`) muda nome, cor, escudo e cosméticos com
   prévia do cartão do clube; o escudo é enviado no próprio formulário.
 - `mm!vender` (alias `mm!demitir`) mostra o valor de venda, o saldo depois e o que muda
@@ -296,6 +303,11 @@ O FUT.AE é um módulo do MeMi BOT, não um bot separado. O menu geral continua 
 ### Times e partidas
 
 - `mm!time`, `mm!escalar` e `mm!tatica` gerenciam time, escalação, formação e estilo.
+  O `mm!tatica` abre um painel com menus de formação (com "trocar e reescalar" quando a
+  escalação não cabe), estilo, capitão e cobradores, e a imagem do time.
+- `mm!vender` sem nome abre o painel de venda: filtros de raridade e posição,
+  "Selecionar todos" (mesmo mais de 25), incluir titulares, proteger com 🔒 e ver os
+  protegidos, com a cotação ao vivo. `mm!proteger` sem nome abre nos protegidos.
 - `mm!amistoso` simula partidas de 90 minutos com força por setores, xG, gols,
   artilheiros e estilos táticos.
 - `mm!campeonato` permite inscrição, início, configuração de canal e agendamento,

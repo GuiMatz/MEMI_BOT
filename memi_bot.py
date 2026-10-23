@@ -3697,6 +3697,8 @@ AJUDA_JOGO = [
             ("mm!scout <nome>", "ficha de jogador, técnico, estádio, emblema, uniforme ou mascote"),
             ("mm!top [categoria]", "catálogo: jogadores, cartola, técnicos, emblemas, mascotes…"),
             ("mm!left", "jogadores e cosméticos (emblemas, uniformes…) ainda livres"),
+            ("mm!topi", "o top dos jogadores em cartas, passando para o lado"),
+            ("mm!img <jogador>", "galeria de imagens; anexe imagem ou GIF para cadastrar"),
             (
                 "mm!elenco [@pessoa] [filtro]",
                 "cartas com ⭐ nos titulares e menu para ordenar; filtros: titulares, reservas, "
@@ -3724,7 +3726,7 @@ AJUDA_JOGO = [
                 "missões que pagam Memilets: 3 por dia e 2 maiores, renovadas toda segunda",
             ),
             ("mm!rt", "zera o claim na hora a cada 12 h (liberado por upgrade)"),
-            ("mm!vender [nome|base|abaixo 70]", "vende jogadores, mostrando o valor antes"),
+            ("mm!vender [nome]", "painel de venda com filtros, seleção em massa e 🔒"),
             ("mm!proteger <nome>", "🔒 tira o jogador de todas as vendas"),
             ("mm!troca @pessoa", "monta uma troca de jogadores e Memilets"),
             ("mm!dar @pessoa <jogador|valor>", "doa um jogador ou Memilets"),
@@ -3742,8 +3744,8 @@ AJUDA_JOGO = [
                 "mostra e equipa seus cosméticos (só os que você possui)",
             ),
             (
-                "mm!tatica capitao|falta|penalti <nome>",
-                "cobradores e capitão pelo nome; também formação e estilo",
+                "mm!tatica",
+                "painel com formação, estilo, capitão e cobradores (também por texto)",
             ),
             ("mm!amistoso @pessoa", "partida narrada; o 1º do dia em casa pode gerar renda"),
             ("mm!campeonato inscrever", "inscreve seu time no campeonato diário"),

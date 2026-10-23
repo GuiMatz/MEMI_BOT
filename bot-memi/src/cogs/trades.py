@@ -2,8 +2,9 @@
 
 Tudo mostra o resultado antes de acontecer:
 
-- `mm!vender <nome>` mostra quanto o jogador rende, o saldo depois e o que muda no time;
-  sem nome, abre um menu para vender vários reservas de uma vez (`mm!demitir` = alias).
+- `mm!vender` abre o painel de venda: filtros de raridade e posição, "Selecionar todos"
+  (mesmo mais de 25), proteger com 🔒, incluir titulares e a cotação ao vivo, tudo em
+  botões. `mm!vender <nome>` vende um jogador direto (`mm!demitir` = alias).
 - Venda rápida: `mm!vender base|comum|…`, `mm!vender abaixo 70` ou `mm!vender posicao ZAG`
   junta todos os reservas do filtro (sem limite de 25) e mostra o total antes.
 - `mm!proteger <nome>` liga/desliga o 🔒: protegido não aparece em venda nenhuma.
@@ -17,7 +18,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timezone
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterable
 from typing import Any
 
 import discord
@@ -26,10 +27,11 @@ from discord.ext import commands
 from src import icons
 from src.cogs.common import ConfirmView, PlayerChoiceView, ambiguity_text, player_label
 from src.db import DATABASE_PATH, connect, normalize_player_name
-from src.ratings import RARITY_TIERS
+from src.ratings import RARITY_TIERS, rarity_index
 from src.game import list_owned_players, register_user, resolve_player
 from src.teams import get_lineup
 from src.transactions import (
+    MAX_SALE_PLAYERS,
     MAX_TRADE_PLAYERS,
     TransactionError,
     cancel_trade,
@@ -40,6 +42,7 @@ from src.transactions import (
     sale_quote,
     sell_players,
     quick_sale_ids,
+    set_protection,
     settle_trade,
     toggle_protection,
     trade_details,
@@ -210,70 +213,255 @@ async def _finish_sale(interaction: discord.Interaction, user_id: int, ids, data
     )
 
 
-class SalePickerView(OwnerView):
-    """Escolhe vários reservas; o embed mostra a cotação na hora."""
+class SalePanelView(OwnerView):
+    """Painel de venda: filtros, seleção em massa, proteção e cotação ao vivo, tudo em botões.
 
-    def __init__(self, owner_id: int, players: list[dict[str, Any]], database_path):
+    Dois modos: **venda** (reservas vendáveis; titulares só se ligar "Incluir titulares")
+    e **protegidos** (os 🔒, para tirar a proteção). "Selecionar todos" marca todos os do
+    filtro, mesmo passando de 25; a cotação embaixo mostra total e saldo antes de vender.
+    """
+
+    def __init__(self, owner_id: int, database_path, *, preselect: Iterable[int] = ()):
         super().__init__(owner_id)
-        self.players = players
         self.database_path = database_path
-        self.values: dict[int, int] = {}
-        if players:
-            quote = sale_quote(owner_id, [player["id"] for player in players[:500]], database_path)
-            self.values = {int(player["id"]): player["value"] for player in quote["players"]}
-        self.selected: set[int] = set()
+        self.mode = "sell"
+        self.rarity: int | None = None
+        self.position: str | None = None
+        self.include_starters = False
         self.query = ""
+        self.notice = ""
+        self.selected: set[int] = set()
+        self._load()
+        self.selected = {int(i) for i in preselect if int(i) in self.by_id}
         self._build()
+
+    # Dados
+
+    def _load(self) -> None:
+        owned = list_owned_players(self.owner_id, self.database_path, limit=5000, sort_by="overall")
+        owned.reverse()  # mais fracos primeiro: é quem costuma ir embora
+        starters = {int(player["id"]) for player in get_lineup(self.owner_id, self.database_path)}
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        for player in owned:
+            player["starter"] = int(player["id"]) in starters
+            player["pack_locked"] = (player.get("pack_locked_until") or "") > now
+        self.owned = owned
+        self.by_id = {int(player["id"]): player for player in owned}
+        sellable = [p for p in owned if not p.get("locked") and not p["pack_locked"]]
+        self.values: dict[int, int] = {}
+        if sellable:
+            quote = sale_quote(self.owner_id, [p["id"] for p in sellable], self.database_path)
+            self.values = {int(p["id"]): p["value"] for p in quote["players"]}
+
+    def pool(self) -> list[dict[str, Any]]:
+        """Jogadores do modo atual, antes dos filtros."""
+        if self.mode == "protected":
+            return [p for p in self.owned if p.get("locked")]
+        return [
+            p
+            for p in self.owned
+            if not p.get("locked")
+            and not p["pack_locked"]
+            and (self.include_starters or not p["starter"])
+        ]
+
+    def filtered(self) -> list[dict[str, Any]]:
+        players = self.pool()
+        if self.rarity is not None:
+            players = [p for p in players if rarity_index(int(p["overall"] or 1)) == self.rarity]
+        if self.position:
+            players = [p for p in players if p.get("game_position") == self.position]
+        return players
+
+    # Interface
 
     def _build(self) -> None:
         self.clear_items()
+        pool = self.pool()
+        valid = {int(p["id"]) for p in pool}
+        self.selected &= valid
+        tiers: dict[int, int] = {}
+        positions: dict[str, int] = {}
+        for player in pool:
+            tier = rarity_index(int(player["overall"] or 1))
+            tiers[tier] = tiers.get(tier, 0) + 1
+            position = player.get("game_position") or "—"
+            positions[position] = positions.get(position, 0) + 1
+
+        rarity = discord.ui.Select(
+            placeholder="Raridade: todas",
+            options=[
+                discord.SelectOption(
+                    label="Todas as raridades", value="all", default=self.rarity is None
+                )
+            ]
+            + [
+                discord.SelectOption(
+                    label=f"{RARITY_TIERS[tier][0]} ({count})",
+                    value=str(tier),
+                    emoji=RARITY_TIERS[tier][1],
+                    default=self.rarity == tier,
+                )
+                for tier, count in sorted(tiers.items())
+            ],
+            row=0,
+        )
+        rarity.callback = self._rarity
+        self.add_item(rarity)
+
+        order = ("GOL", "ZAG", "LD", "LE", "MC", "MEI", "PE", "PD", "CA")
+        position = discord.ui.Select(
+            placeholder="Posição: todas",
+            options=[
+                discord.SelectOption(
+                    label="Todas as posições", value="all", default=self.position is None
+                )
+            ]
+            + [
+                discord.SelectOption(
+                    label=f"{name} ({positions[name]})", value=name, default=self.position == name
+                )
+                for name in sorted(
+                    positions, key=lambda item: order.index(item) if item in order else 99
+                )
+            ],
+            row=1,
+        )
+        position.callback = self._position
+        self.add_item(position)
+
+        players = self.filtered()
         select = _picker(
-            self.players,
+            players,
             self.selected,
             self.query,
-            placeholder="Escolha quem vender",
-            empty="Nenhum reserva para vender",
+            placeholder="Marque os jogadores" if self.mode == "sell" else "Marque quem desproteger",
+            empty="Ninguém com esse filtro",
             max_values=OPTION_LIMIT,
-            row=0,
-            values=self.values,
+            row=2,
+            values=self.values if self.mode == "sell" else None,
         )
         select.callback = self._picked
         self.add_item(select)
-        search = discord.ui.Button(label="Buscar", emoji="🔎", row=1)
-        search.callback = self._search
-        self.add_item(search)
-        everyone = discord.ui.Button(
-            label="Selecionar todos", emoji="☑️", row=1, disabled=not self.players
-        )
-        everyone.callback = self._select_all
-        self.add_item(everyone)
-        sell = discord.ui.Button(
-            label="Vender selecionados",
-            emoji="💰",
-            style=discord.ButtonStyle.danger,
-            disabled=not self.selected,
-            row=1,
-        )
-        sell.callback = self._sell
-        self.add_item(sell)
-        cancel = discord.ui.Button(label="Cancelar", row=1)
-        cancel.callback = self._cancel
-        self.add_item(cancel)
+
+        buttons = [
+            ("Buscar", "🔎", self._search, False, discord.ButtonStyle.secondary),
+            (
+                f"Selecionar todos ({len(players)})",
+                "☑️",
+                self._select_all,
+                not players,
+                discord.ButtonStyle.secondary,
+            ),
+            ("Limpar", "✖️", self._clear, not self.selected, discord.ButtonStyle.secondary),
+        ]
+        if self.mode == "sell":
+            buttons.append(
+                (
+                    "Titulares: " + ("incluídos" if self.include_starters else "fora"),
+                    "⭐",
+                    self._toggle_starters,
+                    False,
+                    discord.ButtonStyle.secondary,
+                )
+            )
+            protected = sum(1 for p in self.owned if p.get("locked"))
+            buttons.append(
+                (
+                    f"Protegidos ({protected})",
+                    "🔒",
+                    self._to_protected,
+                    False,
+                    discord.ButtonStyle.secondary,
+                )
+            )
+        else:
+            buttons.append(
+                ("Voltar à venda", "↩️", self._to_sell, False, discord.ButtonStyle.secondary)
+            )
+        for label, emoji, callback, disabled, style in buttons:
+            button = discord.ui.Button(
+                label=label, emoji=emoji, style=style, disabled=disabled, row=3
+            )
+            button.callback = callback
+            self.add_item(button)
+
+        count = len(self.selected)
+        if self.mode == "sell":
+            total = sum(self.values.get(i, 0) for i in self.selected)
+            sell = discord.ui.Button(
+                label=f"Vender {count} por {total:,}".replace(",", ".") if count else "Vender",
+                emoji="💰",
+                style=discord.ButtonStyle.danger,
+                disabled=not count,
+                row=4,
+            )
+            sell.callback = self._sell
+            self.add_item(sell)
+            lock = discord.ui.Button(
+                label=f"Proteger {count}" if count else "Proteger",
+                emoji="🔒",
+                disabled=not count,
+                row=4,
+            )
+            lock.callback = self._lock
+            self.add_item(lock)
+        else:
+            unlock = discord.ui.Button(
+                label=f"Tirar proteção de {count}" if count else "Tirar proteção",
+                emoji="🔓",
+                style=discord.ButtonStyle.primary,
+                disabled=not count,
+                row=4,
+            )
+            unlock.callback = self._unlock
+            self.add_item(unlock)
+        close = discord.ui.Button(label="Fechar", row=4)
+        close.callback = self._close
+        self.add_item(close)
 
     def embed(self) -> discord.Embed:
-        if not self.selected:
-            return discord.Embed(
+        filters = []
+        if self.rarity is not None:
+            filters.append(f"{RARITY_TIERS[self.rarity][1]} {RARITY_TIERS[self.rarity][0]}")
+        if self.position:
+            filters.append(self.position)
+        if self.query:
+            filters.append(f"“{self.query}”")
+        shown = f"Filtro: {' · '.join(filters)}" if filters else "Sem filtro"
+        if self.mode == "protected":
+            embed = discord.Embed(
+                title="🔒 Jogadores protegidos",
+                description=(
+                    "Protegidos não aparecem em venda nenhuma. Marque quem deve voltar a "
+                    f"poder ser vendido.\n{shown} · {len(self.filtered())} jogador(es)"
+                ),
+                color=discord.Color.dark_teal(),
+            )
+        elif self.selected:
+            embed = sale_embed(sale_quote(self.owner_id, self.selected, self.database_path))
+            embed.description = f"{shown}\n\n{embed.description}"
+        else:
+            hidden = []
+            if not self.include_starters:
+                hidden.append("titulares")
+            hidden.append("🔒 protegidos")
+            if any(p["pack_locked"] for p in self.owned):
+                hidden.append("📦 cartas de pacote ainda travadas")
+            embed = discord.Embed(
                 title="💰 Vender jogadores",
                 description=(
-                    "Escolha no menu os reservas que quer vender (titulares ficam de fora; "
-                    "para vender um titular use `mm!vender <nome>`). "
-                    "O valor de cada um aparece na opção e o total aparece aqui antes de "
-                    "confirmar."
+                    "Filtre por raridade e posição, marque no menu ou use **Selecionar todos**. "
+                    "O total e o saldo depois aparecem aqui antes de vender.\n"
+                    f"{shown} · {len(self.filtered())} jogador(es) · fora da lista: "
+                    + ", ".join(hidden)
+                    + "."
                 ),
                 color=discord.Color.orange(),
             )
-        quote = sale_quote(self.owner_id, self.selected, self.database_path)
-        return sale_embed(quote)
+        if self.notice:
+            embed.add_field(name="​", value=self.notice, inline=False)
+        return embed
 
     async def _refresh(self, interaction: discord.Interaction) -> None:
         self._build()
@@ -284,13 +472,26 @@ class SalePickerView(OwnerView):
             self._build()
             embed = self.embed()
             embed.set_footer(text=str(error))
-        await interaction.response.edit_message(embed=embed, view=self)
+        self.notice = ""
+        await interaction.response.edit_message(content=None, embed=embed, view=self)
+
+    # Filtros e seleção
+
+    async def _rarity(self, interaction: discord.Interaction) -> None:
+        value = interaction.data["values"][0]
+        self.rarity = None if value == "all" else int(value)
+        await self._refresh(interaction)
+
+    async def _position(self, interaction: discord.Interaction) -> None:
+        value = interaction.data["values"][0]
+        self.position = None if value == "all" else value
+        await self._refresh(interaction)
 
     async def _picked(self, interaction: discord.Interaction) -> None:
         values = {int(value) for value in interaction.data.get("values", [])}
         visible = {
             int(option.value)
-            for option in _squad_options(self.players, self.selected, self.query, self.values)
+            for option in _squad_options(self.filtered(), self.selected, self.query, self.values)
         }
         self.selected = (self.selected - visible) | values
         await self._refresh(interaction)
@@ -303,20 +504,72 @@ class SalePickerView(OwnerView):
         await interaction.response.send_modal(SearchModal("Buscar no seu elenco", apply))
 
     async def _select_all(self, interaction: discord.Interaction) -> None:
-        """Marca todos os que aparecem no menu (com a busca atual)."""
-        self.selected |= {
-            int(option.value)
-            for option in _squad_options(self.players, self.selected, self.query, self.values)
-        }
+        """Marca todos os do filtro (raridade, posição e busca), mesmo passando de 25."""
+        wanted = normalize_player_name(self.query) if self.query else ""
+        chosen = [
+            int(p["id"])
+            for p in self.filtered()
+            if not wanted or wanted in normalize_player_name(player_label(p))
+        ]
+        if self.mode == "sell" and len(self.selected | set(chosen)) > MAX_SALE_PLAYERS:
+            chosen = chosen[: max(0, MAX_SALE_PLAYERS - len(self.selected))]
+            self.notice = f"⚠️ Dá para vender até {MAX_SALE_PLAYERS} por vez; marquei os primeiros."
+        self.selected |= set(chosen)
+        await self._refresh(interaction)
+
+    async def _clear(self, interaction: discord.Interaction) -> None:
+        self.selected.clear()
+        await self._refresh(interaction)
+
+    async def _toggle_starters(self, interaction: discord.Interaction) -> None:
+        self.include_starters = not self.include_starters
+        await self._refresh(interaction)
+
+    async def _to_protected(self, interaction: discord.Interaction) -> None:
+        self.mode, self.selected, self.rarity, self.position, self.query = (
+            "protected",
+            set(),
+            None,
+            None,
+            "",
+        )
+        await self._refresh(interaction)
+
+    async def _to_sell(self, interaction: discord.Interaction) -> None:
+        self.mode, self.selected, self.rarity, self.position, self.query = (
+            "sell",
+            set(),
+            None,
+            None,
+            "",
+        )
+        await self._refresh(interaction)
+
+    # Ações
+
+    async def _lock(self, interaction: discord.Interaction) -> None:
+        changed = set_protection(self.owner_id, self.selected, True, self.database_path)
+        self.selected.clear()
+        self._load()
+        self.notice = f"🔒 {changed} jogador(es) protegido(s): saíram da lista de venda."
+        await self._refresh(interaction)
+
+    async def _unlock(self, interaction: discord.Interaction) -> None:
+        changed = set_protection(self.owner_id, self.selected, False, self.database_path)
+        self.selected.clear()
+        self._load()
+        self.notice = f"🔓 {changed} jogador(es) sem proteção: voltaram para a venda."
         await self._refresh(interaction)
 
     async def _sell(self, interaction: discord.Interaction) -> None:
         self.stop()
         await _finish_sale(interaction, self.owner_id, list(self.selected), self.database_path)
 
-    async def _cancel(self, interaction: discord.Interaction) -> None:
+    async def _close(self, interaction: discord.Interaction) -> None:
         self.stop()
-        await interaction.response.edit_message(content="Venda cancelada.", embed=None, view=None)
+        await interaction.response.edit_message(
+            content="Painel de venda fechado.", embed=None, view=None
+        )
 
 
 # --- Troca ------------------------------------------------------------------------------
@@ -674,18 +927,7 @@ class TradesCog(commands.Cog):
             await self._quick_sale(context, query, quick)
             return
         if not query:
-            starters = {
-                int(player["id"]) for player in get_lineup(context.author.id, self.database_path)
-            }
-            now = datetime.now(timezone.utc).isoformat(timespec="seconds")
-            reserves = [
-                player
-                for player in reversed(self._owned(context.author.id))
-                if int(player["id"]) not in starters
-                and not player.get("locked")
-                and not (player.get("pack_locked_until") or "") > now
-            ]
-            view = SalePickerView(context.author.id, reserves, self.database_path)
+            view = SalePanelView(context.author.id, self.database_path)
             view.message = await context.reply(embed=view.embed(), view=view, mention_author=False)
             return
 
@@ -755,19 +997,11 @@ class TradesCog(commands.Cog):
         register_user(context.author.id, context.author.display_name, self.database_path)
         owned = self._owned(context.author.id)
         if not query:
-            locked = [player for player in owned if player.get("locked")]
-            lines = [player_line(player) for player in locked[:40]] or [
-                "Nenhum ainda. Use `mm!proteger <nome>` para colocar o 🔒."
-            ]
-            embed = discord.Embed(
-                title=f"🔒 Protegidos ({len(locked)})",
-                description="\n".join(lines),
-                color=discord.Color.dark_teal(),
-            )
-            embed.set_footer(
-                text="Protegido não aparece em venda nenhuma. Repita o comando para tirar."
-            )
-            await context.reply(embed=embed, mention_author=False)
+            # Sem nome: o painel de venda já aberto nos protegidos (tudo por botão).
+            view = SalePanelView(context.author.id, self.database_path)
+            view.mode = "protected"
+            view._build()
+            view.message = await context.reply(embed=view.embed(), view=view, mention_author=False)
             return
 
         async def toggle(send, player: dict) -> None:

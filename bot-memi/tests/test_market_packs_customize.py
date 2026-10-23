@@ -16,6 +16,7 @@ from src.economy import (
     open_crates,
 )
 from src.game import claim_player, get_wallet, register_user
+from src.ratings import game_overall
 from src.packs import PACK_PRICE, PackError, open_pack
 from src.teams import ensure_team, get_team, set_lineup_slot
 from src.transactions import (
@@ -115,7 +116,7 @@ class PackRuleTests(Case):
         player = self.add_player("Do pacote", 80, owner=100)
         self.mark_pack(player, datetime.now(timezone.utc) - timedelta(minutes=1))
         quote = sale_quote(100, [player], self.database_path)
-        full = sale_value(80, None)
+        full = sale_value(game_overall(80))
         self.assertEqual(quote["total"], max(1, round(full * PACK_SALE_FACTOR)))
         self.assertIn("veio de pacote", " ".join(quote["players"][0]["warnings"]))
 
@@ -134,7 +135,9 @@ class PackRuleTests(Case):
         self.mark_pack(player, datetime.now(timezone.utc) - timedelta(minutes=1))
         give_players(100, "A", 200, "B", [player], 0, self.database_path)
         quote = sale_quote(200, [player], self.database_path)
-        self.assertEqual(quote["total"], max(1, round(sale_value(80, None) * PACK_SALE_FACTOR)))
+        self.assertEqual(
+            quote["total"], max(1, round(sale_value(game_overall(80)) * PACK_SALE_FACTOR))
+        )
 
 
 class OpenPackTests(Case):

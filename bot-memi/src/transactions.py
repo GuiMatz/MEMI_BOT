@@ -27,31 +27,31 @@ from src.db import DATABASE_PATH, connect
 from src.game import register_user
 from src.clock import brasilia_time
 from src.perks import load_perks
-from src.ratings import EFFECTIVE_OVERALL_SQL, RARITY_TIERS
+from src.ratings import EFFECTIVE_OVERALL_SQL, GAME_OVERALL_SQL, RARITY_TIERS
 
 TRADE_LIFETIME = timedelta(minutes=15)
 MAX_TRADE_PLAYERS = 5
 MAX_SALE_PLAYERS = 200
 PACK_SALE_FACTOR = 0.25
 PACK_LOCK = timedelta(days=7)
-SALE_RATE = 0.0005  # Memilets por euro de valor de mercado
+# Valor da carta pelo overall de jogo (o da carta, sem bolas): 400 Memilets no 60 e
+# +11,6% por ponto, dobrando a cada ~6 pontos (70 ≈ 1.200, 80 ≈ 3.600, 90 ≈ 10.800,
+# 97 ≈ 23.300). Carta melhor sempre vale mais; o valor de mercado real não conta.
+CARD_VALUE_AT_60 = 400
+CARD_VALUE_GROWTH = 1.116
+CARD_VALUE_MIN = 25
 
 
 class TransactionError(Exception):
     """Erro de validação de venda, doação ou troca."""
 
 
-def player_market_value(overall: int, market_value_eur: int | None) -> int:
-    if market_value_eur is not None and market_value_eur >= 0:
-        return market_value_eur
-    if not 1 <= overall <= 100:
-        raise TransactionError("Overall inválido para calcular o valor de mercado.")
-    return round(5_000 * 20_000 ** ((overall - 1) / 98))
-
-
-def sale_value(overall: int, market_value_eur: int | None, multiplier: float = 1.0) -> int:
-    """Memilets que a venda rende (valor de mercado × taxa × upgrade de venda)."""
-    return max(1, round(player_market_value(overall, market_value_eur) * SALE_RATE * multiplier))
+def sale_value(game_overall: int, multiplier: float = 1.0) -> int:
+    """Memilets que a carta rende na venda (curva pelo overall × upgrade de venda)."""
+    if not 1 <= game_overall <= 100:
+        raise TransactionError("Overall inválido para calcular o valor da carta.")
+    value = CARD_VALUE_AT_60 * CARD_VALUE_GROWTH ** (game_overall - 60) * multiplier
+    return max(CARD_VALUE_MIN, round(value))
 
 
 def market_values(
@@ -64,12 +64,11 @@ def market_values(
     marks = ", ".join("?" for _ in ids)
     with connect(database_path) as connection:
         rows = connection.execute(
-            f"SELECT id, overall, market_value_eur FROM players WHERE id IN ({marks})", ids
+            f"SELECT p.id, {GAME_OVERALL_SQL} AS game_overall FROM players AS p "
+            f"WHERE p.id IN ({marks})",
+            ids,
         ).fetchall()
-    return {
-        int(row["id"]): sale_value(int(row["overall"] or 1), row["market_value_eur"])
-        for row in rows
-    }
+    return {int(row["id"]): sale_value(int(row["game_overall"])) for row in rows}
 
 
 def _owned_players(
@@ -83,7 +82,7 @@ def _owned_players(
     rows = connection.execute(
         f"""
         SELECT p.id, COALESCE(NULLIF(p.display_name, ''), p.name) AS name, p.game_position,
-               p.club_name, p.overall AS base_overall, p.market_value_eur,
+               p.club_name, {GAME_OVERALL_SQL} AS game_overall,
                {EFFECTIVE_OVERALL_SQL} AS overall, COALESCE(b.balls, 0) AS balls,
                l.slot_order IS NOT NULL AS starter,
                x.captain_player_id = p.id AS captain,
@@ -108,7 +107,7 @@ def _owned_players(
 
 def _player_sale_value(player: dict[str, Any], multiplier: float = 1.0) -> int:
     factor = PACK_SALE_FACTOR if player.get("pack_origin") else 1.0
-    return sale_value(int(player["base_overall"]), player["market_value_eur"], multiplier * factor)
+    return sale_value(int(player["game_overall"]), multiplier * factor)
 
 
 def _pack_locked(player: dict[str, Any], now: datetime) -> datetime | None:
@@ -381,7 +380,7 @@ def trade_details(
             rows = connection.execute(
                 f"""
                 SELECT p.id, COALESCE(NULLIF(p.display_name, ''), p.name) AS name,
-                       p.game_position, p.overall AS base_overall, p.market_value_eur,
+                       p.game_position, {GAME_OVERALL_SQL} AS game_overall,
                        {EFFECTIVE_OVERALL_SQL} AS overall
                 FROM trade_items AS i
                 JOIN players AS p ON p.id = i.player_id
@@ -393,9 +392,7 @@ def trade_details(
             ).fetchall()
             players = [dict(row) for row in rows]
             for player in players:
-                player["value"] = sale_value(
-                    int(player["base_overall"]), player["market_value_eur"]
-                )
+                player["value"] = sale_value(int(player["game_overall"]))
             result[f"{side}_players"] = players
     return result
 
@@ -478,6 +475,26 @@ def toggle_protection(
             "UPDATE player_ownership SET locked = ? WHERE player_id = ?", (int(locked), player_id)
         )
     return locked
+
+
+def set_protection(
+    discord_user_id: int | str,
+    player_ids: Iterable[int],
+    locked: bool,
+    database_path: str | Path = DATABASE_PATH,
+) -> int:
+    """Põe ou tira o 🔒 de vários jogadores do dono; devolve quantos mudaram."""
+    ids = list(dict.fromkeys(int(player_id) for player_id in player_ids))
+    if not ids:
+        return 0
+    marks = ", ".join("?" for _ in ids)
+    with connect(database_path) as connection:
+        cursor = connection.execute(
+            f"UPDATE player_ownership SET locked = ? WHERE discord_user_id = ? "
+            f"AND player_id IN ({marks}) AND locked != ?",
+            (int(locked), str(discord_user_id), *ids, int(locked)),
+        )
+    return cursor.rowcount
 
 
 def quick_sale_ids(

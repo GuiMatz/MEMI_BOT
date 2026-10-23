@@ -394,7 +394,7 @@ OWN_GOAL_CHANCE = 0.025  # das chances de jogada que viram gol
 OFFSIDE_CHANCE = 0.05  # gols anulados por impedimento
 MIRACLE_THRESHOLD = 0.3  # defesa de chance clara (conversão acima disso) pode ser milagre
 MIRACLE_SHARE = 0.25
-SECOND_YELLOW_CHANCE = 0.3  # quem já tem amarelo se cuida; nem toda falta vira o segundo
+SECOND_YELLOW_CHANCE = 0.15  # quem já tem amarelo se cuida; nem toda falta vira o segundo
 
 # Dinâmica do jogo.
 HOME_ADVANTAGE = (1.07, 0.95)  # chances do mandante e do visitante
@@ -403,7 +403,7 @@ LEADING_DAMPING = 0.92  # quem está na frente administra
 EXPOSED_BOOST = 1.06  # e cede espaço quando o adversário se lança
 RED_CARD_ATTACK = 0.7  # chances de quem joga com um a menos
 RED_CARD_EXPOSURE = 1.15  # chances do adversário
-DIRECT_RED_CHANCE = 0.0005  # por minuto e por time
+DIRECT_RED_CHANCE = 0.0002  # por minuto e por time (~1 expulsão a cada 10 jogos no total)
 PRESSURE_BOOST = 1.6
 PRESSURE_MINUTES = 5
 PRESSURE_COOLDOWN = 15
