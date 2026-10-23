@@ -3744,6 +3744,10 @@ AJUDA_JOGO = [
             ("mm!troca @pessoa", "monta uma troca de jogadores e Memilets"),
             ("mm!dar @pessoa <jogador|valor>", "doa um jogador ou Memilets"),
             ("mm!pay @pessoa <quantia>", "manda Memilets para outra pessoa"),
+            (
+                "mm!mercado · mm!anunciar <jogador> <preço>",
+                "compra e venda de jogadores entre pessoas",
+            ),
             ("mm!cassino [valor]", "cara ou coroa, caça-níquel, roleta e minas"),
         ],
     ),

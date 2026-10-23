@@ -335,6 +335,12 @@ O FUT.AE é um módulo do MeMi BOT, não um bot separado. O menu geral continua 
   Memilets); a outra pessoa aceita ou recusa, e quem propôs pode cancelar.
 - `mm!dar @pessoa <jogador|valor>` doa um jogador ou Memilets, com confirmação.
 - `mm!pay @pessoa <quantia>` (ou `mm!pagar`, `mm!pix`) manda Memilets, com confirmação.
+- Mercado entre pessoas: `mm!anunciar <jogador> <preço>` põe uma carta à venda (ela fica no
+  elenco até alguém comprar; até 10 anúncios, valem 3 dias; protegidos e cartas na trava
+  do pacote não entram). `mm!mercado` lista os anúncios (mais novos, mais baratos,
+  melhores) com menu de compra; `mm!anuncios` mostra os seus e cancela. Na compra, a carta
+  sai do time de quem vendeu e quem vende recebe o preço menos 5% de taxa. Se a carta sair
+  do elenco de outro jeito, o anúncio some.
 - No roll, um jogador livre que renderia mais que o seu titular numa vaga (ou que preenche
   uma vaga vazia) vem com o aviso "⬆️ Melhor que o seu titular de CA (Fulano · 78 → 87)".
   Contratando, ele já entra no time nessa vaga (quem sai perde capitão, falta e pênalti).

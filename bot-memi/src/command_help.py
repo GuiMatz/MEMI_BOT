@@ -115,6 +115,23 @@ COMMAND_HELP: dict[str, tuple[str, str, tuple[str, ...]]] = {
         "Manda Memilets para outra pessoa, com confirmação.",
         ("mm!pay @Ana 5000", "mm!pagar @Ana 1.000"),
     ),
+    "mercado": (
+        "mm!mercado",
+        "Jogadores à venda por outras pessoas, com ordem (mais novos, mais baratos, melhores) "
+        "e um menu para comprar. Quem vende paga 5% de taxa.",
+        ("mm!mercado",),
+    ),
+    "anunciar": (
+        "mm!anunciar <jogador> <preço>",
+        "Põe um jogador seu à venda no mercado. A carta fica no seu elenco até alguém "
+        "comprar. Até 10 anúncios, valem 3 dias. Protegidos não podem ser anunciados.",
+        ("mm!anunciar Vini Jr 50000", "mm!anunciar Haaland 120k"),
+    ),
+    "anuncios": (
+        "mm!anuncios",
+        "Os seus anúncios, com o menu para tirar algum do mercado.",
+        ("mm!anuncios",),
+    ),
     "troca": (
         "mm!troca @pessoa",
         "Abre uma proposta de troca de jogadores e Memilets; os dois confirmam.",

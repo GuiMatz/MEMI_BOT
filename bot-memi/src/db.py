@@ -411,6 +411,20 @@ CREATE TABLE IF NOT EXISTS mascots (
     UNIQUE (name, owner)
 );
 
+CREATE TABLE IF NOT EXISTS market_listings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    seller_id TEXT NOT NULL REFERENCES game_users(discord_user_id) ON DELETE CASCADE,
+    player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+    price INTEGER NOT NULL CHECK (price > 0),
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active',
+    buyer_id TEXT,
+    sold_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_market_active ON market_listings(status, expires_at);
+
 CREATE TABLE IF NOT EXISTS pve_progress (
     discord_user_id TEXT PRIMARY KEY REFERENCES game_users(discord_user_id) ON DELETE CASCADE,
     ladder INTEGER NOT NULL DEFAULT 0 CHECK (ladder >= 0)

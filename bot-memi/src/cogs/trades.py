@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Awaitable, Callable, Iterable
+from datetime import datetime
 from typing import Any
 
 import discord
@@ -34,6 +35,18 @@ from src.cogs.common import (
 from src.db import DATABASE_PATH, connect, normalize_player_name
 from src.ratings import RARITY_TIERS, rarity_index
 from src.game import list_owned_players, register_user, resolve_player
+from src.market import (
+    LISTING_DAYS,
+    MARKET_FEE,
+    MAX_LISTINGS,
+    MarketError,
+    buy_listing,
+    cancel_listing,
+    create_listing,
+    fee_for,
+    list_listings,
+)
+from src.wagers import parse_wager
 from src.teams import get_lineup
 from src.transactions import (
     MAX_SALE_PLAYERS,
@@ -889,6 +902,194 @@ def _split_amounts(text: str) -> tuple[str, list[int]]:
     return text[: found.start()].strip(), [int(value) for value in found.group(1).split()]
 
 
+MARKET_PAGE = 10
+MARKET_SORTS = {"novos": "🆕 Mais novos", "baratos": "💸 Mais baratos", "melhores": "⭐ Melhores"}
+
+
+def _price(value: int) -> str:
+    return f"{value:,}".replace(",", ".")
+
+
+class MarketView(discord.ui.View):
+    """O mercado: anúncios em páginas, ordem escolhida e um menu para comprar."""
+
+    def __init__(self, cog: "TradesCog", viewer, sort: str = "novos", page: int = 0):
+        super().__init__(timeout=300)
+        self.cog = cog
+        self.viewer = viewer
+        self.sort = sort
+        self.page = page
+        self._build()
+
+    def _listings(self) -> list[dict[str, Any]]:
+        return list_listings(self.cog.database_path, sort=self.sort)
+
+    def _build(self) -> None:
+        self.clear_items()
+        listings = self._listings()
+        pages = max(1, -(-len(listings) // MARKET_PAGE))
+        self.page = min(self.page, pages - 1)
+        shown = listings[self.page * MARKET_PAGE : (self.page + 1) * MARKET_PAGE]
+        sort = discord.ui.Select(
+            options=[
+                discord.SelectOption(label=label, value=key, default=key == self.sort)
+                for key, label in MARKET_SORTS.items()
+            ],
+            row=0,
+        )
+        sort.callback = self._sorted
+        self.add_item(sort)
+        if shown:
+            buy = discord.ui.Select(
+                placeholder="🛒 Comprar um jogador…",
+                options=[
+                    discord.SelectOption(
+                        label=f"{item['name']} · {item['overall']}"[:100],
+                        description=f"{_price(item['price'])} Memilets · de {item['seller_name'] or '—'}"[
+                            :100
+                        ],
+                        value=str(item["id"]),
+                    )
+                    for item in shown
+                ],
+                row=1,
+            )
+            buy.callback = self._buy
+            self.add_item(buy)
+        for label, delta, disabled in (
+            ("◀", -1, self.page == 0),
+            ("▶", 1, self.page >= pages - 1),
+        ):
+            button = discord.ui.Button(
+                label=label, style=discord.ButtonStyle.secondary, row=2, disabled=disabled
+            )
+            button.callback = self._turner(delta)
+            self.add_item(button)
+        self.shown, self.pages, self.total = shown, pages, len(listings)
+
+    def embed(self) -> discord.Embed:
+        embed = discord.Embed(title="🏪 Mercado de jogadores", color=discord.Color.teal())
+        if not self.shown:
+            embed.description = (
+                "Nenhum jogador à venda agora. Anuncie um seu com "
+                "`mm!anunciar <jogador> <preço>`."
+            )
+        else:
+            embed.description = "\n".join(
+                f"`#{item['id']}` **{item['name']}** · {item['overall']} · "
+                f"{item['game_position'] or '—'} · {icons.memilets(item['price'])} · "
+                f"{item['seller_name'] or '—'}"
+                for item in self.shown
+            )
+        embed.set_footer(
+            text=f"Página {self.page + 1}/{self.pages} · {self.total} anúncio(s) · "
+            f"quem vende paga {round(MARKET_FEE * 100)}% de taxa · mm!anunciar para vender"
+        )
+        return embed
+
+    async def _refresh(self, interaction: discord.Interaction) -> None:
+        self._build()
+        await interaction.response.edit_message(embed=self.embed(), view=self)
+
+    async def _sorted(self, interaction: discord.Interaction) -> None:
+        self.sort, self.page = interaction.data["values"][0], 0
+        await self._refresh(interaction)
+
+    def _turner(self, delta: int):
+        async def turn(interaction: discord.Interaction) -> None:
+            self.page += delta
+            await self._refresh(interaction)
+
+        return turn
+
+    async def _buy(self, interaction: discord.Interaction) -> None:
+        listing_id = int(interaction.data["values"][0])
+        item = next((item for item in self.shown if item["id"] == listing_id), None)
+        if item is None:
+            await interaction.response.send_message("Esse anúncio saiu do mercado.", ephemeral=True)
+            return
+        buyer = interaction.user
+
+        async def confirm(confirm_interaction: discord.Interaction) -> None:
+            try:
+                purchase = buy_listing(
+                    buyer.id, buyer.display_name, listing_id, self.cog.database_path
+                )
+            except MarketError as error:
+                await confirm_interaction.response.edit_message(content=str(error), view=None)
+                return
+            await confirm_interaction.response.edit_message(
+                content=f"✅ {buyer.mention} comprou **{purchase.player_name}** por "
+                f"{icons.memilets(purchase.price)} de <@{purchase.seller_id}> "
+                f"(que recebeu {icons.memilets(purchase.price - purchase.fee)}).",
+                view=None,
+                allowed_mentions=discord.AllowedMentions(users=True),
+            )
+
+        view = ConfirmView(
+            buyer.id, confirm, confirm_label="Comprar", cancel_text="Compra cancelada."
+        )
+        await interaction.response.send_message(
+            f"🛒 Comprar **{item['name']}** ({item['overall']}) por "
+            f"{icons.memilets(item['price'])} Memilets de {item['seller_name'] or '—'}?",
+            view=view,
+            ephemeral=True,
+        )
+
+
+class MyListingsView(discord.ui.View):
+    """Os seus anúncios, com o menu para tirar algum do mercado."""
+
+    def __init__(self, cog: "TradesCog", owner):
+        super().__init__(timeout=300)
+        self.cog = cog
+        self.owner = owner
+        self.listings = list_listings(cog.database_path, seller_id=owner.id)
+        if self.listings:
+            select = discord.ui.Select(
+                placeholder="Tirar um anúncio do mercado…",
+                options=[
+                    discord.SelectOption(
+                        label=f"{item['name']} · {_price(item['price'])}"[:100],
+                        value=str(item["id"]),
+                    )
+                    for item in self.listings
+                ],
+            )
+            select.callback = self._cancel
+            self.add_item(select)
+
+    def embed(self) -> discord.Embed:
+        embed = discord.Embed(title="📋 Seus anúncios", color=discord.Color.teal())
+        embed.description = (
+            "\n".join(
+                f"`#{item['id']}` **{item['name']}** · {item['overall']} · "
+                f"{icons.memilets(item['price'])} · vence <t:{int(datetime.fromisoformat(item['expires_at']).timestamp())}:R>"
+                for item in self.listings
+            )
+            or "Você não tem anúncios. Use `mm!anunciar <jogador> <preço>`."
+        )
+        embed.set_footer(text=f"Até {MAX_LISTINGS} anúncios · valem {LISTING_DAYS} dias")
+        return embed
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner.id:
+            await interaction.response.send_message("Esses anúncios não são seus.", ephemeral=True)
+            return False
+        return True
+
+    async def _cancel(self, interaction: discord.Interaction) -> None:
+        try:
+            cancel_listing(
+                self.owner.id, int(interaction.data["values"][0]), self.cog.database_path
+            )
+        except MarketError as error:
+            await interaction.response.send_message(str(error), ephemeral=True)
+            return
+        fresh = MyListingsView(self.cog, self.owner)
+        await interaction.response.edit_message(embed=fresh.embed(), view=fresh)
+
+
 class TradesCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -1223,6 +1424,62 @@ class TradesCog(commands.Cog):
     @protect.autocomplete("query")
     async def _protect_names(self, interaction: discord.Interaction, current: str):
         return await player_choices(self.database_path, current, interaction.user.id)
+
+    @commands.command(name="mercado", aliases=["market", "feira"])
+    async def market(self, context: commands.Context) -> None:
+        """`mm!mercado`: os jogadores à venda por outras pessoas."""
+        register_user(context.author.id, context.author.display_name, self.database_path)
+        view = MarketView(self, context.author)
+        await context.reply(embed=view.embed(), view=view, mention_author=False)
+
+    @commands.command(name="anunciar", aliases=["anuncio", "listar"])
+    async def list_player(self, context: commands.Context, *, arguments: str = "") -> None:
+        """`mm!anunciar <jogador> <preço>`: põe um jogador seu à venda no mercado."""
+        words = arguments.split()
+        price = parse_wager(words[-1]) if words else None
+        name = " ".join(words[:-1]).strip()
+        if price is None or not name:
+            await context.reply(
+                "Use `mm!anunciar <jogador> <preço>`: `mm!anunciar Vini Jr 50000`.",
+                mention_author=False,
+            )
+            return
+        author = context.author
+
+        async def chosen(send, player: dict) -> None:
+            fee = fee_for(price)
+
+            async def confirm(interaction: discord.Interaction) -> None:
+                try:
+                    listing = create_listing(
+                        author.id, author.display_name, int(player["id"]), price, self.database_path
+                    )
+                except MarketError as error:
+                    await interaction.response.edit_message(content=str(error), view=None)
+                    return
+                await interaction.response.edit_message(
+                    content=f"🏪 **{player_label(player)}** anunciado por {icons.memilets(price)} "
+                    f"(anúncio `#{listing}`, vale {LISTING_DAYS} dias). Veja em `mm!mercado`.",
+                    view=None,
+                )
+
+            view = ConfirmView(
+                author.id, confirm, confirm_label="Anunciar", cancel_text="Anúncio cancelado."
+            )
+            view.message = await send(
+                content=f"🏪 Anunciar **{player_label(player)}** por {icons.memilets(price)}?\n"
+                f"Se vender, você recebe {icons.memilets(price - fee)} (taxa de "
+                f"{round(MARKET_FEE * 100)}%). A carta fica no seu elenco até alguém comprar.",
+                view=view,
+            )
+
+        await self._resolve(context, name, self._owned(author.id), chosen)
+
+    @commands.command(name="anuncios", aliases=["anúncios", "meusanuncios"])
+    async def my_listings(self, context: commands.Context) -> None:
+        """`mm!anuncios`: os seus anúncios, com a opção de tirar do mercado."""
+        view = MyListingsView(self, context.author)
+        await context.reply(embed=view.embed(), view=view, mention_author=False)
 
 
 async def setup(bot: commands.Bot) -> None:

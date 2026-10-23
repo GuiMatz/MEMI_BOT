@@ -283,6 +283,7 @@ FUTAE_SECTIONS = (
         "`mm!proteger <nome>` — 🔒 tira o jogador de todas as vendas\n"
         "`mm!troca @pessoa` — monta a troca nos menus · `mm!dar @pessoa <jogador|valor>`\n"
         "`mm!pay @pessoa <quantia>` — manda Memilets para outra pessoa\n"
+        "`mm!mercado` · `mm!anunciar <jogador> <preço>` — compra e venda entre pessoas\n"
         "`mm!cassino [valor]` — cara ou coroa, caça-níquel, roleta e minas\n"
         "`mm!amistoso @pessoa [idaevolta] [aposta N]` — partida narrada, ida e volta, apostada\n"
         "`mm!penaltis @pessoa [aposta]` — disputa de pênaltis escolhendo o canto\n"
