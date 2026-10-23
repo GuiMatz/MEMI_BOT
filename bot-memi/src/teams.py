@@ -30,6 +30,8 @@ STYLE_LABELS = {
     "balanced": "equilibrado",
     "attack": "ataque total",
     "counter": "contra-ataque",
+    "press": "pressão alta",
+    "park": "retranca",
 }
 
 POSITION_GROUPS = {
@@ -219,10 +221,19 @@ def set_team_style(
         "contra": "counter",
         "contra-ataque": "counter",
         "counter": "counter",
+        "pressao": "press",
+        "pressão": "press",
+        "pressao alta": "press",
+        "pressão alta": "press",
+        "press": "press",
+        "retranca": "park",
+        "park": "park",
     }
     normalized = aliases.get(style.casefold().strip())
     if normalized is None:
-        raise TeamError("Estilo inválido: equilibrado, ataque ou contra-ataque.")
+        raise TeamError(
+            "Estilo inválido: equilibrado, ataque, contra-ataque, pressão alta ou retranca."
+        )
     with connect(database_path) as connection:
         cursor = connection.execute(
             "UPDATE team_tactics SET style = ? WHERE discord_user_id = ?",

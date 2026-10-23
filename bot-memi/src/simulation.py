@@ -10,8 +10,11 @@ posição, `src.positions`). A partir disso:
   defende com mais gente).
 - **Meio-campo.** `CONTROL_WEIGHT` mede quem domina o jogo; o capitão soma um pouco.
 - **Chances.** Cada time cria chances conforme o próprio ataque contra a defesa
-  adversária e o controle do meio. O estilo ajusta: ataque total cria mais e se expõe;
-  contra-ataque cria menos, converte mais e cede menos.
+  adversária e o controle do meio. O estilo muda o jeito do jogo: ataque total cria mais
+  e se expõe; contra-ataque cria menos, converte mais e cede menos; pressão alta cria um
+  pouco mais e faz mais faltas; retranca fecha o jogo (pouca chance para os dois lados).
+  Os estilos se vencem em ciclo (`STYLE_BEATS`, cada um vence dois e perde para dois),
+  com vantagem leve: escolher bem ajuda, mas não vira jogo contra time bem mais forte.
 - **Finalização.** Quem chuta é sorteado entre os jogadores de ataque, com os melhores
   aparecendo mais. A conversão compara o finalizador com o goleiro: atacante bom contra
   goleiro ruim vira gol à toa; goleiro excelente segura até atacante bom.
@@ -37,6 +40,7 @@ from src.teams import POSITION_GROUPS, TeamError
 
 HALF_LENGTH = 45
 YELLOW_CARD_CHANCE = 0.018  # por minuto e por time
+PRESS_CARD_FACTOR = 1.5  # pressão alta faz mais faltas: 50% mais amarelos
 
 # Peso de cada vaga no ataque, na defesa e no controle do meio-campo.
 ATTACK_WEIGHT = {
@@ -93,9 +97,21 @@ FREE_KICK_SHARE = 0.07
 # (chances criadas, chances cedidas ao adversário, conversão)
 STYLES = {
     "balanced": (1.00, 1.00, 1.00),
-    "attack": (1.18, 1.12, 0.97),
-    "counter": (0.86, 0.90, 1.12),
+    "attack": (1.14, 1.13, 0.97),
+    "counter": (0.86, 0.90, 1.07),
+    "press": (1.07, 1.05, 1.00),
+    "park": (0.75, 0.75, 1.02),
 }
+# Pedra-papel-tesoura dos estilos: cada um vence dois e perde para dois. Quem vence cria
+# um pouco mais de chances e o outro, um pouco menos (`STYLE_EDGE`).
+STYLE_BEATS = {
+    "attack": {"balanced", "park"},
+    "counter": {"attack", "press"},
+    "balanced": {"counter", "park"},
+    "press": {"balanced", "attack"},
+    "park": {"counter", "press"},
+}
+STYLE_EDGE = 0.04
 STYLE_FACTORS = STYLES  # nome antigo
 
 
@@ -276,6 +292,15 @@ def conversion(shooter_rating: float, keeper_rating: float, style_factor: float 
     return min(MAX_CONVERSION, max(MIN_CONVERSION, value * style_factor))
 
 
+def style_matchup(style: str, opponent: str) -> float:
+    """Multiplica as chances criadas: estilo que vence o outro cria um pouco mais."""
+    if opponent in STYLE_BEATS.get(style, ()):
+        return 1 + STYLE_EDGE
+    if style in STYLE_BEATS.get(opponent, ()):
+        return 1 - STYLE_EDGE
+    return 1.0
+
+
 def expected_goals(attack: float, resistance: float) -> float:
     """Gols esperados de um ataque contra uma defesa, sem olhar jogador a jogador."""
     chances = BASE_CHANCES * math.exp(QUALITY_FACTOR * (attack - resistance))
@@ -443,7 +468,7 @@ def _pick(players, weights: dict[str, float], profile: TeamProfile, rng) -> dict
 
 
 def _possession(profiles, home_style: str, away_style: str, rng) -> int:
-    lean = {"balanced": 0, "attack": 4, "counter": -5}
+    lean = {"balanced": 0, "attack": 4, "counter": -5, "press": 3, "park": -8}
     value = (
         50
         + 1.5 * (profiles["home"].control - profiles["away"].control)
@@ -580,10 +605,12 @@ def simulate_match(
     names = {"home": home_name, "away": away_name}
     tactics = {"home": home_tactics or {}, "away": away_tactics or {}}
     styles = {"home": STYLES[home_style], "away": STYLES[away_style]}
+    style_names = {"home": home_style, "away": away_style}
     chances: dict[str, float] = {}
     for side, other in (("home", "away"), ("away", "home")):
         created = expected_chances(profiles[side], profiles[other])
         created *= styles[side][0] * styles[other][1]
+        created *= style_matchup(style_names[side], style_names[other])
         chances[side] = min(MAX_CHANCES, max(MIN_CHANCES, created))
     expected = {
         side: _expected_goals(
@@ -834,7 +861,9 @@ def simulate_match(
                     f"🟥 **Expulso!** {_name(fouler)} entra duro e recebe o vermelho direto. "
                     f"{team_name} com um a menos.",
                 )
-            elif generator.random() < YELLOW_CARD_CHANCE:
+            elif generator.random() < YELLOW_CARD_CHANCE * (
+                PRESS_CARD_FACTOR if style_names[side] == "press" else 1.0
+            ):
                 fouler = generator.choice(outfield)
                 key = (side, int(fouler["id"]))
                 if key in booked:

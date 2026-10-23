@@ -15,7 +15,7 @@ from PIL import Image, ImageDraw, ImageOps
 from src.card_image import _silhouette
 from src.lineup_image import DEPTH, SIDE, TIER_COLORS, coach_placeholder
 from src.ratings import rarity_index
-from src.teams import FORMATIONS
+from src.teams import FORMATIONS, STYLE_LABELS
 from src.visual import MUTED, emblem, fit, font, load_picture, mix, rgb, text_center, to_png
 
 WIDTH, HEIGHT = 1000, 1500
@@ -25,7 +25,6 @@ TILE_W, TILE_H = 160, 200
 PHOTO_H = 148
 GRASS = ((26, 70, 46), (29, 77, 50))
 LINES = (255, 255, 255, 60)
-STYLE_LABELS = {"balanced": "equilibrado", "attack": "ataque total", "counter": "contra-ataque"}
 
 OFF_POSITION = (232, 176, 75)  # jogador fora da posição natural
 
