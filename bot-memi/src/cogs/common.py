@@ -9,6 +9,7 @@ from typing import Any
 import discord
 
 from src.accents import rarity_color
+from src.transactions import PACK_SALE_FACTOR
 from src.card_image import animated_photo, render_player_card, render_player_card_gif
 from src.ratings import rarity_label
 
@@ -54,7 +55,7 @@ def card_embed(
     if player.get("locked"):
         lines.append("🔒 Protegido (não aparece em vendas)")
     if player.get("pack_origin"):
-        lines.append("📦 Veio de pacote: vende por 25% do valor")
+        lines.append(f"📦 Veio de pacote: vende por {round(PACK_SALE_FACTOR * 100)}% do valor")
     if "owner_name" in player:
         lines.append(f"🔒 Contratado por **{owner}**" if owner else "🟢 Livre para contratar")
     embed = discord.Embed(

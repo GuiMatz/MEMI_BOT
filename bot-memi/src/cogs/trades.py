@@ -17,7 +17,6 @@ Tudo mostra o resultado antes de acontecer:
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
 from collections.abc import Awaitable, Callable, Iterable
 from typing import Any
 
@@ -241,13 +240,11 @@ class SalePanelView(OwnerView):
         owned = list_owned_players(self.owner_id, self.database_path, limit=5000, sort_by="overall")
         owned.reverse()  # mais fracos primeiro: é quem costuma ir embora
         starters = {int(player["id"]) for player in get_lineup(self.owner_id, self.database_path)}
-        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         for player in owned:
             player["starter"] = int(player["id"]) in starters
-            player["pack_locked"] = (player.get("pack_locked_until") or "") > now
         self.owned = owned
         self.by_id = {int(player["id"]): player for player in owned}
-        sellable = [p for p in owned if not p.get("locked") and not p["pack_locked"]]
+        sellable = [p for p in owned if not p.get("locked")]
         self.values: dict[int, int] = {}
         if sellable:
             quote = sale_quote(self.owner_id, [p["id"] for p in sellable], self.database_path)
@@ -260,9 +257,7 @@ class SalePanelView(OwnerView):
         return [
             p
             for p in self.owned
-            if not p.get("locked")
-            and not p["pack_locked"]
-            and (self.include_starters or not p["starter"])
+            if not p.get("locked") and (self.include_starters or not p["starter"])
         ]
 
     def filtered(self) -> list[dict[str, Any]]:
@@ -446,8 +441,6 @@ class SalePanelView(OwnerView):
             if not self.include_starters:
                 hidden.append("titulares")
             hidden.append("🔒 protegidos")
-            if any(p["pack_locked"] for p in self.owned):
-                hidden.append("📦 cartas de pacote ainda travadas")
             embed = discord.Embed(
                 title="💰 Vender jogadores",
                 description=(

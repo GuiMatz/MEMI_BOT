@@ -101,8 +101,8 @@ RARITY_STYLE = {
 }
 PACK_INTRO = (
     "O pacote traz **uma carta de jogador** livre do mercado, direto para o seu elenco. "
-    "Nunca vem Base. A carta de pacote vende por {factor}% do valor e fica {days} dias sem "
-    "poder ser vendida, doada ou trocada."
+    "Nunca vem Base. A carta de pacote pode ser vendida na hora, por {factor}% do valor, e "
+    "fica {days} dias sem poder ser doada ou trocada."
 )
 RARITY_ITEMS_TEXT = {
     "basico": "1 a 3 rolls guardados (não expiram)",
@@ -598,8 +598,8 @@ class EconomyCog(commands.Cog):
                 f"**{overall}** · {label} · {player.get('game_position') or '—'} · "
                 f"{player.get('club_name') or 'Passe livre'}\n"
                 f"Foi direto para o seu elenco.\n"
-                f"📦 Vende por {round(PACK_SALE_FACTOR * 100)}% do valor · livre para vender, "
-                f"doar ou trocar <t:{int(result.locked_until.timestamp())}:R>."
+                f"📦 Dá para vender na hora por {round(PACK_SALE_FACTOR * 100)}% do valor · "
+                f"livre para doar ou trocar <t:{int(result.locked_until.timestamp())}:R>."
             ),
             color=rarity_color(overall),
         )

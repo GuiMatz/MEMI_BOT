@@ -33,12 +33,12 @@ UPGRADE_LABELS = {key: spec.name for key, spec in UPGRADES.items()}
 # Crates V2: toda caixa traz 1 item Básico e, com sorte, 1 item de outra raridade.
 # As chances são baixas de propósito: tirar algo raro deve ser difícil de verdade.
 CRATE_RARITIES = ("basico", "incomum", "raro", "epico", "lendario")
-CRATE_EXTRA_CHANCES = {"lendario": 0.005, "epico": 0.015, "raro": 0.05, "incomum": 0.15}
+CRATE_EXTRA_CHANCES = {"lendario": 0.006, "epico": 0.018, "raro": 0.055, "incomum": 0.16}
 # Memilets que vêm no lugar dos itens de cada raridade (um OU outro, nunca os dois).
 # Calibrado para a caixa de Memilets devolver, em média, quase o preço (~480 de 500):
 # a caixa comum não parece prejuízo e os itens raros são o lucro.
 CRATE_MEMILETS = {
-    "basico": (250, 400),
+    "basico": (240, 390),
     "incomum": (450, 600),
     "raro": (900, 900),
     "epico": (1_500, 1_500),

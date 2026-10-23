@@ -89,7 +89,7 @@ class ProtectionAndQuickSaleTests(Case):
         with self.assertRaises(TransactionError):
             toggle_protection(100, other, self.database_path)
 
-    def test_quick_sale_filters_and_skips_starters_locked_and_pack_locked(self):
+    def test_quick_sale_filters_skips_starters_and_locked_but_sells_pack_cards(self):
         # Overall bruto 45 vira 63 no jogo (Comum); 75 vira 81 (Raro).
         commons = [self.add_player(f"Comum {n}", 45, "ZAG", owner=100) for n in range(3)]
         rare = self.add_player("Raro", 75, "CA", owner=100)
@@ -97,8 +97,13 @@ class ProtectionAndQuickSaleTests(Case):
         set_lineup_slot(100, 1, starter, self.database_path)
         toggle_protection(100, commons[0], self.database_path)
         self.mark_pack(commons[1], datetime.now(timezone.utc) + timedelta(days=3))
-        self.assertEqual(quick_sale_ids(100, self.database_path, rarity="Comum"), [commons[2]])
-        self.assertEqual(quick_sale_ids(100, self.database_path, below=70), [commons[2]])
+        # Carta de pacote entra na venda (por 50%); protegido e titular ficam de fora.
+        self.assertEqual(
+            quick_sale_ids(100, self.database_path, rarity="Comum"), [commons[1], commons[2]]
+        )
+        self.assertEqual(
+            quick_sale_ids(100, self.database_path, below=70), [commons[1], commons[2]]
+        )
         self.assertEqual(quick_sale_ids(100, self.database_path, position="CA"), [rare])
         with self.assertRaises(TransactionError):
             quick_sale_ids(100, self.database_path, rarity="Inexistente")
@@ -120,15 +125,16 @@ class PackRuleTests(Case):
         self.assertEqual(quote["total"], max(1, round(full * PACK_SALE_FACTOR)))
         self.assertIn("veio de pacote", " ".join(quote["players"][0]["warnings"]))
 
-    def test_pack_lock_blocks_sale_gift_and_trade(self):
+    def test_pack_card_sells_right_away_at_half_but_cannot_be_given_or_traded(self):
         player = self.add_player("Travado", 80, owner=100)
         self.mark_pack(player, datetime.now(timezone.utc) + timedelta(days=6))
-        with self.assertRaises(TransactionError):
-            sell_players(100, [player], self.database_path)
         with self.assertRaises(TransactionError):
             give_players(100, "A", 200, "B", [player], 0, self.database_path)
         with self.assertRaises(TransactionError):
             create_trade(100, "A", 200, "B", [player], [], 0, 0, self.database_path)
+        expected = max(1, round(sale_value(game_overall(80)) * PACK_SALE_FACTOR))
+        self.assertEqual(PACK_SALE_FACTOR, 0.5)
+        self.assertEqual(sell_players(100, [player], self.database_path), expected)
 
     def test_pack_mark_follows_the_card_after_a_trade(self):
         player = self.add_player("Viajante", 80, owner=100)

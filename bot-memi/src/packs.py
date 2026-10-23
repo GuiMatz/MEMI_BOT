@@ -1,8 +1,9 @@
 """Pacote de jogador: paga Memilets e recebe uma carta livre do mercado.
 
 O pacote nunca traz Base. A carta vai direto para o elenco, marcada como "veio de
-pacote": vende por `PACK_SALE_FACTOR` do valor e passa `PACK_LOCK` sem poder ser vendida,
-doada ou trocada (`src.transactions`). Assim comprar pacote para revender nunca dá lucro.
+pacote": pode ser vendida na hora por `PACK_SALE_FACTOR` do valor e passa `PACK_LOCK`
+sem poder ser doada ou trocada (`src.transactions`). Em média um pacote vende por ~70% do
+preço: comprar para revender nunca dá lucro.
 Se não houver jogador livre na série sorteada, tenta a série de baixo e depois as de cima.
 """
 
@@ -22,7 +23,7 @@ from src.transactions import PACK_LOCK, _utc_now
 
 PACK_PRICE = 1_500
 # Série de raridade (índice em RARITY_TIERS) → chance. Soma 1.
-PACK_ODDS = {1: 0.55, 2: 0.30, 3: 0.12, 4: 0.025, 5: 0.005}
+PACK_ODDS = {1: 0.40, 2: 0.35, 3: 0.185, 4: 0.05, 5: 0.015}
 
 
 class PackError(Exception):
