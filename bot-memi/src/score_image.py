@@ -276,21 +276,26 @@ def _digit_layer(text: str, center, scale: float, fill) -> Image.Image:
     return layer
 
 
-def _sweep(progress: float) -> Image.Image:
-    """Faixa de luz diagonal que atravessa a área do placar."""
-    layer = _layer()
-    x = -200 + (WIDTH + 400) * progress
-    band = Image.new("L", (WIDTH, HEIGHT), 0)
-    ImageDraw.Draw(band).polygon([(x, 0), (x + 90, 0), (x - 60, HEIGHT), (x - 150, HEIGHT)], 60)
-    center = Image.new("L", (WIDTH, HEIGHT), 0)
-    ImageDraw.Draw(center).rectangle((430, 150, 770, 380), fill=255)
-    layer.putalpha(ImageChops.multiply(band, center).filter(ImageFilter.GaussianBlur(18)))
+def _sweep(progress: float, scale: float = 1.0) -> Image.Image:
+    """Faixa de luz diagonal que atravessa a área do placar (desenhada já no tamanho final)."""
+    width, height = round(WIDTH * scale), round(HEIGHT * scale)
+    layer = Image.new("RGBA", (width, height), (255, 255, 255, 0))
+    x = (-200 + (WIDTH + 400) * progress) * scale
+    band = Image.new("L", (width, height), 0)
+    ImageDraw.Draw(band).polygon(
+        [(x, 0), (x + 90 * scale, 0), (x - 60 * scale, height), (x - 150 * scale, height)], 60
+    )
+    center = Image.new("L", (width, height), 0)
+    ImageDraw.Draw(center).rectangle(
+        tuple(round(value * scale) for value in (430, 150, 770, 380)), fill=255
+    )
+    layer.putalpha(ImageChops.multiply(band, center).filter(ImageFilter.GaussianBlur(18 * scale)))
     return layer
 
 
-def _dust(frame: int, seed: str) -> Image.Image:
+def _dust(frame: int, seed: str, scale: float = 1.0) -> Image.Image:
     """Poeira dourada caindo devagar (sempre igual para a mesma partida)."""
-    layer = _layer()
+    layer = Image.new("RGBA", (round(WIDTH * scale), round(HEIGHT * scale)), (0, 0, 0, 0))
     draw = ImageDraw.Draw(layer)
     generator = random.Random(seed)
     for _ in range(28):
@@ -299,6 +304,7 @@ def _dust(frame: int, seed: str) -> Image.Image:
         y = (generator.uniform(-HEIGHT, HEIGHT) + frame * speed) % (HEIGHT + 40) - 20
         radius = generator.uniform(1.5, 3.5)
         alpha = int(generator.uniform(90, 200))
+        x, y, radius = x * scale, y * scale, max(1.0, radius * scale)
         draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=(*GOLD, alpha))
     return layer
 
@@ -369,19 +375,23 @@ def render_score_gif(
         content.alpha_composite(champion)
     total = EFFECT_FRAMES
     dust_seed = f"{home.get('team_name')}{away.get('team_name')}"
+    # Fundo e conteúdo não mudam entre os quadros: reduz uma vez só e desenha os efeitos
+    # já no tamanho do GIF (redimensionar cada quadro era o que mais pesava).
+    size = (round(WIDTH * GIF_SCALE), round(HEIGHT * GIF_SCALE))
+    small_background = background.resize(size, Image.LANCZOS)
+    small_content = content.resize(size, Image.LANCZOS)
+    still = small_background.copy()
+    still.alpha_composite(small_content)
     frames: list[Image.Image] = []
     for frame in range(total):
-        image = background.copy()
         if championship:
-            image.alpha_composite(_dust(frame, dust_seed))
-        image.alpha_composite(content)
-        if not championship:
-            image.alpha_composite(_sweep(frame / (total - 1)))
-        frames.append(
-            image.resize(
-                (round(WIDTH * GIF_SCALE), round(HEIGHT * GIF_SCALE)), Image.LANCZOS
-            ).convert("RGB")
-        )
+            image = small_background.copy()
+            image.alpha_composite(_dust(frame, dust_seed, GIF_SCALE))
+            image.alpha_composite(small_content)
+        else:
+            image = still.copy()
+            image.alpha_composite(_sweep(frame / (total - 1), GIF_SCALE))
+        frames.append(image.convert("RGB"))
 
     palette = frames[-1].quantize(colors=255, method=Image.Quantize.MEDIANCUT)
     indexed = [frame.quantize(palette=palette, dither=Image.Dither.NONE) for frame in frames]

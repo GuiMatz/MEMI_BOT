@@ -136,7 +136,7 @@ def _card_image(player: dict[str, Any], picture: Image.Image | None = None) -> I
 
 def to_card_png(image: Image.Image) -> BytesIO:
     buffer = BytesIO()
-    image.convert("RGB").save(buffer, format="PNG", optimize=True)
+    image.convert("RGB").save(buffer, format="PNG", compress_level=6)
     buffer.seek(0)
     return buffer
 

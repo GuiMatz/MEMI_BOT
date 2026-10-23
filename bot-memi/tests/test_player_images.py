@@ -56,6 +56,16 @@ class PlayerImageTests(unittest.TestCase):
                 "SELECT photo_path FROM players WHERE id = ?", (self.player,)
             ).fetchone()[0]
 
+    def test_first_image_of_a_player_without_photo_becomes_main(self):
+        first = add_image(self.player, picture(), 100, self.database_path, root=self.root)
+        self.assertTrue(first["main"])
+        self.assertEqual(self.photo_path(), first["image_path"])
+        second = add_image(self.player, picture(), 100, self.database_path, root=self.root)
+        self.assertFalse(second["main"])  # já tem foto: a principal não muda sozinha
+        self.assertEqual(self.photo_path(), first["image_path"])
+        images = list_images(self.player, self.database_path, root=self.root)
+        self.assertEqual([image["main"] for image in images], [True, False])
+
     def test_add_keeps_original_and_choose_main(self):
         original = self.root / "players" / f"{self.player}.png"
         original.write_bytes(picture(color=(0, 0, 200)))
@@ -144,6 +154,8 @@ class GalleryAndTopTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(viewer.make_main.disabled)
         self.assertIn("Só o dono", viewer.page().description)
         root = Path(self.tempdir.name)
+        first = add_image(int(player["id"]), picture(), 1, self.database_path, root=root)
+        self.assertTrue(first["main"])  # sem foto: a primeira já vira a principal
         added = add_image(int(player["id"]), picture(), 1, self.database_path, root=root)
         editor = ImageGalleryView(player, 1, True, self.database_path, start=added["id"])
         self.assertFalse(editor.make_main.disabled)

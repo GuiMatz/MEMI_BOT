@@ -6,6 +6,8 @@ arredondados, texto branco em Manrope e a cor do time ou da raridade como destaq
 
 from __future__ import annotations
 
+from functools import lru_cache
+
 import math
 from io import BytesIO
 from pathlib import Path
@@ -163,8 +165,13 @@ def pill(draw, center, text, size, fill, text_fill=(15, 15, 20), padding=(18, 8)
     return half_w * 2
 
 
+@lru_cache(maxsize=16)
 def noise(size: tuple[int, int], amount: int = 10, seed: int = 7) -> Image.Image:
-    """Granulado sutil (deixa os gradientes menos chapados)."""
+    """Granulado sutil (deixa os gradientes menos chapados).
+
+    É sempre o mesmo para o mesmo tamanho, então fica em cache (gerar custava ~0,3 s).
+    Quem usa não altera a imagem devolvida.
+    """
     import random
 
     generator = random.Random(seed)
@@ -204,7 +211,7 @@ def star(cx: float, cy: float, outer: float, inner: float, rotation: float = 0.0
 
 def to_png(image: Image.Image) -> BytesIO:
     buffer = BytesIO()
-    image.convert("RGB").save(buffer, format="PNG", optimize=True)
+    image.convert("RGB").save(buffer, format="PNG", compress_level=6)
     buffer.seek(0)
     return buffer
 

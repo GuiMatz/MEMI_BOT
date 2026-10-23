@@ -232,7 +232,7 @@ def render_lineup(
     _draw_coach(image, team, color)
 
     buffer = BytesIO()
-    image.convert("RGB").save(buffer, format="PNG", optimize=True)
+    image.convert("RGB").save(buffer, format="PNG", compress_level=6)
     buffer.seek(0)
     return buffer
 

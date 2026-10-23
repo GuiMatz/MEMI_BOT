@@ -3699,7 +3699,8 @@ AJUDA_JOGO = [
             ("mm!left", "jogadores e cosméticos (emblemas, uniformes…) ainda livres"),
             ("mm!topi", "o top dos jogadores em cartas, passando para o lado"),
             ("mm!stats [@pessoa]", "estatísticas do time, por campeonato, amistoso e rival"),
-            ("mm!img <jogador>", "galeria de imagens; anexe imagem ou GIF para cadastrar"),
+            ("mm!img <jogador>", "galeria de imagens: 📷 adicionar e ⭐ escolher a principal"),
+            ("mm!semfoto [meus]", "jogadores sem foto, um por vez, para preencher rápido"),
             (
                 "mm!elenco [@pessoa] [filtro]",
                 "cartas com ⭐ nos titulares e menu para ordenar; filtros: titulares, reservas, "

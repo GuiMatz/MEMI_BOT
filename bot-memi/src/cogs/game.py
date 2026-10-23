@@ -27,9 +27,17 @@ from src.game import (
     list_owned_players,
     register_user,
     search_catalog,
+    search_players,
     top_player_cards,
 )
-from src.player_images import ImageError, add_image, delete_image, list_images, set_main
+from src.player_images import (
+    ImageError,
+    add_image,
+    delete_image,
+    list_images,
+    missing_photos,
+    set_main,
+)
 from src.roll_images import find_image, image_file
 from src.teams import get_lineup
 
@@ -236,7 +244,8 @@ FUTAE_SECTIONS = (
         "`mm!left` — jogadores e cosméticos ainda livres\n"
         "`mm!stats [@pessoa]` — vitórias, gols e artilheiros, por campeonato ou amistoso\n"
         "`mm!topi` — o top dos jogadores em cartas, passando para o lado\n"
-        "`mm!img <jogador>` — galeria de imagens; anexe uma imagem ou GIF para cadastrar\n"
+        "`mm!img <jogador>` — galeria de imagens (📷 Adicionar, ⭐ principal)\n"
+        "`mm!semfoto [meus]` — jogadores sem foto, um por vez, para preencher em sequência\n"
         "`mm!elenco [@pessoa] [titulares|reservas|filtro]` — cartas com ⭐ nos titulares "
         "e menu para ordenar\n"
         "`mm!wish`, `mm!wishlist`/`mm!wl`, `mm!starwish`/`mm!sw` — wishes",
@@ -301,6 +310,169 @@ GENERAL_HELP_PAGES = (
 )
 
 
+class PhotoUploadModal(discord.ui.Modal):
+    """Formulário com a imagem anexada; `on_upload(interaction, bytes)` faz o resto."""
+
+    def __init__(self, player_name: str, on_upload):
+        super().__init__(title=f"Foto de {player_name}"[:45])
+        self.on_upload = on_upload
+        self.upload = discord.ui.FileUpload(max_values=1)
+        self.add_item(
+            discord.ui.Label(
+                text="Imagem ou GIF",
+                description="Ela é cortada no formato da carta. Rosto no alto fica melhor.",
+                component=self.upload,
+            )
+        )
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        files = list(self.upload.values or [])
+        if not files:
+            await interaction.response.send_message("Nenhuma imagem enviada.", ephemeral=True)
+            return
+        try:
+            data = await files[0].read()
+        except discord.HTTPException:
+            await interaction.response.send_message("Não consegui baixar a imagem.", ephemeral=True)
+            return
+        await self.on_upload(interaction, data)
+
+
+def can_edit_photos(member, player: dict) -> bool:
+    """Dono do jogador ou moderação mexem nas fotos (a primeira foto é livre)."""
+    moderator = bool(getattr(getattr(member, "guild_permissions", None), "manage_guild", False))
+    return moderator or str(player.get("owner_id") or "") == str(member.id)
+
+
+class MissingPhotosView(discord.ui.View):
+    """`mm!semfoto`: um jogador sem foto por vez; enviar a foto já passa para o próximo."""
+
+    def __init__(self, member, database_path, *, mine: bool = False):
+        super().__init__(timeout=900)
+        self.member = member
+        self.database_path = database_path
+        self.mine = mine
+        self.index = 0
+        self.notice = ""
+        self.message: discord.Message | None = None
+        self._load()
+
+    def _load(self) -> None:
+        self.missing, self.total = missing_photos(
+            self.database_path, owner_id=self.member.id if self.mine else None
+        )
+        self.index = min(self.index, max(0, len(self.missing) - 1))
+        self._sync()
+
+    def current(self) -> dict | None:
+        if not self.missing:
+            return None
+        found = search_players(str(self.missing[self.index]), self.database_path, limit=1)
+        return found[0] if found else None
+
+    def _sync(self) -> None:
+        self.previous.disabled = self.index == 0
+        self.next.disabled = self.index >= len(self.missing) - 1
+        self.upload.disabled = not self.missing
+        self.scope.label = "Ver todos" if self.mine else "Só os meus"
+
+    def page(self, player: dict | None) -> discord.Embed:
+        done = self.total - len(self.missing)
+        share = done / self.total if self.total else 1
+        scope = "do seu elenco" if self.mine else "do mercado"
+        header = f"📸 **{done}/{self.total}** jogadores {scope} com foto ({share:.0%})"
+        if player is None:
+            embed = discord.Embed(
+                title="📸 Fotos completas!",
+                description=f"{header}\nNenhum jogador {scope} está sem foto. 🎉",
+                color=discord.Color.green(),
+            )
+            return embed
+        embed = card_embed(
+            player,
+            title_prefix="📷 Sem foto · ",
+            footer=f"{self.index + 1}/{len(self.missing)} sem foto · do maior overall para o menor",
+        )
+        embed.description = (
+            f"{header}\n{embed.description}\n\n"
+            "Toque em **📷 Enviar foto** e anexe a imagem: ela já vira a foto da carta e "
+            "o painel passa para o próximo." + (f"\n\n{self.notice}" if self.notice else "")
+        )
+        return embed
+
+    async def send(self, send) -> None:
+        player = self.current()
+        kwargs = {"embed": self.page(player), "view": self}
+        if player is not None:
+            kwargs["file"] = await card_file(player)
+        self.message = await send(**kwargs)
+
+    async def _show(self, interaction: discord.Interaction) -> None:
+        self._sync()
+        player = self.current()
+        if not interaction.response.is_done():
+            await interaction.response.defer()
+        attachments = [await card_file(player)] if player is not None else []
+        await interaction.edit_original_response(
+            embed=self.page(player), attachments=attachments, view=self
+        )
+        self.notice = ""
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.member.id:
+            await interaction.response.send_message(
+                "Use `mm!semfoto` para abrir o seu painel.", ephemeral=True
+            )
+            return False
+        return True
+
+    @discord.ui.button(label="◀", style=discord.ButtonStyle.secondary)
+    async def previous(self, interaction: discord.Interaction, button) -> None:
+        self.index -= 1
+        await self._show(interaction)
+
+    @discord.ui.button(label="Enviar foto", emoji="📷", style=discord.ButtonStyle.success)
+    async def upload(self, interaction: discord.Interaction, button) -> None:
+        player = self.current()
+        if player is None:
+            await self._show(interaction)
+            return
+
+        async def save(modal_interaction: discord.Interaction, data: bytes) -> None:
+            try:
+                add_image(int(player["id"]), data, self.member.id, self.database_path)
+            except ImageError as error:
+                await modal_interaction.response.send_message(str(error), ephemeral=True)
+                return
+            name = player.get("display_name") or player["name"]
+            self.notice = f"✅ Foto de **{name}** salva. Próximo:"
+            self._load()  # quem ganhou foto sai da lista; o índice já aponta o próximo
+            await self._show(modal_interaction)
+
+        await interaction.response.send_modal(
+            PhotoUploadModal(player.get("display_name") or player["name"], save)
+        )
+
+    @discord.ui.button(label="▶", style=discord.ButtonStyle.secondary)
+    async def next(self, interaction: discord.Interaction, button) -> None:
+        self.index += 1
+        await self._show(interaction)
+
+    @discord.ui.button(label="Só os meus", style=discord.ButtonStyle.secondary)
+    async def scope(self, interaction: discord.Interaction, button) -> None:
+        self.mine = not self.mine
+        self.index = 0
+        self._load()
+        await self._show(interaction)
+
+    async def on_timeout(self) -> None:
+        if self.message:
+            try:
+                await self.message.edit(view=None)
+            except discord.HTTPException:
+                pass
+
+
 class ImageGalleryView(discord.ui.View):
     """`mm!img`: uma carta por imagem; ⭐ deixa a imagem como principal da carta."""
 
@@ -325,6 +497,7 @@ class ImageGalleryView(discord.ui.View):
         self.next.disabled = self.index >= len(self.images) - 1
         self.make_main.disabled = not self.can_edit or image is None or image["main"]
         self.delete.disabled = not self.can_edit or image is None or image["source"] == "original"
+        self.add.disabled = not (self.can_edit or not self.images)
 
     def current(self) -> dict | None:
         return self.images[self.index] if self.images else None
@@ -380,6 +553,28 @@ class ImageGalleryView(discord.ui.View):
     async def next(self, interaction: discord.Interaction, button) -> None:
         self.index += 1
         await self._show(interaction)
+
+    @discord.ui.button(label="Adicionar", emoji="📷", style=discord.ButtonStyle.primary)
+    async def add(self, interaction: discord.Interaction, button) -> None:
+        async def save(modal_interaction: discord.Interaction, data: bytes) -> None:
+            try:
+                added = add_image(int(self.player["id"]), data, self.viewer_id, self.database_path)
+            except ImageError as error:
+                await modal_interaction.response.send_message(str(error), ephemeral=True)
+                return
+            self.images = list_images(int(self.player["id"]), self.database_path)
+            self.index = next(
+                (i for i, image in enumerate(self.images) if image["id"] == added["id"]), 0
+            )
+            self.notice = (
+                "✅ Foto salva e já aplicada na carta."
+                if added["main"]
+                else "✅ Imagem cadastrada. Toque em ⭐ para usar como principal."
+            )
+            await self._show(modal_interaction)
+
+        name = self.player.get("display_name") or self.player["name"]
+        await interaction.response.send_modal(PhotoUploadModal(name, save))
 
     @discord.ui.button(label="Usar como principal", emoji="⭐", style=discord.ButtonStyle.success)
     async def make_main(self, interaction: discord.Interaction, button) -> None:
@@ -541,7 +736,37 @@ class GameCog(commands.Cog):
         if not players:
             await context.reply("Ainda não há jogadores na roleta.", mention_author=False)
             return
-        view = CardPagerView(players, title="TOP jogadores", line_format=top_line)
+        view = CardPagerView(
+            players, title="TOP jogadores", line_format=top_line, on_photos=self._open_gallery
+        )
+        await view.send(lambda **kwargs: context.reply(mention_author=False, **kwargs))
+
+    async def _open_gallery(self, interaction: discord.Interaction, card: dict) -> None:
+        """Botão 🖼️ Fotos das cartas: abre a galeria do jogador que está na tela."""
+        found = search_players(str(card["id"]), self.database_path, limit=1)
+        if not found:
+            await interaction.response.send_message("Jogador não encontrado.", ephemeral=True)
+            return
+        player = found[0]
+        view = ImageGalleryView(
+            player,
+            interaction.user.id,
+            can_edit_photos(interaction.user, player),
+            self.database_path,
+        )
+        await interaction.response.defer()
+        view.message = await interaction.followup.send(
+            embed=view.page(), file=await card_file(view.card()), view=view, wait=True
+        )
+
+    @commands.command(name="semfoto", aliases=["semfotos", "fotos"])
+    async def missing_photos_panel(
+        self, context: commands.Context, scope: str | None = None
+    ) -> None:
+        """Jogadores sem foto, um por vez, para preencher em sequência."""
+        register_user(context.author.id, context.author.display_name, self.database_path)
+        mine = normalize_player_name(scope or "") in {"meus", "minhas", "eu", "elenco"}
+        view = MissingPhotosView(context.author, self.database_path, mine=mine)
         await view.send(lambda **kwargs: context.reply(mention_author=False, **kwargs))
 
     @commands.command(name="img", aliases=["imagem", "imagens"])
@@ -550,8 +775,8 @@ class GameCog(commands.Cog):
         name = (query or "").strip().strip('"').strip("“”").strip()
         if not name:
             await context.reply(
-                "Use `mm!img <jogador>` para ver as imagens, ou anexe uma imagem na mesma "
-                "mensagem para cadastrar uma nova.",
+                "Use `mm!img <jogador>` para ver e adicionar imagens (botão 📷 Adicionar ou "
+                "uma imagem anexada no comando). Para achar quem está sem foto: `mm!semfoto`.",
                 mention_author=False,
             )
             return
@@ -560,20 +785,20 @@ class GameCog(commands.Cog):
             for attachment in context.message.attachments
             if (attachment.content_type or "").startswith("image/")
         ]
-        moderator = bool(
-            getattr(getattr(context.author, "guild_permissions", None), "manage_guild", False)
-        )
 
         async def open_gallery(send, player: dict) -> None:
-            can_edit = moderator or str(player.get("owner_id") or "") == str(context.author.id)
+            can_edit = can_edit_photos(context.author, player)
             start = None
             notice = ""
             if uploads:
-                if not can_edit:
+                # A primeira foto de quem não tem nenhuma é livre: todo mundo ajuda a completar.
+                first_photo = not list_images(int(player["id"]), self.database_path)
+                if not (can_edit or first_photo):
                     await send(
                         content=(
-                            f"Só o dono de **{player_label(player)}** (ou a moderação) pode "
-                            "adicionar imagens a ele."
+                            f"**{player_label(player)}** já tem foto: só o dono dele (ou a "
+                            "moderação) adiciona outras. Para ajudar com quem está sem foto, "
+                            "use `mm!semfoto`."
                         ),
                         embed=None,
                         view=None,
@@ -593,7 +818,11 @@ class GameCog(commands.Cog):
                     await send(content=message, embed=None, view=None)
                     return
                 start = added["id"]
-                notice = "✅ Imagem cadastrada. Toque em ⭐ para usar como principal."
+                notice = (
+                    "✅ Imagem cadastrada e já aplicada na carta (o jogador não tinha foto)."
+                    if added["main"]
+                    else "✅ Imagem cadastrada. Toque em ⭐ para usar como principal."
+                )
             view = ImageGalleryView(
                 player, context.author.id, can_edit, self.database_path, start=start
             )
@@ -714,7 +943,13 @@ class GameCog(commands.Cog):
         title = f"Elenco de {target.display_name} ({len(players)} · ⭐ {starters} titulares)"
         if filter_text:
             title += f" · {filter_text}"
-        view = CardPagerView(players, title=title, line_format=roster_line, sorts=ROSTER_SORTS)
+        view = CardPagerView(
+            players,
+            title=title,
+            line_format=roster_line,
+            sorts=ROSTER_SORTS,
+            on_photos=self._open_gallery,
+        )
         await view.send(lambda **kwargs: context.reply(mention_author=False, **kwargs))
 
     @commands.command(name="carteira", aliases=["saldo", "wallet", "bal"])

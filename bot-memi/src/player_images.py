@@ -13,6 +13,7 @@ Quem pode adicionar, trocar a principal e apagar: o dono do jogador ou a modera�
 
 from __future__ import annotations
 
+import os
 from io import BytesIO
 from pathlib import Path
 from typing import Any
@@ -152,7 +153,11 @@ def add_image(
     *,
     root: Path = PHOTO_ROOT,
 ) -> dict[str, Any]:
-    """Cadastra a imagem (sem trocar a principal) e devolve o registro dela."""
+    """Cadastra a imagem e devolve o registro dela.
+
+    Se o jogador ainda não tinha foto nenhuma, a imagem já vira a principal da carta;
+    se tinha, a principal continua a mesma até alguém escolher outra (⭐).
+    """
     content, extension = normalize_image(data)
     with connect(database_path) as connection:
         _ensure_original(connection, player_id, root)
@@ -172,7 +177,16 @@ def add_image(
         connection.execute(
             "UPDATE player_images SET image_path = ? WHERE id = ?", (relative, image_id)
         )
-    return {"id": image_id, "image_path": relative, "source": "custom", "main": False}
+        current = connection.execute(
+            "SELECT photo_path FROM players WHERE id = ?", (player_id,)
+        ).fetchone()["photo_path"]
+        main = _original_file(current, player_id, root) is None
+        if main:
+            connection.execute(
+                "UPDATE players SET photo_path = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (relative, player_id),
+            )
+    return {"id": image_id, "image_path": relative, "source": "custom", "main": main}
 
 
 def set_main(player_id: int, image_id: int, database_path: str | Path = DATABASE_PATH) -> None:
@@ -220,3 +234,57 @@ def delete_image(
                 (original["image_path"] if original else None, player_id),
             )
     (root / row["image_path"]).unlink(missing_ok=True)
+
+
+def _photo_files(root: Path) -> set[int]:
+    """Ids que têm arquivo baixado em `players/<id>.*` (uma leitura da pasta)."""
+    folder = root / "players"
+    if not folder.is_dir():
+        return set()
+    return {
+        int(entry.name.split(".", 1)[0])
+        for entry in os.scandir(folder)
+        if entry.is_file() and entry.name.split(".", 1)[0].isdigit()
+    }
+
+
+def missing_photos(
+    database_path: str | Path = DATABASE_PATH,
+    *,
+    owner_id: int | str | None = None,
+    root: Path = PHOTO_ROOT,
+) -> tuple[list[int], int]:
+    """Jogadores do mercado sem foto, do maior overall para o menor, e o total do mercado.
+
+    Com `owner_id`, só os do elenco dessa pessoa.
+    """
+    from src.pool_cache import snapshot  # o índice do mercado importa o banco
+
+    files = _photo_files(root)
+    with connect(database_path) as connection:
+        pool = snapshot(connection, database_path)
+        paths = {
+            int(row["id"]): row["photo_path"]
+            for row in connection.execute(
+                "SELECT id, photo_path FROM players WHERE photo_path IS NOT NULL"
+            )
+        }
+        owned = None
+        if owner_id is not None:
+            owned = {
+                int(row["player_id"])
+                for row in connection.execute(
+                    "SELECT player_id FROM player_ownership WHERE discord_user_id = ?",
+                    (str(owner_id),),
+                )
+            }
+
+    def has_photo(player_id: int) -> bool:
+        if player_id in files:
+            return True
+        path = paths.get(player_id)
+        return bool(path) and _original_file(path, player_id, root) is not None
+
+    candidates = pool.ranking if owned is None else [i for i in pool.ranking if i in owned]
+    missing = [player_id for player_id in candidates if not has_photo(player_id)]
+    return missing, len(candidates)

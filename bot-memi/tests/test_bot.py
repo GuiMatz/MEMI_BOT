@@ -31,6 +31,7 @@ class DiscordBotSetupTests(unittest.IsolatedAsyncioTestCase):
                         "topi",
                         "stats",
                         "img",
+                        "semfoto",
                         "carteira",
                         "vender",
                         "proteger",
