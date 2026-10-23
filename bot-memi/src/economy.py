@@ -33,17 +33,20 @@ UPGRADE_LABELS = {key: spec.name for key, spec in UPGRADES.items()}
 # Crates V2: toda caixa traz 1 item Básico e, com sorte, 1 item de outra raridade.
 # As chances são baixas de propósito: tirar algo raro deve ser difícil de verdade.
 CRATE_RARITIES = ("basico", "incomum", "raro", "epico", "lendario")
-CRATE_EXTRA_CHANCES = {"lendario": 0.004, "epico": 0.012, "raro": 0.035, "incomum": 0.10}
+CRATE_EXTRA_CHANCES = {"lendario": 0.005, "epico": 0.015, "raro": 0.05, "incomum": 0.15}
 # Memilets que vêm no lugar dos itens de cada raridade (um OU outro, nunca os dois).
+# Calibrado para a caixa de Memilets devolver, em média, quase o preço (~480 de 500):
+# a caixa comum não parece prejuízo e os itens raros são o lucro.
 CRATE_MEMILETS = {
-    "basico": (150, 300),
-    "incomum": (300, 450),
-    "raro": (670, 670),
-    "epico": (800, 800),
-    "lendario": (1_000, 1_000),
+    "basico": (250, 400),
+    "incomum": (450, 600),
+    "raro": (900, 900),
+    "epico": (1_500, 1_500),
+    "lendario": (2_500, 2_500),
 }
-# Garantia: a cada 40 caixas sem Raro (ou melhor), a seguinte traz pelo menos um Raro.
-CRATE_PITY_LIMIT = 40
+# Garantia: a cada 30 caixas sem Raro (ou melhor), a seguinte traz pelo menos um Raro.
+CRATE_PITY_LIMIT = 30
+CRATE_BATCHES = (1, 5, 10)
 CRATE_ITEM_CHANCE = 0.5
 CRATE_DOUBLE_CHANCE = 0.05
 CRATE_INSTANT_ROLLS = (1, 3)
@@ -356,6 +359,44 @@ def reset_claim(
         return current_time + CLAIM_RESET_COOLDOWN
 
 
+def get_crate_pity(discord_user_id: int | str, database_path: str | Path = DATABASE_PATH) -> int:
+    """Caixas seguidas sem Raro (a garantia vem em `CRATE_PITY_LIMIT`)."""
+    with connect(database_path) as connection:
+        row = connection.execute(
+            "SELECT crate_pity FROM user_upgrades WHERE discord_user_id = ? "
+            "AND upgrade_key = 'rolls'",
+            (str(discord_user_id),),
+        ).fetchone()
+    return int(row["crate_pity"]) if row else 0
+
+
+def open_crates(
+    discord_user_id: int | str,
+    display_name: str,
+    count: int,
+    database_path: str | Path = DATABASE_PATH,
+    *,
+    rng: random.Random | random.SystemRandom | None = None,
+) -> list[CrateResult]:
+    """Abre `count` caixas seguidas; confere antes se o saldo paga todas."""
+    if count not in CRATE_BATCHES:
+        raise ValueError("Quantidade de caixas inválida.")
+    register_user(discord_user_id, display_name, database_path)
+    price = get_crate_price(discord_user_id, database_path)
+    with connect(database_path) as connection:
+        balance = connection.execute(
+            "SELECT memilets FROM game_users WHERE discord_user_id = ?",
+            (str(discord_user_id),),
+        ).fetchone()["memilets"]
+    if balance < price * count:
+        affordable = balance // price
+        raise InsufficientFunds(
+            f"{count} caixas custam {price * count:,} Memilets".replace(",", ".")
+            + (f"; seu saldo paga {affordable}." if affordable else "; seu saldo não paga nenhuma.")
+        )
+    return [open_crate(discord_user_id, display_name, database_path, rng=rng) for _ in range(count)]
+
+
 def get_crate_price(discord_user_id: int | str, database_path: str | Path = DATABASE_PATH) -> int:
     with connect(database_path) as connection:
         return load_perks(connection, discord_user_id).crate_price
@@ -441,7 +482,7 @@ def open_crate(
                 if not items and generator.random() < CRATE_DOUBLE_CHANCE:
                     rolls *= 2
                     doubled = True
-                _give_instant_rolls(connection, user_id, rolls, current_time)
+                _give_instant_rolls(connection, user_id, rolls)
                 prizes = [CratePrize("basico", "instant_rolls", rolls), *items]
         if not prizes:
             # Sem item disponível (ou caixa de Memilets): tudo vira Memilets.
@@ -464,16 +505,16 @@ def open_crate(
         return CrateResult(price, tuple(prizes), doubled, pity, guaranteed)
 
 
-def _give_instant_rolls(connection, user_id: str, amount: int, now: datetime) -> None:
-    cycle_key = cycle_start_for(now).isoformat(timespec="seconds")
+def _give_instant_rolls(connection, user_id: str, amount: int) -> None:
+    """Rolls da crate vão para o estoque de rolls extras: não expiram, usa quando quiser."""
     connection.execute(
         """
-        INSERT INTO cycle_bonus_rolls (discord_user_id, cycle_started_at, amount)
-        VALUES (?, ?, ?)
-        ON CONFLICT(discord_user_id, cycle_started_at)
-        DO UPDATE SET amount = cycle_bonus_rolls.amount + excluded.amount
+        INSERT INTO user_upgrades (discord_user_id, upgrade_key, roll_tokens)
+        VALUES (?, 'rolls', ?)
+        ON CONFLICT(discord_user_id, upgrade_key)
+        DO UPDATE SET roll_tokens = roll_tokens + excluded.roll_tokens
         """,
-        (user_id, cycle_key, amount),
+        (user_id, amount),
     )
 
 
@@ -517,7 +558,7 @@ def describe_prize(prize: CratePrize) -> str:
         return f"{prize.amount:,} Memilets".replace(",", ".")
     if prize.kind == "instant_rolls":
         plural = "s" if prize.amount > 1 else ""
-        return f"{prize.amount} roll{plural} instantâneo{plural} (só neste ciclo)"
+        return f"{prize.amount} roll{plural} guardado{plural} (use quando quiser)"
     if prize.kind.startswith("cosmetic:"):
         kind = prize.kind.split(":", 1)[1]
         label, emoji, *_ = COSMETIC_KINDS[kind]

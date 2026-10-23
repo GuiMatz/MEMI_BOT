@@ -179,7 +179,8 @@ def list_owned_players(
             SELECT p.id, COALESCE(NULLIF(p.display_name, ''), p.name) AS name,
                    p.club_name, p.game_position, p.photo_path, p.overall_source,
                    {effective_overall} AS overall,
-                   COALESCE(b.balls, 0) AS balls, o.acquired_at
+                   COALESCE(b.balls, 0) AS balls, o.acquired_at,
+                   o.locked, o.pack_origin, o.pack_locked_until
             FROM player_ownership AS o
             JOIN players AS p ON p.id = o.player_id
             LEFT JOIN player_balls AS b ON b.player_id = p.id

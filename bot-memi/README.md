@@ -55,7 +55,7 @@ minutos e cada pessoa tem um claim por ciclo (renova junto com os rolls).
 Os claims são atômicos e cada jogador só pode ter um dono.
 
 Comandos oficiais do **FUT.AE** incluem `mm!futae`, `mm!left`, `mm!top [categoria]`, `mm!scout <nome>`, `mm!daily`, `mm!upgrade`, `mm!crates`,
-`mm!wish`, `mm!wishlist`/`mm!wl`, `mm!starwish`/`mm!sw`, `mm!vender`, `mm!troca`, `mm!dar`, `mm!time`,
+`mm!wish`, `mm!wishlist`/`mm!wl`, `mm!starwish`/`mm!sw`, `mm!vender`, `mm!proteger`, `mm!troca`, `mm!dar`, `mm!pacote`, `mm!personalizar`, `mm!time`,
 `mm!escalar`, `mm!tatica`, `mm!amistoso` e `mm!campeonato`. A economia diária
 usa cooldown de 24 horas; wishes e Star Wishes afetam a roleta e
 os claims conforme o guia. Times têm dez formações, três estilos e imagens de
@@ -279,6 +279,14 @@ O FUT.AE é um módulo do MeMi BOT, não um bot separado. O menu geral continua 
 - `mm!crates`, `mm!construir`, `mm!destruir`, `mm!renda`, `mm!bilheteria` e
   `mm!cosmeticos` (com `mm!emblema`, `mm!uniforme`, `mm!estadio`, `mm!tecnico`,
   `mm!liga` e `mm!mascote`) completam a economia do clube.
+- `mm!vender base|comum|…`, `mm!vender abaixo 70` e `mm!vender posicao ZAG` vendem todos
+  os reservas do filtro de uma vez (sem titulares nem 🔒), com o total antes.
+- `mm!proteger <nome>` liga/desliga o 🔒: o jogador some de todas as vendas.
+- `mm!crates 5|10` abre várias caixas; os rolls da caixa ficam guardados (não expiram).
+- `mm!pacote` dá uma carta livre do mercado (nunca Base); carta de pacote vende por 25%
+  e fica 7 dias sem poder ser vendida, doada ou trocada.
+- `mm!personalizar` (ou o botão no `mm!time`) muda nome, cor, escudo e cosméticos com
+  prévia do cartão do clube; o escudo é enviado no próprio formulário.
 - `mm!vender` (alias `mm!demitir`) mostra o valor de venda, o saldo depois e o que muda
   no time antes de confirmar; sem nome, abre um menu para vender vários reservas.
 - `mm!troca @pessoa` abre um montador com os dois elencos (até 5 jogadores por lado e

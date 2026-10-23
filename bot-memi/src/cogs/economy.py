@@ -7,11 +7,16 @@ from io import BytesIO
 
 import discord
 from discord.ext import commands
+from PIL import Image
 
 from src import icons
 from src.db import DATABASE_PATH, normalize_player_name
-from src.crate_animation import opening_gif, reveal_gif
+from src.accents import rarity_color
+from src.card_image import render_player_card
+from src.cosmetics import COSMETIC_KINDS, list_owned
+from src.crate_animation import PrizeTile, card_reveal_gif, opening_gif, prize_gif
 from src.economy import (
+    CRATE_BATCHES,
     CRATE_DOUBLE_CHANCE,
     CRATE_PITY_LIMIT,
     CRATE_EXTRA_CHANCES,
@@ -25,13 +30,17 @@ from src.economy import (
     claim_daily,
     describe_prize,
     get_account_status,
+    get_crate_pity,
     get_crate_price,
     get_upgrade_cost,
     get_upgrade_levels,
     list_wishes,
-    open_crate,
+    open_crates,
     reset_claim,
 )
+from src.packs import PACK_PRICE, PackError, open_pack, pack_odds_text
+from src.ratings import rarity_label
+from src.transactions import PACK_LOCK, PACK_SALE_FACTOR
 from src.cogs.common import ConfirmView, PlayerChoiceView, ambiguity_text, intro_embed
 from src.game import find_player, get_wallet, register_user
 from src.perks import UPGRADES
@@ -42,7 +51,7 @@ UPGRADES_INTRO = (
     "de comprar. Nenhum upgrade aumenta a sorte: a chance na roleta é igual para todo mundo."
 )
 CRATES_INTRO = (
-    "As caixas entregam itens aleatórios: rolls instantâneos, cosméticos, bônus e upgrades. "
+    "As caixas entregam itens aleatórios: rolls guardados, cosméticos, bônus e upgrades. "
     "Toda caixa traz um item básico e, com sorte, um item de outra raridade. Quanto mais rara, "
     "mais difícil de vir. A caixa vem toda em itens ou toda em Memilets, e nunca repete um "
     "cosmético que você já tem."
@@ -82,15 +91,21 @@ UPGRADE_ALIASES = {
     "patrocinio": "match_income",
 }
 
+# Mesma palavra, mesma cor em todo o bot: as cores seguem as séries das cartas.
 RARITY_STYLE = {
     "basico": ("📦", discord.Color.light_grey()),
-    "incomum": ("🟢", discord.Color.green()),
-    "raro": ("🔵", discord.Color.blue()),
-    "epico": ("🟣", discord.Color.purple()),
-    "lendario": ("🟠", discord.Color.orange()),
+    "incomum": ("🔵", discord.Color.from_rgb(91, 156, 255)),
+    "raro": ("🟣", discord.Color.from_rgb(176, 124, 255)),
+    "epico": ("🟠", discord.Color.from_rgb(240, 150, 60)),
+    "lendario": ("🔴", discord.Color.from_rgb(235, 75, 75)),
 }
+PACK_INTRO = (
+    "O pacote traz **uma carta de jogador** livre do mercado, direto para o seu elenco. "
+    "Nunca vem Base. A carta de pacote vende por {factor}% do valor e fica {days} dias sem "
+    "poder ser vendida, doada ou trocada."
+)
 RARITY_ITEMS_TEXT = {
-    "basico": "1 a 3 rolls instantâneos (só no ciclo atual)",
+    "basico": "1 a 3 rolls guardados (não expiram)",
     "incomum": "uniforme, emblema, estádio, técnico, liga ou mascote novo",
     "raro": "-1 h no daily ou +1 s de proteção de wish",
     "epico": "+1 slot de Star Wish, +1 slot de wish ou -2 h no daily",
@@ -163,11 +178,29 @@ class UpgradeShopView(discord.ui.View):
 
 
 class CrateMenuView(discord.ui.View):
+    """Abrir 1, 5 ou 10 caixas, ou um pacote de jogador, direto do menu."""
+
     def __init__(self, cog: "EconomyCog", author: discord.abc.User, price: int):
         super().__init__(timeout=300)
         self.cog = cog
         self.author = author
-        self.open_button.label = f"Abrir crate ({_thousands(price)})"
+        for count in CRATE_BATCHES:
+            button = discord.ui.Button(
+                label=f"Abrir {count} ({_thousands(price * count)})",
+                emoji="📦",
+                style=discord.ButtonStyle.success if count == 1 else discord.ButtonStyle.primary,
+                row=0,
+            )
+            button.callback = self._opener(count)
+            self.add_item(button)
+        pack = discord.ui.Button(
+            label=f"Pacote de jogador ({_thousands(PACK_PRICE)})",
+            emoji="🃏",
+            style=discord.ButtonStyle.secondary,
+            row=1,
+        )
+        pack.callback = self._pack
+        self.add_item(pack)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.author.id:
@@ -177,11 +210,19 @@ class CrateMenuView(discord.ui.View):
             return False
         return True
 
-    @discord.ui.button(label="Abrir crate", emoji="📦", style=discord.ButtonStyle.success)
-    async def open_button(self, interaction: discord.Interaction, button) -> None:
-        price = get_crate_price(interaction.user.id, self.cog.database_path)
-        button.label = f"Abrir outra ({_thousands(price)})"
-        await self.cog.open_with_animation(
+    def _opener(self, count: int):
+        async def open_crates_button(interaction: discord.Interaction) -> None:
+            await self.cog.open_with_animation(
+                interaction.user,
+                interaction.response.send_message,
+                interaction.edit_original_response,
+                count=count,
+            )
+
+        return open_crates_button
+
+    async def _pack(self, interaction: discord.Interaction) -> None:
+        await self.cog.open_pack_with_animation(
             interaction.user,
             interaction.response.send_message,
             interaction.edit_original_response,
@@ -296,6 +337,7 @@ class EconomyCog(commands.Cog):
 
     def crate_menu(self, author: discord.abc.User) -> tuple[discord.Embed, CrateMenuView]:
         price = get_crate_price(author.id, self.database_path)
+        pity = get_crate_pity(author.id, self.database_path)
         embed = intro_embed("📦 Crates", CRATES_INTRO, color=discord.Color.orange())
         lines = [
             f"{RARITY_STYLE['basico'][0]} **Básico** · sempre vem\n"
@@ -311,81 +353,261 @@ class EconomyCog(commands.Cog):
             f"🎁 {_percent(CRATE_DOUBLE_CHANCE)} de chance de o item vir em dobro "
             "(não vale para Memilets)."
         )
-        lines.append(
-            f"🛡️ Garantia: a cada {CRATE_PITY_LIMIT} caixas sem Raro, a seguinte traz um Raro."
-        )
         embed.description += "\n\n" + "\n".join(lines)
         balance = get_wallet(author.id, self.database_path)["memilets"]
-        embed.add_field(name="Preço", value=f"{icons.memilets(price)} Memilets")
+        embed.add_field(name="Preço", value=f"{icons.memilets(price)} por caixa")
         embed.add_field(name="Saldo", value=f"{icons.memilets(balance)} Memilets")
-        embed.set_footer(text="mm!crates abrir abre direto · mm!cosmeticos mostra o que você tem")
+        embed.add_field(
+            name="🛡️ Garantia de Raro",
+            value=f"**{pity}/{CRATE_PITY_LIMIT}** · faltam {CRATE_PITY_LIMIT - pity} caixas",
+        )
+        odds = " · ".join(
+            f"{emoji} {label} {_percent(chance)}" for emoji, label, chance in pack_odds_text()
+        )
+        embed.add_field(
+            name=f"🃏 Pacote de jogador · {icons.memilets(PACK_PRICE)}",
+            value=f"Uma carta livre do mercado: {odds}",
+            inline=False,
+        )
+        embed.set_footer(
+            text="mm!crates 5 abre 5 direto · mm!pacote abre um pacote · "
+            "rolls da caixa ficam guardados"
+        )
         return embed, CrateMenuView(self, author, price)
 
-    async def open_with_animation(self, author, send, edit) -> None:
-        """Abre a crate em dois tempos: o pacote treme e depois revela a raridade.
+    def prize_tiles(self, user_id: int, prizes) -> list[PrizeTile]:
+        """Cartões do GIF: Memilets e rolls somados; cada item no seu cartão."""
+        order = list(RARITY_LABELS)
+        tiles: list[PrizeTile] = []
+        coins = [prize for prize in prizes if prize.kind == "memilets"]
+        rolls = [prize for prize in prizes if prize.kind == "instant_rolls"]
+        if coins:
+            best = max((prize.rarity for prize in coins), key=order.index)
+            total = sum(prize.amount for prize in coins)
+            tiles.append(PrizeTile(best, "coin", _thousands(total), "Memilets"))
+        if rolls:
+            total = sum(prize.amount for prize in rolls)
+            tiles.append(
+                PrizeTile("basico", "rolls", f"{total} roll{'s' if total > 1 else ''}", "guardados")
+            )
+        pictures = {}
+        for prize in prizes:
+            if prize.kind.startswith("cosmetic:") and not pictures:
+                pictures = {
+                    (item["kind"], item["name"]): item["image_path"]
+                    for item in list_owned(user_id, None, self.database_path)
+                }
+        items = {
+            "daily_1h": ("clock", "-1 h", "no daily"),
+            "daily_2h": ("clock", "-2 h", "no daily"),
+            "wish_protection": ("shield", "+1 s", "proteção de wish"),
+            "star_wish_slot": ("star", "+1 Star Wish", "slot permanente"),
+            "wish_slot": ("plus", "+1 wish", "slot permanente"),
+            "permanent_roll": ("rolls", "+1 roll", "por ciclo, para sempre"),
+            "crate_discount": ("tag", "-10", "no preço da crate"),
+        }
+        for prize in sorted(prizes, key=lambda item: -order.index(item.rarity)):
+            if prize.kind in {"memilets", "instant_rolls"}:
+                continue
+            if prize.kind.startswith("cosmetic:"):
+                kind = prize.kind.split(":", 1)[1]
+                tiles.append(
+                    PrizeTile(
+                        prize.rarity,
+                        "cosmetic",
+                        COSMETIC_KINDS[kind][0],
+                        prize.name or "",
+                        pictures.get((kind, prize.name)),
+                    )
+                )
+            elif prize.kind == "random_upgrade":
+                tiles.append(PrizeTile(prize.rarity, "up", "+1 nível", prize.name or ""))
+            else:
+                icon, title, subtitle = items[prize.kind]
+                tiles.append(PrizeTile(prize.rarity, icon, title, subtitle))
+        # Itens raros primeiro, para aparecerem nos cartões do GIF.
+        return sorted(tiles, key=lambda tile: -order.index(tile.rarity))
+
+    async def open_with_animation(self, author, send, edit, *, count: int = 1) -> None:
+        """O pacote treme e depois vem a revelação com os prêmios já à vista.
 
         `send(**kwargs)` manda a primeira mensagem; `edit(**kwargs)` a troca pela revelação.
         """
         try:
-            result = open_crate(author.id, author.display_name, self.database_path)
+            results = open_crates(author.id, author.display_name, count, self.database_path)
         except InsufficientFunds as error:
             await send(embed=discord.Embed(description=str(error), color=discord.Color.red()))
             return
         opening = await asyncio.to_thread(opening_gif)
         waiting = discord.Embed(
-            title="📦 Abrindo a crate…", color=discord.Color.from_rgb(230, 181, 74)
+            title=f"📦 Abrindo {count} crate{'s' if count > 1 else ''}…",
+            color=discord.Color.from_rgb(230, 181, 74),
         )
         waiting.set_image(url="attachment://abrindo.gif")
         message = await send(embed=waiting, file=discord.File(BytesIO(opening), "abrindo.gif"))
-        reveal = await asyncio.to_thread(reveal_gif, result.best_rarity)
-        await asyncio.sleep(1.6)
-        embed = self.crate_result_embed(author, result)
+        prizes = [prize for result in results for prize in result.prizes]
+        best = max((result.best_rarity for result in results), key=list(RARITY_LABELS).index)
+        headline = f"{count} caixas abertas" if count > 1 else None
+        reveal = await asyncio.to_thread(
+            prize_gif, best, self.prize_tiles(author.id, prizes), headline=headline
+        )
+        await asyncio.sleep(1.2)
+        embed = self.crate_result_embed(author, results)
         embed.set_image(url="attachment://revelacao.gif")
         target = edit if edit is not None else message.edit
         await target(embed=embed, attachments=[discord.File(BytesIO(reveal), "revelacao.gif")])
 
-    def crate_result_embed(self, author: discord.abc.User, result) -> discord.Embed:
-        emoji, color = RARITY_STYLE[result.best_rarity]
-        lines = [
-            f"{RARITY_STYLE[prize.rarity][0]} **{RARITY_LABELS[prize.rarity]}** · "
-            + (
-                f"{icons.memilets(prize.amount)} Memilets"
-                if prize.kind == "memilets"
-                else describe_prize(prize)
+    def crate_result_embed(self, author: discord.abc.User, results) -> discord.Embed:
+        if not isinstance(results, list):
+            results = [results]
+        order = list(RARITY_LABELS)
+        best = max((result.best_rarity for result in results), key=order.index)
+        emoji, color = RARITY_STYLE[best]
+        prizes = [prize for result in results for prize in result.prizes]
+        lines = []
+        coins = sum(prize.amount for prize in prizes if prize.kind == "memilets")
+        rolls = sum(prize.amount for prize in prizes if prize.kind == "instant_rolls")
+        if coins:
+            lines.append(f"{icons.memilets(coins)} Memilets")
+        if rolls:
+            lines.append(
+                f"🎲 **{rolls}** roll{'s' if rolls > 1 else ''} guardado{'s' if rolls > 1 else ''} (use quando quiser)"
             )
-            for prize in result.prizes
-        ]
-        if result.doubled:
-            lines.append("🎁 **Sorte grande!** O prêmio veio em dobro.")
+        for prize in sorted(prizes, key=lambda item: -order.index(item.rarity)):
+            if prize.kind in {"memilets", "instant_rolls"}:
+                continue
+            lines.append(
+                f"{RARITY_STYLE[prize.rarity][0]} **{RARITY_LABELS[prize.rarity]}** · "
+                + describe_prize(prize)
+            )
+        doubled = sum(1 for result in results if result.doubled)
+        if doubled:
+            lines.append(
+                "🎁 **Sorte grande!** Prêmio em dobro" + (f" ({doubled}×)." if doubled > 1 else ".")
+            )
+        if any(result.guaranteed for result in results):
+            lines.append(f"🛡️ **Garantia ativada:** {CRATE_PITY_LIMIT} caixas sem Raro, veio um.")
+        count = len(results)
         embed = discord.Embed(
-            title=f"{emoji} Crate aberta · {RARITY_LABELS[result.best_rarity]}",
+            title=f"{emoji} {count} crate{'s' if count > 1 else ''} · melhor: {RARITY_LABELS[best]}",
             description="\n".join(lines),
             color=color,
         )
         balance = get_wallet(author.id, self.database_path)["memilets"]
-        embed.add_field(name="Pagou", value=f"{icons.memilets(result.price)}")
+        spent = sum(result.price for result in results)
+        embed.add_field(name="Pagou", value=f"{icons.memilets(spent)}")
         embed.add_field(name="Saldo", value=f"{icons.memilets(balance)} Memilets")
-        if result.guaranteed:
-            embed.description += "\n🛡️ **Garantia ativada:** 40 caixas sem Raro, esta veio com um."
-        embed.add_field(name="Garantia de Raro", value=f"{result.pity}/{CRATE_PITY_LIMIT} caixas")
-        if any(prize.kind.startswith("cosmetic:") for prize in result.prizes):
+        embed.add_field(
+            name="🛡️ Garantia de Raro", value=f"{results[-1].pity}/{CRATE_PITY_LIMIT} caixas"
+        )
+        if any(prize.kind.startswith("cosmetic:") for prize in prizes):
             embed.set_footer(
                 text="Veja e equipe em mm!cosmeticos · cada cosmético equipado: +100 no daily"
             )
         return embed
 
+    async def open_pack_with_animation(self, author, send, edit) -> None:
+        try:
+            result = await asyncio.to_thread(
+                open_pack, author.id, author.display_name, self.database_path
+            )
+        except PackError as error:
+            await send(embed=discord.Embed(description=str(error), color=discord.Color.red()))
+            return
+        player = result.player
+        overall = int(player["effective_overall"] or 0)
+        opening = await asyncio.to_thread(opening_gif)
+        waiting = discord.Embed(
+            title="🃏 Abrindo o pacote…", color=discord.Color.from_rgb(230, 181, 74)
+        )
+        waiting.set_image(url="attachment://abrindo.gif")
+        message = await send(embed=waiting, file=discord.File(BytesIO(opening), "abrindo.gif"))
+        label = rarity_label(overall)
+        card = await asyncio.to_thread(render_player_card, {**player, "effective_overall": overall})
+        reveal = await asyncio.to_thread(
+            card_reveal_gif,
+            Image.open(card),
+            rarity_color(overall).to_rgb(),
+            f"PACOTE · {label.split(' ', 1)[-1].upper()}",
+        )
+        await asyncio.sleep(1.2)
+        name = player.get("display_name") or player["name"]
+        embed = discord.Embed(
+            title=f"🃏 {name}",
+            description=(
+                f"**{overall}** · {label} · {player.get('game_position') or '—'} · "
+                f"{player.get('club_name') or 'Passe livre'}\n"
+                f"Foi direto para o seu elenco.\n"
+                f"📦 Vende por {round(PACK_SALE_FACTOR * 100)}% do valor · livre para vender, "
+                f"doar ou trocar <t:{int(result.locked_until.timestamp())}:R>."
+            ),
+            color=rarity_color(overall),
+        )
+        balance = get_wallet(author.id, self.database_path)["memilets"]
+        embed.add_field(name="Pagou", value=f"{icons.memilets(result.price)}")
+        embed.add_field(name="Saldo", value=f"{icons.memilets(balance)} Memilets")
+        embed.set_image(url="attachment://pacote.gif")
+        target = edit if edit is not None else message.edit
+        await target(embed=embed, attachments=[discord.File(BytesIO(reveal), "pacote.gif")])
+
     @commands.command(name="crates", aliases=["crate", "caixa", "caixas"])
     async def crates(self, context: commands.Context, action: str | None = None) -> None:
         register_user(context.author.id, context.author.display_name, self.database_path)
-        if action and normalize_player_name(action) in {"abrir", "open", "1"}:
+        wanted = normalize_player_name(action or "")
+        count = 1 if wanted in {"abrir", "open"} else int(wanted) if wanted.isdigit() else None
+        if count is not None:
+            if count not in CRATE_BATCHES:
+                await context.reply(
+                    "Dá para abrir 1, 5 ou 10 de uma vez: `mm!crates 5`.", mention_author=False
+                )
+                return
             await self.open_with_animation(
+                context.author,
+                lambda **kwargs: context.reply(mention_author=False, **kwargs),
+                None,
+                count=count,
+            )
+            return
+        embed, view = self.crate_menu(context.author)
+        await context.reply(embed=embed, view=view, mention_author=False)
+
+    @commands.command(name="pacote", aliases=["pack", "pacotes"])
+    async def pack(self, context: commands.Context, action: str | None = None) -> None:
+        register_user(context.author.id, context.author.display_name, self.database_path)
+        if normalize_player_name(action or "") in {"abrir", "open", "1"}:
+            await self.open_pack_with_animation(
                 context.author,
                 lambda **kwargs: context.reply(mention_author=False, **kwargs),
                 None,
             )
             return
-        embed, view = self.crate_menu(context.author)
-        await context.reply(embed=embed, view=view, mention_author=False)
+        odds = "\n".join(
+            f"{emoji} **{label}** · {_percent(chance)}" for emoji, label, chance in pack_odds_text()
+        )
+        embed = intro_embed(
+            "🃏 Pacote de jogador",
+            PACK_INTRO.format(factor=round(PACK_SALE_FACTOR * 100), days=PACK_LOCK.days),
+            color=discord.Color.from_rgb(230, 181, 74),
+        )
+        embed.description += "\n\n" + odds
+        balance = get_wallet(context.author.id, self.database_path)["memilets"]
+        embed.add_field(name="Preço", value=f"{icons.memilets(PACK_PRICE)}")
+        embed.add_field(name="Saldo", value=f"{icons.memilets(balance)} Memilets")
+
+        async def done(interaction: discord.Interaction) -> None:
+            await self.open_pack_with_animation(
+                interaction.user,
+                interaction.response.send_message,
+                interaction.edit_original_response,
+            )
+
+        view = ConfirmView(
+            context.author.id,
+            done,
+            confirm_label=f"Abrir pacote ({_thousands(PACK_PRICE)})",
+            cancel_text="Pacote cancelado.",
+        )
+        view.message = await context.reply(embed=embed, view=view, mention_author=False)
 
     @commands.command(name="rt")
     async def reset_claim_command(self, context: commands.Context) -> None:

@@ -4,6 +4,9 @@ Tudo mostra o resultado antes de acontecer:
 
 - `mm!vender <nome>` mostra quanto o jogador rende, o saldo depois e o que muda no time;
   sem nome, abre um menu para vender vários reservas de uma vez (`mm!demitir` = alias).
+- Venda rápida: `mm!vender base|comum|…`, `mm!vender abaixo 70` ou `mm!vender posicao ZAG`
+  junta todos os reservas do filtro (sem limite de 25) e mostra o total antes.
+- `mm!proteger <nome>` liga/desliga o 🔒: protegido não aparece em venda nenhuma.
 - `mm!dar @pessoa <jogador | valor>` doa jogadores ou Memilets, com confirmação.
 - `mm!troca @pessoa` abre um montador com menus dos dois elencos, busca por nome e
   Memilets dos dois lados; a outra pessoa aceita ou recusa num botão. O formato em
@@ -13,6 +16,7 @@ Tudo mostra o resultado antes de acontecer:
 from __future__ import annotations
 
 import re
+from datetime import datetime, timezone
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -22,6 +26,7 @@ from discord.ext import commands
 from src import icons
 from src.cogs.common import ConfirmView, PlayerChoiceView, ambiguity_text, player_label
 from src.db import DATABASE_PATH, connect, normalize_player_name
+from src.ratings import RARITY_TIERS
 from src.game import list_owned_players, register_user, resolve_player
 from src.teams import get_lineup
 from src.transactions import (
@@ -34,11 +39,14 @@ from src.transactions import (
     player_warnings,
     sale_quote,
     sell_players,
+    quick_sale_ids,
     settle_trade,
+    toggle_protection,
     trade_details,
 )
 
 OPTION_LIMIT = 25
+SALE_LINES = 15  # jogadores listados na cotação; o resto vira "e mais N"
 STATUS_TEXT = {
     "accepted": "✅ Troca concluída",
     "declined": "❌ Troca recusada",
@@ -163,9 +171,11 @@ class OwnerView(discord.ui.View):
 def sale_embed(quote: dict[str, Any]) -> discord.Embed:
     players = quote["players"]
     lines = []
-    for player in players:
+    for player in players[:SALE_LINES]:
         lines.append(player_line(player, player["value"]))
         lines.extend(f"└ ⚠️ {warning}" for warning in player["warnings"])
+    if len(players) > SALE_LINES:
+        lines.append(f"… e mais **{len(players) - SALE_LINES}** jogadores")
     bonus = round((quote["multiplier"] - 1) * 100)
     total = coins(quote["total"]) + (f" (inclui +{bonus}% do upgrade)" if bonus else "")
     embed = discord.Embed(
@@ -207,7 +217,10 @@ class SalePickerView(OwnerView):
         super().__init__(owner_id)
         self.players = players
         self.database_path = database_path
-        self.values = market_values([player["id"] for player in players[:500]], database_path)
+        self.values: dict[int, int] = {}
+        if players:
+            quote = sale_quote(owner_id, [player["id"] for player in players[:500]], database_path)
+            self.values = {int(player["id"]): player["value"] for player in quote["players"]}
         self.selected: set[int] = set()
         self.query = ""
         self._build()
@@ -229,6 +242,11 @@ class SalePickerView(OwnerView):
         search = discord.ui.Button(label="Buscar", emoji="🔎", row=1)
         search.callback = self._search
         self.add_item(search)
+        everyone = discord.ui.Button(
+            label="Selecionar todos", emoji="☑️", row=1, disabled=not self.players
+        )
+        everyone.callback = self._select_all
+        self.add_item(everyone)
         sell = discord.ui.Button(
             label="Vender selecionados",
             emoji="💰",
@@ -283,6 +301,14 @@ class SalePickerView(OwnerView):
             await self._refresh(modal_interaction)
 
         await interaction.response.send_modal(SearchModal("Buscar no seu elenco", apply))
+
+    async def _select_all(self, interaction: discord.Interaction) -> None:
+        """Marca todos os que aparecem no menu (com a busca atual)."""
+        self.selected |= {
+            int(option.value)
+            for option in _squad_options(self.players, self.selected, self.query, self.values)
+        }
+        await self._refresh(interaction)
 
     async def _sell(self, interaction: discord.Interaction) -> None:
         self.stop()
@@ -643,14 +669,21 @@ class TradesCog(commands.Cog):
     @commands.command(name="vender", aliases=["demitir", "vende", "sell"])
     async def sell(self, context: commands.Context, *, query: str | None = None) -> None:
         register_user(context.author.id, context.author.display_name, self.database_path)
+        quick = self._quick_filter(query or "")
+        if quick is not None:
+            await self._quick_sale(context, query, quick)
+            return
         if not query:
             starters = {
                 int(player["id"]) for player in get_lineup(context.author.id, self.database_path)
             }
+            now = datetime.now(timezone.utc).isoformat(timespec="seconds")
             reserves = [
                 player
                 for player in reversed(self._owned(context.author.id))
                 if int(player["id"]) not in starters
+                and not player.get("locked")
+                and not (player.get("pack_locked_until") or "") > now
             ]
             view = SalePickerView(context.author.id, reserves, self.database_path)
             view.message = await context.reply(embed=view.embed(), view=view, mention_author=False)
@@ -678,6 +711,78 @@ class TradesCog(commands.Cog):
             view.message = await send(content=None, embed=sale_embed(quote), view=view)
 
         await self._resolve(context, query, self._owned(context.author.id), confirm)
+
+    def _quick_filter(self, text: str) -> dict[str, Any] | None:
+        """`base`, `abaixo 70` ou `posicao ZAG`; None se o texto é nome de jogador."""
+        words = normalize_player_name(text).split()
+        if not words:
+            return None
+        tiers = {normalize_player_name(tier[0]): tier[0] for tier in RARITY_TIERS}
+        if len(words) == 1 and words[0] in tiers:
+            return {"rarity": tiers[words[0]]}
+        if len(words) == 2 and words[0] in {"abaixo", "menor", "menores"} and words[1].isdigit():
+            return {"below": int(words[1])}
+        if len(words) == 2 and words[0] in {"posicao", "pos"}:
+            return {"position": words[1].upper()}
+        return None
+
+    async def _quick_sale(self, context, query: str, filters: dict[str, Any]) -> None:
+        ids = quick_sale_ids(context.author.id, self.database_path, **filters)
+        if not ids:
+            await context.reply(
+                f"Nenhum reserva para vender com **{query}** (titulares e 🔒 ficam de fora).",
+                mention_author=False,
+            )
+            return
+        quote = sale_quote(context.author.id, ids, self.database_path)
+
+        async def done(interaction: discord.Interaction) -> None:
+            await _finish_sale(interaction, context.author.id, ids, self.database_path)
+
+        embed = sale_embed(quote)
+        embed.set_footer(text="Venda rápida: só reservas sem 🔒. A venda não pode ser desfeita.")
+        view = ConfirmView(
+            context.author.id,
+            done,
+            confirm_label=f"Vender {len(ids)} por {quote['total']:,}".replace(",", "."),
+            cancel_text="Venda cancelada.",
+            danger=True,
+        )
+        view.message = await context.reply(embed=embed, view=view, mention_author=False)
+
+    @commands.command(name="proteger", aliases=["cadeado", "lock", "favorito"])
+    async def protect(self, context: commands.Context, *, query: str | None = None) -> None:
+        register_user(context.author.id, context.author.display_name, self.database_path)
+        owned = self._owned(context.author.id)
+        if not query:
+            locked = [player for player in owned if player.get("locked")]
+            lines = [player_line(player) for player in locked[:40]] or [
+                "Nenhum ainda. Use `mm!proteger <nome>` para colocar o 🔒."
+            ]
+            embed = discord.Embed(
+                title=f"🔒 Protegidos ({len(locked)})",
+                description="\n".join(lines),
+                color=discord.Color.dark_teal(),
+            )
+            embed.set_footer(
+                text="Protegido não aparece em venda nenhuma. Repita o comando para tirar."
+            )
+            await context.reply(embed=embed, mention_author=False)
+            return
+
+        async def toggle(send, player: dict) -> None:
+            locked = toggle_protection(context.author.id, int(player["id"]), self.database_path)
+            await send(
+                content=(
+                    f"🔒 **{player_label(player)}** protegido: não aparece mais em vendas."
+                    if locked
+                    else f"🔓 **{player_label(player)}** sem proteção."
+                ),
+                embed=None,
+                view=None,
+            )
+
+        await self._resolve(context, query, owned, toggle)
 
     # Doação
 

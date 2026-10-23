@@ -225,7 +225,7 @@ class CrateTests(Case):
         self.assertEqual([prize.rarity for prize in result.prizes], ["basico", "epico", "epico"])
         self.assertEqual(result.memilets, 0)
 
-    def test_instant_rolls_only_last_for_the_current_cycle(self):
+    def test_crate_rolls_are_saved_and_do_not_expire(self):
         self.add_player("Atacante")
         self.give(CRATE_PRICE)
         with (
@@ -236,11 +236,9 @@ class CrateTests(Case):
             result = open_crate(100, "Pessoa", self.database_path, now=NOW, rng=random.Random(5))
         rolls = result.prizes[0].amount
         status = get_account_status(100, "Pessoa", self.database_path, now=NOW)
-        self.assertEqual(status.roll_capacity, 10 + rolls)
-        later = get_account_status(
-            100, "Pessoa", self.database_path, now=NOW + timedelta(minutes=30)
-        )
-        self.assertEqual(later.roll_capacity, 10)
+        self.assertEqual((status.roll_capacity, status.roll_tokens), (10, rolls))
+        later = get_account_status(100, "Pessoa", self.database_path, now=NOW + timedelta(days=3))
+        self.assertEqual(later.roll_tokens, rolls)
 
     def test_floor_four_and_legendary_discount_lower_the_price(self):
         self.give(10_000)

@@ -9,6 +9,11 @@
   presente). Só a pessoa convidada aceita; quem propôs pode cancelar.
 
 Ao sair de um elenco, o jogador deixa a escalação e perde capitania e cobranças.
+
+Travas: jogador **protegido** (`toggle_protection`, o 🔒 do `mm!proteger`) não entra em
+venda nenhuma. Jogador que veio de **pacote** vende por `PACK_SALE_FACTOR` do valor (a
+marca acompanha a carta mesmo depois de trocas) e passa `PACK_LOCK` sem poder ser
+vendido, doado ou trocado.
 """
 
 from __future__ import annotations
@@ -20,12 +25,15 @@ from typing import Any, Iterable
 
 from src.db import DATABASE_PATH, connect
 from src.game import register_user
+from src.clock import brasilia_time
 from src.perks import load_perks
-from src.ratings import EFFECTIVE_OVERALL_SQL
+from src.ratings import EFFECTIVE_OVERALL_SQL, RARITY_TIERS
 
 TRADE_LIFETIME = timedelta(minutes=15)
 MAX_TRADE_PLAYERS = 5
-MAX_SALE_PLAYERS = 25
+MAX_SALE_PLAYERS = 200
+PACK_SALE_FACTOR = 0.25
+PACK_LOCK = timedelta(days=7)
 SALE_RATE = 0.0005  # Memilets por euro de valor de mercado
 
 
@@ -80,7 +88,8 @@ def _owned_players(
                l.slot_order IS NOT NULL AS starter,
                x.captain_player_id = p.id AS captain,
                x.free_kick_player_id = p.id AS free_kick_taker,
-               x.penalty_player_id = p.id AS penalty_taker
+               x.penalty_player_id = p.id AS penalty_taker,
+               o.locked, o.pack_origin, o.pack_locked_until
         FROM player_ownership AS o
         JOIN players AS p ON p.id = o.player_id
         LEFT JOIN player_balls AS b ON b.player_id = p.id
@@ -95,6 +104,36 @@ def _owned_players(
     if len(found) != len(ids):
         raise TransactionError("Algum desses jogadores não está mais no elenco.")
     return [found[player_id] for player_id in ids]
+
+
+def _player_sale_value(player: dict[str, Any], multiplier: float = 1.0) -> int:
+    factor = PACK_SALE_FACTOR if player.get("pack_origin") else 1.0
+    return sale_value(int(player["base_overall"]), player["market_value_eur"], multiplier * factor)
+
+
+def _pack_locked(player: dict[str, Any], now: datetime) -> datetime | None:
+    until = player.get("pack_locked_until")
+    if not until:
+        return None
+    moment = datetime.fromisoformat(until)
+    return moment if moment > now else None
+
+
+def _check_movable(players: Iterable[dict[str, Any]], action: str, *, selling=False) -> None:
+    """Barra protegidos (só na venda) e jogadores de pacote ainda travados."""
+    now = _utc_now()
+    for player in players:
+        if selling and player.get("locked"):
+            raise TransactionError(
+                f"🔒 **{player['name']}** está protegido. Tire a proteção com "
+                f"`mm!proteger {player['name']}` antes de vender."
+            )
+        until = _pack_locked(player, now)
+        if until is not None:
+            raise TransactionError(
+                f"📦 **{player['name']}** veio de pacote e só pode ser {action} a partir de "
+                f"**{brasilia_time(until)}**."
+            )
 
 
 def player_warnings(player: dict[str, Any], *, selling: bool = True) -> list[str]:
@@ -116,6 +155,8 @@ def player_warnings(player: dict[str, Any], *, selling: bool = True) -> list[str
     if selling and player.get("balls"):
         balls = int(player["balls"])
         warnings.append(f"as {balls} bola{'s' if balls > 1 else ''} investidas se perdem")
+    if selling and player.get("pack_origin"):
+        warnings.append(f"veio de pacote: vende por {round(PACK_SALE_FACTOR * 100)}% do valor")
     return warnings
 
 
@@ -130,14 +171,13 @@ def sale_quote(
         players = _owned_players(connection, user_id, player_ids)
         if not players:
             raise TransactionError("Escolha pelo menos um jogador para vender.")
+        _check_movable(players, "vendido", selling=True)
         multiplier = load_perks(connection, user_id).dismiss_refund_multiplier
         balance = connection.execute(
             "SELECT memilets FROM game_users WHERE discord_user_id = ?", (user_id,)
         ).fetchone()["memilets"]
     for player in players:
-        player["value"] = sale_value(
-            int(player["base_overall"]), player["market_value_eur"], multiplier
-        )
+        player["value"] = _player_sale_value(player, multiplier)
         player["warnings"] = player_warnings(player)
     total = sum(player["value"] for player in players)
     return {
@@ -207,10 +247,11 @@ def sell_players(
         players = _owned_players(connection, user_id, ids)
         if not players:
             raise TransactionError("Escolha pelo menos um jogador para vender.")
+        _check_movable(players, "vendido", selling=True)
         multiplier = load_perks(connection, user_id).dismiss_refund_multiplier
         total = 0
         for player in players:
-            total += sale_value(int(player["base_overall"]), player["market_value_eur"], multiplier)
+            total += _player_sale_value(player, multiplier)
             _leave_team(connection, user_id, int(player["id"]))
             connection.execute("DELETE FROM player_balls WHERE player_id = ?", (player["id"],))
             connection.execute(
@@ -253,6 +294,7 @@ def give_players(
     with connect(database_path) as connection:
         connection.execute("BEGIN IMMEDIATE")
         players = _owned_players(connection, giver, ids)
+        _check_movable(players, "doado")
         _require_balance(connection, giver, memilets, "Você não tem Memilets suficientes.")
         for player in players:
             _move_player(connection, int(player["id"]), giver, recipient)
@@ -291,8 +333,8 @@ def create_trade(
     current_time = _utc_now(now)
     with connect(database_path) as connection:
         connection.execute("BEGIN IMMEDIATE")
-        _owned_players(connection, proposer, offered)
-        _owned_players(connection, recipient, requested)
+        _check_movable(_owned_players(connection, proposer, offered), "trocado")
+        _check_movable(_owned_players(connection, recipient, requested), "trocado")
         _require_balance(
             connection, proposer, proposer_memilets, "Você não tem Memilets suficientes."
         )
@@ -392,12 +434,13 @@ def settle_trade(
         }
         proposer, recipient = trade["proposer_id"], trade["recipient_id"]
         try:
-            _owned_players(connection, proposer, sides["proposer"])
-            _owned_players(connection, recipient, sides["recipient"])
+            moving = _owned_players(connection, proposer, sides["proposer"])
+            moving += _owned_players(connection, recipient, sides["recipient"])
         except TransactionError as error:
             raise TransactionError(
                 "Um dos jogadores mudou de dono desde a proposta; a troca não foi feita."
             ) from error
+        _check_movable(moving, "trocado")
         for owner, amount in (
             (proposer, trade["proposer_memilets"]),
             (recipient, trade["recipient_memilets"]),
@@ -417,6 +460,74 @@ def settle_trade(
         _add_memilets(connection, recipient, -balance)
         _set_status(connection, trade_id, "accepted")
         return "accepted"
+
+
+def toggle_protection(
+    discord_user_id: int | str, player_id: int, database_path: str | Path = DATABASE_PATH
+) -> bool:
+    """Liga ou desliga o 🔒 do jogador; devolve se ficou protegido."""
+    with connect(database_path) as connection:
+        row = connection.execute(
+            "SELECT locked FROM player_ownership WHERE discord_user_id = ? AND player_id = ?",
+            (str(discord_user_id), player_id),
+        ).fetchone()
+        if row is None:
+            raise TransactionError("Esse jogador não está no seu elenco.")
+        locked = not row["locked"]
+        connection.execute(
+            "UPDATE player_ownership SET locked = ? WHERE player_id = ?", (int(locked), player_id)
+        )
+    return locked
+
+
+def quick_sale_ids(
+    discord_user_id: int | str,
+    database_path: str | Path = DATABASE_PATH,
+    *,
+    rarity: str | None = None,
+    below: int | None = None,
+    position: str | None = None,
+) -> list[int]:
+    """Reservas que a venda rápida pode vender com o filtro (sem 🔒 e sem trava de pacote)."""
+    clauses = [
+        "o.discord_user_id = ?",
+        "o.locked = 0",
+        "(o.pack_locked_until IS NULL OR o.pack_locked_until <= ?)",
+        "NOT EXISTS (SELECT 1 FROM team_lineups AS l "
+        "WHERE l.player_id = p.id AND l.discord_user_id = o.discord_user_id)",
+    ]
+    parameters: list[Any] = [
+        str(discord_user_id),
+        _utc_now().isoformat(timespec="seconds"),
+    ]
+    if rarity is not None:
+        index = next(
+            (i for i, tier in enumerate(RARITY_TIERS) if tier[0].casefold() == rarity.casefold()),
+            None,
+        )
+        if index is None:
+            raise TransactionError("Raridade desconhecida.")
+        clauses.append(f"rarity_index({EFFECTIVE_OVERALL_SQL}) = ?")
+        parameters.append(index)
+    if below is not None:
+        clauses.append(f"{EFFECTIVE_OVERALL_SQL} < ?")
+        parameters.append(below)
+    if position is not None:
+        clauses.append("p.game_position = ?")
+        parameters.append(position)
+    with connect(database_path) as connection:
+        rows = connection.execute(
+            f"""
+            SELECT p.id FROM player_ownership AS o
+            JOIN players AS p ON p.id = o.player_id
+            LEFT JOIN player_balls AS b ON b.player_id = p.id
+            WHERE {' AND '.join(clauses)}
+            ORDER BY {EFFECTIVE_OVERALL_SQL}, p.id
+            LIMIT {MAX_SALE_PLAYERS}
+            """,
+            parameters,
+        ).fetchall()
+    return [int(row["id"]) for row in rows]
 
 
 def cancel_trade(

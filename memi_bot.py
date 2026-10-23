@@ -3712,7 +3712,8 @@ AJUDA_JOGO = [
             ("mm!daily", "100 a 300 Memilets; cada cosmético equipado soma +100 ao máximo"),
             ("mm!carteira", "saldo, rolls, wishes, timers e preço da crate"),
             ("mm!upgrade", "loja de upgrades (rolls, wishes, Star Wish, daily…), com confirmação"),
-            ("mm!crates", "caixas: rolls instantâneos, cosméticos, bônus e upgrades"),
+            ("mm!crates [1|5|10]", "caixas: rolls guardados, cosméticos, bônus e upgrades"),
+            ("mm!pacote", "uma carta de jogador livre do mercado (nunca Base)"),
             (
                 "mm!construir [1-12] / mm!destruir",
                 "Centro de Treinamento: torre de upgrades eternos",
@@ -3723,7 +3724,8 @@ AJUDA_JOGO = [
                 "missões que pagam Memilets: 3 por dia e 2 maiores, renovadas toda segunda",
             ),
             ("mm!rt", "zera o claim na hora a cada 12 h (liberado por upgrade)"),
-            ("mm!vender [nome]", "vende jogadores, mostrando o valor antes"),
+            ("mm!vender [nome|base|abaixo 70]", "vende jogadores, mostrando o valor antes"),
+            ("mm!proteger <nome>", "🔒 tira o jogador de todas as vendas"),
             ("mm!troca @pessoa", "monta uma troca de jogadores e Memilets"),
             ("mm!dar @pessoa <jogador|valor>", "doa um jogador ou Memilets"),
         ],
@@ -3733,6 +3735,7 @@ AJUDA_JOGO = [
         [
             ("mm!escalar", "monta o time clicando na posição e escolhendo o jogador"),
             ("mm!time [nome|cor valor]", "perfil e imagem do time, com emblema e técnico"),
+            ("mm!personalizar", "painel com nome, cor, escudo e cosméticos do time"),
             (
                 "mm!cosmeticos · mm!emblema · mm!uniforme · mm!estadio · mm!tecnico · "
                 "mm!liga · mm!mascote",

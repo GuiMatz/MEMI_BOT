@@ -60,13 +60,15 @@ ROSTER_SORTS = {
 
 
 def roster_line(index: int, player: dict) -> str:
-    """`  1. ⭐ 88 — Nome (PE›PD)`: estrela e vaga para os titulares."""
+    """`  1. ⭐ 88 — Nome (PE›PD) 🔒📦`: titulares, vaga, protegido e veio de pacote."""
     natural = player.get("game_position") or "posição pendente"
     slot = player.get("lineup_position")
     position = natural if not slot or slot == natural else f"{natural}›{slot}"
     mark = "⭐" if slot else "▫️"
+    tags = ("🔒" if player.get("locked") else "") + ("📦" if player.get("pack_origin") else "")
     return (
-        f"`{index:>3}.` {mark} **{player.get('overall') or '—'}** — {player['name']} ({position})"
+        f"`{index:>3}.` {mark} **{player.get('overall') or '—'}** — {player['name']} "
+        f"({position}){' ' + tags if tags else ''}"
     )
 
 
@@ -232,7 +234,8 @@ FUTAE_SECTIONS = (
         "`mm!daily` — de 100 a 300 Memilets (+100 por cosmético equipado)\n"
         "`mm!carteira` — saldo, limites e timers\n"
         "`mm!upgrade` — loja de upgrades (sempre pede confirmação)\n"
-        "`mm!crates` — caixas com rolls, cosméticos e bônus\n"
+        "`mm!crates [1|5|10]` — caixas com rolls guardados, cosméticos e bônus\n"
+        "`mm!pacote` — uma carta de jogador livre do mercado (nunca Base)\n"
         "`mm!construir [1-12]` / `mm!destruir` — Centro de Treinamento (torre)\n"
         "`mm!renda` · `mm!bilheteria` — dinheiro do estádio e do campeonato\n"
         "`mm!missoes` — missões diárias e semanais · `mm!rt` — zera o claim (upgrade)",
@@ -245,11 +248,12 @@ FUTAE_SECTIONS = (
     ),
     (
         "⚽ Time e partidas",
-        "`mm!time` — perfil e imagem do time (`mm!time nome|cor <valor>`)\n"
-        "`mm!escudo` + imagem anexada — escudo próprio do time (`mm!escudo remover`)\n"
+        "`mm!time` — perfil e imagem do time · `mm!personalizar` — nome, cor, escudo e "
+        "cosméticos num painel\n"
         "`mm!escalar` — monta o time clicando em cada posição\n"
         "`mm!tatica capitao|falta|penalti <nome>` — capitão e cobradores\n"
-        "`mm!vender [nome]` — mostra quanto rende e confirma (sem nome: vários)\n"
+        "`mm!vender [nome|base|abaixo 70|posicao ZAG]` — mostra quanto rende e confirma\n"
+        "`mm!proteger <nome>` — 🔒 tira o jogador de todas as vendas\n"
         "`mm!troca @pessoa` — monta a troca nos menus · `mm!dar @pessoa <jogador|valor>`\n"
         "`mm!amistoso @pessoa` — partida narrada; o 1º do dia em casa rende renda\n"
         "`mm!campeonato` — campeonato diário; o campeão leva 500 Memilets\n"

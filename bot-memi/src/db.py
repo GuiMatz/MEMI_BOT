@@ -175,7 +175,12 @@ CREATE TABLE IF NOT EXISTS player_ownership (
     player_id INTEGER PRIMARY KEY REFERENCES players(id) ON DELETE CASCADE,
     discord_user_id TEXT NOT NULL REFERENCES game_users(discord_user_id)
         ON DELETE CASCADE,
-    acquired_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    acquired_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- 1 = protegido pelo dono (não aparece em nenhuma venda).
+    locked INTEGER NOT NULL DEFAULT 0 CHECK (locked IN (0, 1)),
+    -- Veio de pacote: vende por menos e fica um tempo sem sair do elenco.
+    pack_origin INTEGER NOT NULL DEFAULT 0 CHECK (pack_origin IN (0, 1)),
+    pack_locked_until TEXT
 );
 
 CREATE TABLE IF NOT EXISTS player_balls (
@@ -557,6 +562,19 @@ def initialize_database(database_path: str | Path = DATABASE_PATH) -> None:
                 )
 
         _migrate_roll_cycle_limit(connection)
+        ownership_columns = {
+            row["name"] for row in connection.execute("PRAGMA table_info(player_ownership)")
+        }
+        ownership_migrations = {
+            "locked": "INTEGER NOT NULL DEFAULT 0 CHECK (locked IN (0, 1))",
+            "pack_origin": "INTEGER NOT NULL DEFAULT 0 CHECK (pack_origin IN (0, 1))",
+            "pack_locked_until": "TEXT",
+        }
+        for column, definition in ownership_migrations.items():
+            if column not in ownership_columns:
+                connection.execute(
+                    f"ALTER TABLE player_ownership ADD COLUMN {_identifier(column)} {definition}"
+                )
         team_columns = {row["name"] for row in connection.execute("PRAGMA table_info(game_teams)")}
         for column in (
             "coach_name",

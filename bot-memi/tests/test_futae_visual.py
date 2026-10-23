@@ -8,14 +8,14 @@ from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
 
-from PIL import Image
+from PIL import Image, ImageChops, ImageStat
 
 from src.boards_image import render_missions, render_season
 from src.card_image import render_player_card
 from src.championship import play_championship, register_team
 from src.club_card import render_club_card
 from src.cosmetic_card import render_cosmetic_card
-from src.crate_animation import opening_gif, reveal_gif
+from src.crate_animation import PrizeTile, opening_gif, prize_gif
 from src.db import connect, initialize_database
 from src.economy import (
     CRATE_PITY_LIMIT,
@@ -132,16 +132,24 @@ class ImageTests(unittest.TestCase):
                 with Image.open(BytesIO(image.getvalue())) as opened:
                     self.assertGreater(opened.height, opened.width)
 
-    def test_crate_gifs_loop_only_while_opening(self):
+    def test_crate_gifs_show_the_prize_from_the_first_frame(self):
         with Image.open(BytesIO(opening_gif())) as image:
             self.assertEqual(image.format, "GIF")
             self.assertEqual(image.info.get("loop"), 0)
+        tiles = [PrizeTile("basico", "coin", "300", "Memilets")]
         for rarity in ("basico", "lendario"):
-            data = reveal_gif(rarity)
+            data = prize_gif(rarity, tiles)
             self.assertLess(len(data), 3_000_000)
             with Image.open(BytesIO(data)) as image:
-                self.assertGreater(image.n_frames, 20)
-                self.assertNotIn("loop", image.info)  # toca uma vez e para
+                first = image.convert("RGB").copy()
+                image.seek(image.n_frames - 1)
+                last = image.convert("RGB")
+            # O cartão do prêmio já está no primeiro quadro e não muda até o último.
+            box = (246, 140, 394, 316)
+            tile = first.crop(box)
+            self.assertGreater(max(ImageStat.Stat(tile).extrema[0]), 200)  # tem texto claro
+            difference = ImageStat.Stat(ImageChops.difference(tile, last.crop(box))).mean
+            self.assertLess(max(difference), 6)
 
 
 class MissionTests(Case):

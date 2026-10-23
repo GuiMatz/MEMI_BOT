@@ -42,6 +42,10 @@ def card_embed(
         lines.insert(1, "✅ Titular" + (f" como {slot}" if natural and slot != natural else ""))
     if player.get("balls"):
         lines.append(f"⚽ {player['balls']}/10 bolas")
+    if player.get("locked"):
+        lines.append("🔒 Protegido (não aparece em vendas)")
+    if player.get("pack_origin"):
+        lines.append("📦 Veio de pacote: vende por 25% do valor")
     if "owner_name" in player:
         lines.append(f"🔒 Contratado por **{owner}**" if owner else "🟢 Livre para contratar")
     embed = discord.Embed(

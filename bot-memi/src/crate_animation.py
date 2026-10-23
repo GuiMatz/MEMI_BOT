@@ -1,4 +1,4 @@
-"""Animações da crate em GIF: o pacote tremendo e a revelação de cada raridade.
+"""Animações da crate em GIF: o pacote tremendo e a revelação dos prêmios.
 
 A abertura acontece em dois tempos no Discord: primeiro o pacote treme (GIF neutro, que
 não entrega a raridade, em loop); depois a mensagem é editada com a revelação daquela
@@ -12,13 +12,15 @@ from __future__ import annotations
 
 import math
 import random
+from dataclasses import dataclass
 from functools import lru_cache
 from io import BytesIO
+from typing import Any
 
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 from src.art import artwork
-from src.visual import font, glow, mix
+from src.visual import contain, font, glow, load_picture, mix, star
 
 WIDTH, HEIGHT = 480, 300
 SCALE = 2  # desenha em dobro e reduz: bordas suaves
@@ -28,12 +30,13 @@ GOLD = (230, 181, 74)
 PACK_HEIGHT = 430  # altura do pacote no quadro grande
 PACK_BASE = 560  # onde fica o pé do pacote
 
+# Mesma palavra, mesma cor das séries das cartas (Incomum azul, Raro roxo…).
 RARITY_COLORS = {
     "basico": (190, 198, 210),
-    "incomum": (76, 207, 134),
-    "raro": (91, 156, 255),
-    "epico": (176, 124, 255),
-    "lendario": (255, 179, 71),
+    "incomum": (91, 156, 255),
+    "raro": (176, 124, 255),
+    "epico": (240, 150, 60),
+    "lendario": (235, 75, 75),
 }
 RARITY_TITLES = {
     "basico": "BÁSICO",
@@ -131,20 +134,6 @@ def opening_gif() -> bytes:
     return _to_gif(frames, durations, loop=True)
 
 
-def _rays(color, count: int, rotation: float, length: float, alpha: int) -> Image.Image:
-    layer = Image.new("RGBA", BIG, (0, 0, 0, 0))
-    draw = ImageDraw.Draw(layer)
-    cx, cy = BIG[0] / 2, PACK_BASE - PACK_HEIGHT * 0.72
-    for index in range(count):
-        angle = rotation + index * 2 * math.pi / count
-        draw.line(
-            (cx, cy, cx + length * math.cos(angle), cy + length * math.sin(angle)),
-            fill=(*color, alpha),
-            width=3 if index % 2 else 5,
-        )
-    return layer.filter(ImageFilter.GaussianBlur(1.5))
-
-
 def _tracked(draw, center, text: str, size: int, fill, spacing: int):
     face = font(size, True)
     widths = [draw.textlength(letter, font=face) for letter in text]
@@ -154,90 +143,281 @@ def _tracked(draw, center, text: str, size: int, fill, spacing: int):
         x += width + spacing
 
 
-@lru_cache(maxsize=8)
-def reveal_gif(rarity: str) -> bytes:
-    """A aba se solta, a luz da raridade sai do pacote e o nome da série aparece."""
+# --- Revelação com o prêmio na frente ------------------------------------------------------
+#
+# Regra de todos os GIFs do bot: o primeiro quadro já mostra o que importa (quem não
+# carrega o GIF, ou tem a animação desligada, vê só ele). A animação vem por cima: luz,
+# raios e partículas, sem esconder nada.
+
+PRIZE_SIZE = (640, 360)
+TILE = (168, 196)
+ICONS = ("coin", "rolls", "clock", "shield", "star", "plus", "up", "tag", "cosmetic")
+
+
+@dataclass(frozen=True)
+class PrizeTile:
+    """Um cartão de prêmio: raridade (cor), ícone, título grande e linha de apoio."""
+
+    rarity: str
+    icon: str
+    title: str
+    subtitle: str = ""
+    picture: Any = None  # caminho da imagem do cosmético, se houver
+
+
+def _gif(frames: list[Image.Image], durations: list[int], loop: bool = True) -> bytes:
+    """Paleta única tirada de vários quadros, para qualquer tamanho de quadro."""
+    width, height = frames[0].size
+    picks = [frames[0], frames[len(frames) // 3], frames[2 * len(frames) // 3], frames[-1]]
+    strip = Image.new("RGB", (width, height * len(picks)))
+    for index, frame in enumerate(picks):
+        strip.paste(frame, (0, height * index))
+    palette = strip.quantize(colors=255, method=Image.Quantize.MEDIANCUT)
+    paletted = [frame.quantize(palette=palette, dither=Image.Dither.NONE) for frame in frames]
+    buffer = BytesIO()
+    paletted[0].save(
+        buffer,
+        format="GIF",
+        save_all=True,
+        append_images=paletted[1:],
+        duration=durations,
+        disposal=1,
+        **({"loop": 0} if loop else {}),
+    )
+    return buffer.getvalue()
+
+
+def _icon(kind: str, size: int, color, picture=None) -> Image.Image:
+    """Ícone chapado e simples (o estilo minimalista do resto do bot)."""
+    big = size * 2
+    layer = Image.new("RGBA", (big, big), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(layer)
+    c = big / 2
+    r = big * 0.4
+    light = mix(color, (255, 255, 255), 0.35)
+    if kind == "cosmetic" and picture is not None:
+        loaded = load_picture(picture)
+        if loaded is not None:
+            return contain(loaded, (size, size))
+    if kind == "coin":
+        draw.ellipse((c - r, c - r, c + r, c + r), fill=(*GOLD, 255))
+        draw.ellipse(
+            (c - r * 0.72, c - r * 0.72, c + r * 0.72, c + r * 0.72),
+            outline=(120, 84, 20, 255),
+            width=int(big * 0.03),
+        )
+        draw.text(
+            (c, c), "M", font=font(int(big * 0.36), True), fill=(110, 76, 16, 255), anchor="mm"
+        )
+    elif kind == "rolls":
+        s = r * 0.85
+        draw.rounded_rectangle(
+            (c - s, c - s, c + s, c + s), radius=int(big * 0.1), fill=(*light, 255)
+        )
+        pip = big * 0.06
+        for dx, dy in ((-0.5, -0.5), (0.5, 0.5), (0, 0), (0.5, -0.5), (-0.5, 0.5)):
+            x, y = c + dx * s, c + dy * s
+            draw.ellipse((x - pip, y - pip, x + pip, y + pip), fill=(*BACKGROUND, 255))
+    elif kind == "clock":
+        draw.ellipse((c - r, c - r, c + r, c + r), outline=(*light, 255), width=int(big * 0.07))
+        draw.line((c, c, c, c - r * 0.6), fill=(*light, 255), width=int(big * 0.06))
+        draw.line((c, c, c + r * 0.45, c + r * 0.2), fill=(*light, 255), width=int(big * 0.06))
+    elif kind == "shield":
+        draw.polygon(
+            [
+                (c - r * 0.8, c - r * 0.75),
+                (c + r * 0.8, c - r * 0.75),
+                (c + r * 0.8, c),
+                (c, c + r),
+                (c - r * 0.8, c),
+            ],
+            fill=(*light, 255),
+        )
+    elif kind == "star":
+        draw.polygon(star(c, c, r, r * 0.45), fill=(*light, 255))
+    elif kind in {"plus", "up"}:
+        w = big * 0.13
+        if kind == "plus":
+            draw.rectangle((c - w / 2, c - r, c + w / 2, c + r), fill=(*light, 255))
+            draw.rectangle((c - r, c - w / 2, c + r, c + w / 2), fill=(*light, 255))
+        else:
+            draw.polygon([(c, c - r), (c + r * 0.8, c), (c - r * 0.8, c)], fill=(*light, 255))
+            draw.rectangle((c - w / 2, c - 2, c + w / 2, c + r), fill=(*light, 255))
+    elif kind == "tag":
+        draw.polygon(
+            [
+                (c - r, c - r * 0.5),
+                (c + r * 0.4, c - r * 0.5),
+                (c + r, c),
+                (c + r * 0.4, c + r * 0.5),
+                (c - r, c + r * 0.5),
+            ],
+            fill=(*light, 255),
+        )
+        draw.ellipse(
+            (c + r * 0.15, c - big * 0.04, c + r * 0.15 + big * 0.08, c + big * 0.04),
+            fill=(*BACKGROUND, 255),
+        )
+    else:  # cosmético sem imagem: um losango
+        draw.polygon([(c, c - r), (c + r, c), (c, c + r), (c - r, c)], fill=(*light, 255))
+    return layer.resize((size, size), Image.LANCZOS)
+
+
+def _tile(tile: PrizeTile) -> Image.Image:
+    color = RARITY_COLORS[tile.rarity]
+    width, height = TILE
+    card = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(card)
+    draw.rounded_rectangle((0, 0, width - 1, height - 1), 18, fill=(20, 25, 35, 245))
+    draw.rounded_rectangle((0, 0, width - 1, height - 1), 18, outline=(*color, 255), width=3)
+    icon = _icon(tile.icon, 78, color, tile.picture)
+    card.alpha_composite(icon, ((width - icon.width) // 2, 20))
+    face = font(24, True)
+    title = tile.title
+    while draw.textlength(title, font=face) > width - 18 and len(title) > 3:
+        title = title[:-2].rstrip() + "…"
+    draw.text((width / 2, 124), title, font=face, fill="white", anchor="mm")
+    if tile.subtitle:
+        small = font(15)
+        subtitle = tile.subtitle
+        while draw.textlength(subtitle, font=small) > width - 16 and len(subtitle) > 3:
+            subtitle = subtitle[:-2].rstrip() + "…"
+        draw.text((width / 2, 152), subtitle, font=small, fill=(176, 184, 198), anchor="mm")
+    draw.text(
+        (width / 2, 178),
+        RARITY_TITLES[tile.rarity],
+        font=font(12, True),
+        fill=(*color, 255),
+        anchor="mm",
+    )
+    return card
+
+
+def prize_gif(rarity: str, tiles: list[PrizeTile], *, headline: str | None = None) -> bytes:
+    """A raridade em cima e os prêmios em cartões, visíveis desde o primeiro quadro."""
     color = RARITY_COLORS[rarity]
     power = RARITY_POWER[rarity]
-    body, top = _pack_parts()
-    total = 24 + power * 3
-    generator = random.Random(power + 11)
+    width, height = PRIZE_SIZE
+    shown = tiles[:3]
+    base = Image.new("RGBA", PRIZE_SIZE, (*BACKGROUND, 255))
+    base.alpha_composite(glow(PRIZE_SIZE, (width / 2, height * 0.62), 300, (40, 52, 76), 120))
+    cards = [_tile(tile) for tile in shown]
+    gap = 18
+    row = sum(card.width for card in cards) + gap * (len(cards) - 1)
+    x0 = (width - row) // 2
+    top = 128
+    content = Image.new("RGBA", PRIZE_SIZE, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(content)
+    _tracked(draw, (width / 2, 44), RARITY_TITLES[rarity], 34, (255, 255, 255, 255), 7)
+    draw.line((width / 2 - 46, 72, width / 2 + 46, 72), fill=(*color, 255), width=3)
+    if headline:
+        draw.text((width / 2, 98), headline, font=font(17, True), fill=(176, 184, 198), anchor="mm")
+    x = x0
+    for card in cards:
+        content.alpha_composite(card, (x, top))
+        x += card.width + gap
+    if len(tiles) > len(shown):
+        draw.text(
+            (width / 2, top + TILE[1] + 18),
+            f"+ {len(tiles) - len(shown)} prêmio(s) na lista abaixo",
+            font=font(14),
+            fill=(176, 184, 198),
+            anchor="mm",
+        )
+    generator = random.Random(power + 7)
     particles = [
         (
-            generator.uniform(-math.pi * 0.95, -math.pi * 0.05),
-            generator.uniform(120, 380),
-            generator.uniform(2, 4.5),
+            generator.uniform(0, width),
+            generator.uniform(0, height),
+            generator.uniform(1.2, 3.0),
+            generator.uniform(0.6, 1.6),
         )
-        for _ in range(8 + power * 6)
+        for _ in range(10 + power * 8)
     ]
-    mouth = (BIG[0] / 2, PACK_BASE - PACK_HEIGHT * 0.72)
-    frames, durations = [], []
+    total = 24
+    frames = []
     for index in range(total):
-        t = index / (total - 1)
-        image = _background().copy()
-        burst = _ease_out_cubic(_clamp(t / 0.4))
-        image.alpha_composite(glow(BIG, mouth, 90 + 220 * burst, color, int(60 + 90 * burst)))
+        t = index / total
+        pulse = 0.5 + 0.5 * math.sin(t * 2 * math.pi)
+        image = base.copy()
+        image.alpha_composite(
+            glow(
+                PRIZE_SIZE,
+                (width / 2, top + TILE[1] / 2),
+                200 + 40 * pulse,
+                color,
+                int(50 + 25 * power + 30 * pulse),
+            )
+        )
         if power:
-            image.alpha_composite(
-                _rays(
-                    mix(color, (255, 255, 255), 0.3),
-                    10 + power * 2,
-                    t * 0.5,
-                    120 + 300 * burst,
-                    40 + 14 * power,
+            rays = Image.new("RGBA", PRIZE_SIZE, (0, 0, 0, 0))
+            ray_draw = ImageDraw.Draw(rays)
+            cx, cy = width / 2, top + TILE[1] / 2
+            count = 8 + power * 2
+            for ray in range(count):
+                angle = t * 2 * math.pi / count + ray * 2 * math.pi / count
+                ray_draw.line(
+                    (cx, cy, cx + 420 * math.cos(angle), cy + 420 * math.sin(angle)),
+                    fill=(*mix(color, (255, 255, 255), 0.3), 20 + 8 * power),
+                    width=3,
                 )
+            image.alpha_composite(rays.filter(ImageFilter.GaussianBlur(1.5)))
+        dots = Image.new("RGBA", PRIZE_SIZE, (0, 0, 0, 0))
+        dot_draw = ImageDraw.Draw(dots)
+        for px, py, radius, speed in particles:
+            y = (py - t * height * speed * 0.5) % height
+            dot_draw.ellipse(
+                (px - radius, y - radius, px + radius, y + radius),
+                fill=(*mix(color, (255, 255, 255), 0.5), 150),
             )
-        _place(image, body)
-        lid = _ease_out_cubic(_clamp(t / 0.45))
-        _place(
-            image,
-            top,
-            dx=60 * lid,
-            dy=-240 * lid,
-            angle=-28 * lid,
-            alpha=1 - _clamp((t - 0.2) / 0.25),
+        image.alpha_composite(dots)
+        image.alpha_composite(content)
+        frames.append(image.convert("RGB"))
+    return _gif(frames, [70] * total)
+
+
+def card_reveal_gif(card: Image.Image, color, headline: str) -> bytes:
+    """Carta de jogador do pacote, inteira desde o primeiro quadro, com um brilho passando."""
+    width, height = 560, 500
+    card = card.convert("RGBA")
+    card.thumbnail((300, 420), Image.LANCZOS)
+    x, y = (width - card.width) // 2, 64
+    base = Image.new("RGBA", (width, height), (*BACKGROUND, 255))
+    title = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    _tracked(ImageDraw.Draw(title), (width / 2, 32), headline, 22, (255, 255, 255, 255), 5)
+    mask = card.getchannel("A")
+    total = 26
+    frames = []
+    for index in range(total):
+        t = index / total
+        pulse = 0.5 + 0.5 * math.sin(t * 2 * math.pi)
+        image = base.copy()
+        image.alpha_composite(
+            glow(
+                (width, height),
+                (width / 2, y + card.height / 2),
+                230 + 30 * pulse,
+                color,
+                int(90 + 40 * pulse),
+            )
         )
-        layer = Image.new("RGBA", BIG, (0, 0, 0, 0))
-        overlay = ImageDraw.Draw(layer)
-        line = 150 * burst
-        overlay.line(
-            (mouth[0] - line, mouth[1], mouth[0] + line, mouth[1]),
-            fill=(*mix(color, (255, 255, 255), 0.6), int(255 * burst)),
-            width=4,
+        image.alpha_composite(card, (x, y))
+        # Faixa de luz diagonal atravessando a carta (só por cima, não esconde nada).
+        sweep = Image.new("L", card.size, 0)
+        position = -card.width + (card.width * 3) * t
+        ImageDraw.Draw(sweep).polygon(
+            [
+                (position, 0),
+                (position + 50, 0),
+                (position - 60, card.height),
+                (position - 110, card.height),
+            ],
+            fill=70,
         )
-        for angle, distance, radius in particles:
-            travel = _ease_out_cubic(_clamp((t - 0.08) / 0.6)) * distance
-            fade = 1 - _clamp((t - 0.5) / 0.45)
-            if travel <= 0 or fade <= 0:
-                continue
-            px = mouth[0] + math.cos(angle) * travel
-            py = mouth[1] + math.sin(angle) * travel * 0.8
-            overlay.ellipse(
-                (px - radius, py - radius, px + radius, py + radius),
-                fill=(*mix(color, (255, 255, 255), 0.5), int(230 * fade)),
-            )
-        image.alpha_composite(layer)
-        label_t = _clamp((t - 0.3) / 0.4)
-        if label_t > 0:
-            text_layer = Image.new("RGBA", BIG, (0, 0, 0, 0))
-            size = int(44 * SCALE * (0.8 + 0.2 * _ease_out_back(label_t)))
-            _tracked(
-                ImageDraw.Draw(text_layer),
-                (BIG[0] / 2, 96),
-                RARITY_TITLES[rarity],
-                size,
-                (255, 255, 255, 255),
-                size // 5,
-            )
-            text_layer.putalpha(
-                text_layer.getchannel("A").point(lambda value: int(value * min(1, label_t * 1.6)))
-            )
-            image.alpha_composite(text_layer)
-            bar = 70 * _ease_out_cubic(label_t)
-            ImageDraw.Draw(image).line(
-                (BIG[0] / 2 - bar, 150, BIG[0] / 2 + bar, 150), fill=(*color, 255), width=4
-            )
-        frames.append(_finish(image))
-        durations.append(55)
-    durations[-1] = 60_000  # para no último quadro
-    return _to_gif(frames, durations, loop=False)
+        sweep = ImageChops.multiply(sweep.filter(ImageFilter.GaussianBlur(8)), mask)
+        shine = Image.new("RGBA", card.size, (255, 255, 255, 0))
+        shine.putalpha(sweep)
+        image.alpha_composite(shine, (x, y))
+        image.alpha_composite(title)
+        frames.append(image.convert("RGB"))
+    return _gif(frames, [70] * total)

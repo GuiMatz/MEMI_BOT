@@ -269,6 +269,32 @@ def equip(
     return item
 
 
+def equip_key(
+    discord_user_id: int | str,
+    kind: str,
+    key: str,
+    database_path: str | Path = DATABASE_PATH,
+) -> dict[str, Any]:
+    """Equipa pelo identificador exato (menus do `mm!personalizar`), sem busca por nome."""
+    label, _, column, stores_path = COSMETIC_KINDS[kind]
+    item = next(
+        (item for item in list_owned(discord_user_id, kind, database_path) if item["key"] == key),
+        None,
+    )
+    if item is None:
+        raise CosmeticError(f"Esse {label.lower()} não é seu.")
+    value = item["image_path"] if stores_path else item["name"]
+    if stores_path and not value:
+        raise CosmeticError(f"{item['name']} não tem imagem local para equipar.")
+    with connect(database_path) as connection:
+        connection.execute(
+            f"UPDATE game_teams SET {column} = ?, updated_at = CURRENT_TIMESTAMP "
+            "WHERE discord_user_id = ?",
+            (value, str(discord_user_id)),
+        )
+    return item
+
+
 def unequip(
     discord_user_id: int | str, kind: str, database_path: str | Path = DATABASE_PATH
 ) -> None:

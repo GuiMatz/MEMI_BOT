@@ -3,7 +3,7 @@ import unittest
 from io import BytesIO
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageChops, ImageStat
 
 from src.crests import (
     CrestError,
@@ -103,8 +103,21 @@ class ScoreGifTests(unittest.TestCase):
             with self.subTest(title=title):
                 data, image = self.render(title, penalties=(4, 3))
                 self.assertEqual(image.format, "GIF")
-                self.assertGreater(image.n_frames, 20)
+                self.assertGreater(image.n_frames, 1)
                 self.assertLess(len(data), 8 * 1024 * 1024)
+
+    def test_first_frame_already_shows_the_final_score(self):
+        """Quem não carrega o GIF vê só o primeiro quadro: o placar tem de estar nele."""
+        for title in ("Amistoso", "FINAL do campeonato"):
+            with self.subTest(title=title):
+                _, image = self.render(title)
+                first = image.convert("RGB").copy()
+                image.seek(image.n_frames - 1)
+                last = image.convert("RGB")
+                score = (300, 130, 660, 260)  # placar e "FIM DE JOGO", no meio do quadro
+                self.assertGreater(max(ImageStat.Stat(first.crop(score)).extrema[0]), 230)
+                difference = ImageStat.Stat(ImageChops.difference(first, last).crop(score)).mean
+                self.assertLess(max(difference), 12)
 
     def test_championship_gif_differs_from_friendly(self):
         friendly, _ = self.render("Amistoso")

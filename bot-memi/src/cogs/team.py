@@ -338,11 +338,15 @@ class TeamLayout(discord.ui.LayoutView):
             label="Editar escalação", emoji="✏️", style=discord.ButtonStyle.primary
         )
         edit.callback = self._edit
+        customize = discord.ui.Button(
+            label="Personalizar", emoji="🎨", style=discord.ButtonStyle.secondary
+        )
+        customize.callback = self._customize
         container = discord.ui.Container(
             discord.ui.TextDisplay(f"## {team['team_name']}"),
             discord.ui.MediaGallery(discord.MediaGalleryItem("attachment://escalacao.png")),
             discord.ui.TextDisplay(team_summary(team, lineup, database_path)),
-            discord.ui.ActionRow(card, edit),
+            discord.ui.ActionRow(card, edit, customize),
             accent_colour=discord.Color.from_str(team["color"]),
         )
         self.add_item(container)
@@ -367,6 +371,23 @@ class TeamLayout(discord.ui.LayoutView):
         builder.message = await interaction.followup.send(
             embed=builder.embed(team, lineup), file=file, view=builder, wait=True
         )
+
+    async def _customize(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != self.owner.id:
+            await interaction.response.send_message(
+                "Use `mm!personalizar` para personalizar o seu time.", ephemeral=True
+            )
+            return
+        await interaction.response.defer()
+        await open_customize(self.owner, self.database_path, interaction.followup.send)
+
+
+async def open_customize(owner: discord.abc.User, database_path, send) -> None:
+    """Abre o painel de personalização (`src.cogs.customize`) com a prévia do clube."""
+    from src.cogs.customize import CustomizeView
+
+    panel = CustomizeView(owner, database_path)
+    panel.message = await send(embed=panel.embed(), file=await panel.file(), view=panel, wait=True)
 
 
 class TeamCog(commands.Cog):
@@ -467,6 +488,16 @@ class TeamCog(commands.Cog):
             file=await lineup_file(team, lineup),
             mention_author=False,
         )
+
+    @commands.command(name="personalizar", aliases=["customizar", "visual", "editartime"])
+    async def customize(self, context: commands.Context) -> None:
+        """Painel com nome, cor, escudo e cosméticos do time, com prévia ao vivo."""
+        ensure_team(context.author.id, context.author.display_name, self.database_path)
+
+        async def send(wait: bool = False, **kwargs):
+            return await context.reply(mention_author=False, **kwargs)
+
+        await open_customize(context.author, self.database_path, send)
 
     @commands.command(name="escalar", aliases=["escalacao", "lineup"])
     async def scale(

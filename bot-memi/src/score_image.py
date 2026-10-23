@@ -152,31 +152,15 @@ def render_score_card(
 
 # --- Versão animada ---------------------------------------------------------------------
 #
-# Mesmo layout do cartão, montado em camadas: o fundo é desenhado uma vez e cada quadro
-# só recompõe o que se mexe (escudos entrando, placar estourando, artilheiros subindo).
-# Amistoso termina com um brilho discreto passando pelo centro; campeonato tem poeira
-# dourada caindo no fim e o selo de campeão no vencedor.
+# Mesmo layout do cartão, montado em camadas. O primeiro quadro já traz o placar
+# completo (escudos, gols, artilheiros e o selo de campeão): no Discord, quem não carrega
+# o GIF vê só esse quadro. A animação vem por cima: um brilho discreto passando pelo
+# centro no amistoso e poeira dourada caindo no campeonato.
 
 GIF_SCALE = 0.8  # 960 × 504: cabe folgado no limite de anexo do Discord
 FRAME_MS = 45
 HOLD_MS = 4000
-INTRO_FRAMES = 12  # escudos e nomes
-SCORE_FRAMES = (8, 18)  # placar: começa e termina
-SCORER_STEP = 3  # quadros entre um artilheiro e o próximo
-OUTRO_FRAMES = 16  # brilho / selo de campeão
-
-
-def _ease(value: float) -> float:
-    value = min(1.0, max(0.0, value))
-    return 1 - (1 - value) ** 3
-
-
-def _faded(layer: Image.Image, alpha: float) -> Image.Image:
-    if alpha >= 1:
-        return layer
-    faded = layer.copy()
-    faded.putalpha(layer.getchannel("A").point(lambda value: int(value * max(0.0, alpha))))
-    return faded
+EFFECT_FRAMES = 22  # brilho/poeira por cima do placar já pronto
 
 
 def _layer() -> Image.Image:
@@ -340,43 +324,29 @@ def render_score_gif(
         champion = _layer()
         pill(ImageDraw.Draw(champion), (230 if home_won else 970, 140), "CAMPEÃO", 24, GOLD)
 
-    scorers_start = SCORE_FRAMES[1]
-    scorers_end = scorers_start + SCORER_STEP * len(scorers) + 4
-    total = scorers_end + OUTRO_FRAMES
+    # O placar inteiro já no primeiro quadro (quem não carrega o GIF vê ele); a animação
+    # só passa por cima: brilho no amistoso, poeira dourada no campeonato.
+    content = _layer()
+    for layer, _ in teams:
+        content.alpha_composite(layer)
+    content.alpha_composite(dash)
+    for text, center, fill in digits:
+        content.alpha_composite(_digit_layer(text, center, 1.0, fill))
+    content.alpha_composite(status)
+    for layer, _ in scorers:
+        content.alpha_composite(layer)
+    if champion is not None:
+        content.alpha_composite(champion)
+    total = EFFECT_FRAMES
+    dust_seed = f"{home.get('team_name')}{away.get('team_name')}"
     frames: list[Image.Image] = []
     for frame in range(total):
         image = background.copy()
-        if championship and frame >= scorers_end:
-            dust_seed = f"{home.get('team_name')}{away.get('team_name')}"
-            image.alpha_composite(_dust(frame - scorers_end, dust_seed))
-        intro = _ease(frame / INTRO_FRAMES)
-        for layer, direction in teams:
-            shifted = _layer()
-            shifted.alpha_composite(_faded(layer, intro), (round(direction * 140 * (1 - intro)), 0))
-            image.alpha_composite(shifted)
-        image.alpha_composite(_faded(dash, _ease((frame - 6) / 6)))
-        start, end = SCORE_FRAMES
-        for index, (text, center, fill) in enumerate(digits):
-            progress = (frame - start - index * 3) / (end - start - 3)
-            if progress <= 0:
-                continue
-            eased = _ease(progress)
-            scale = 1 + 0.6 * (1 - eased)
-            image.alpha_composite(_faded(_digit_layer(text, center, scale, fill), eased))
-        image.alpha_composite(_faded(status, _ease((frame - end) / 6)))
-        for index, (layer, _) in enumerate(scorers):
-            progress = _ease((frame - scorers_start - index * SCORER_STEP) / 5)
-            if progress <= 0:
-                continue
-            moved = _layer()
-            moved.alpha_composite(_faded(layer, progress), (0, round(14 * (1 - progress))))
-            image.alpha_composite(moved)
-        outro = (frame - scorers_end) / OUTRO_FRAMES
-        if 0 <= outro <= 1:
-            if not championship:
-                image.alpha_composite(_sweep(outro))
-        if champion is not None:
-            image.alpha_composite(_faded(champion, _ease((frame - scorers_end) / 8)))
+        if championship:
+            image.alpha_composite(_dust(frame, dust_seed))
+        image.alpha_composite(content)
+        if not championship:
+            image.alpha_composite(_sweep(frame / (total - 1)))
         frames.append(
             image.resize(
                 (round(WIDTH * GIF_SCALE), round(HEIGHT * GIF_SCALE)), Image.LANCZOS
