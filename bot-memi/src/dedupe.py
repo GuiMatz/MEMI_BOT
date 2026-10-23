@@ -140,6 +140,11 @@ def remove_duplicates(database_path: str | Path = DATABASE_PATH) -> dict[str, in
                         (keep_id, drop_id),
                     )
                 connection.execute(
+                    "UPDATE OR IGNORE trade_items SET player_id = ? WHERE player_id = ?",
+                    (keep_id, drop_id),
+                )
+                connection.execute("DELETE FROM trade_items WHERE player_id = ?", (drop_id,))
+                connection.execute(
                     "UPDATE player_sources SET player_id = ? WHERE player_id = ?",
                     (keep_id, drop_id),
                 )

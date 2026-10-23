@@ -302,6 +302,31 @@ CREATE TABLE IF NOT EXISTS trade_offers (
 CREATE INDEX IF NOT EXISTS idx_trade_offers_pending
     ON trade_offers(recipient_id, status, expires_at);
 
+-- Trocas com vários jogadores por lado (trade_offers fica só como histórico).
+CREATE TABLE IF NOT EXISTS trades (
+    id INTEGER PRIMARY KEY,
+    proposer_id TEXT NOT NULL REFERENCES game_users(discord_user_id)
+        ON DELETE CASCADE,
+    recipient_id TEXT NOT NULL REFERENCES game_users(discord_user_id)
+        ON DELETE CASCADE,
+    proposer_memilets INTEGER NOT NULL DEFAULT 0 CHECK (proposer_memilets >= 0),
+    recipient_memilets INTEGER NOT NULL DEFAULT 0 CHECK (recipient_memilets >= 0),
+    status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'accepted', 'declined', 'expired', 'cancelled')),
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    CHECK (proposer_id != recipient_id)
+);
+
+CREATE TABLE IF NOT EXISTS trade_items (
+    trade_id INTEGER NOT NULL REFERENCES trades(id) ON DELETE CASCADE,
+    side TEXT NOT NULL CHECK (side IN ('proposer', 'recipient')),
+    player_id INTEGER NOT NULL REFERENCES players(id),
+    PRIMARY KEY (trade_id, player_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_trades_pending ON trades(recipient_id, status, expires_at);
+
 CREATE TABLE IF NOT EXISTS championships (
     id INTEGER PRIMARY KEY,
     guild_id TEXT NOT NULL,

@@ -202,7 +202,8 @@ FUTAE_SECTIONS = (
         "`mm!escudo` + imagem anexada — escudo próprio do time (`mm!escudo remover`)\n"
         "`mm!escalar` — monta o time clicando em cada posição\n"
         "`mm!tatica capitao|falta|penalti <nome>` — capitão e cobradores\n"
-        "`mm!troca @pessoa <seu> por <dela>` / `mm!demitir <nome>`\n"
+        "`mm!vender [nome]` — mostra quanto rende e confirma (sem nome: vários)\n"
+        "`mm!troca @pessoa` — monta a troca nos menus · `mm!dar @pessoa <jogador|valor>`\n"
         "`mm!amistoso @pessoa` — partida narrada; o 1º do dia em casa rende renda\n"
         "`mm!campeonato` — campeonato diário; o campeão leva 500 Memilets\n"
         "`mm!temporada [mês]` — tabela do mês · `mm!temporadas` — campeão de cada mês",

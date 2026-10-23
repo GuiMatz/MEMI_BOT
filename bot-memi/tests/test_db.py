@@ -47,6 +47,8 @@ class DatabaseSchemaTests(unittest.TestCase):
                     "team_tactics",
                     "team_lineups",
                     "trade_offers",
+                    "trades",
+                    "trade_items",
                     "championships",
                     "championship_entries",
                     "championship_fixtures",
