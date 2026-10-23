@@ -28,9 +28,9 @@ from src.transactions import PACK_LOCK, _utc_now
 PACK_PRICE = 1_500
 # Série de raridade (índice em RARITY_TIERS) → chance. Soma 1.
 PACK_ODDS = {1: 0.40, 2: 0.35, 3: 0.185, 4: 0.05, 5: 0.015}
-# Pacote épico: só Raro ou melhor, com chance pequena de Ícone. É o pacote de quem tem
-# dinheiro sobrando: vendendo na hora rende ~42% do preço.
-EPIC_PACK_PRICE = 10_000
+# Pacote épico: só Raro ou melhor, com chance pequena de Ícone. A carta vende pelo valor
+# cheio (sem o corte de pacote); vendendo na hora rende ~55% do preço.
+EPIC_PACK_PRICE = 15_000
 EPIC_PACK_ODDS = {3: 0.44, 4: 0.40, 5: 0.10, 6: 0.05, 7: 0.01}
 # All-in: uma aposta, não um investimento. A roleta tem 20 fatias iguais e a cor de cada
 # uma é a série que ela dá: 2 douradas (Ícone ou melhor, 1 em 10) e o resto carta comum.
@@ -113,6 +113,7 @@ def open_pack(
         now,
         generator,
         inventory_item=("pacote_epico" if epic else "pacote") if from_inventory else None,
+        full_value=epic,
     )
 
 
@@ -166,12 +167,15 @@ def _buy_card(
     *,
     needs: tuple[int, ...] = (),
     inventory_item: str | None = None,
+    full_value: bool = False,
 ) -> PackResult:
     """Cobra `price` e entrega a primeira carta livre de `order`, marcada como de pacote.
 
     `needs`: séries das quais precisa haver alguém livre para a compra valer (o all-in só
     gira se o prêmio grande existir de verdade). `inventory_item`: abre um pacote ganho,
-    tirando do inventário em vez de cobrar (se o mercado estiver vazio, ele volta)."""
+    tirando do inventário em vez de cobrar (se o mercado estiver vazio, ele volta).
+    `full_value`: a carta vende pelo valor cheio (sem a marca de pacote); a trava de doar e
+    trocar continua."""
     user_id = str(discord_user_id)
     current_time = _utc_now(now)
     register_user(user_id, display_name, database_path)
@@ -207,9 +211,14 @@ def _buy_card(
         connection.execute(
             """
             INSERT INTO player_ownership (player_id, discord_user_id, pack_origin, pack_locked_until)
-            VALUES (?, ?, 1, ?)
+            VALUES (?, ?, ?, ?)
             """,
-            (player["id"], user_id, locked_until.isoformat(timespec="seconds")),
+            (
+                player["id"],
+                user_id,
+                int(not full_value),
+                locked_until.isoformat(timespec="seconds"),
+            ),
         )
         record(connection, user_id, "pack", now=current_time)
     return PackResult(player, price, locked_until)

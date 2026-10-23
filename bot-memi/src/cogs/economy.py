@@ -122,8 +122,8 @@ SHOP_INTRO = (
 )
 EPIC_PACK_INTRO = (
     "O pacote épico traz **uma carta Raro ou melhor**, com chance de Ícone. "
-    "Como no pacote comum, a carta pode ser vendida na hora por {factor}% do valor e fica "
-    "{days} dias sem poder ser doada ou trocada."
+    "Diferente do pacote comum, a carta vende pelo **valor cheio**. Ela fica {days} dias "
+    "sem poder ser doada ou trocada."
 )
 ALL_IN_INTRO = (
     "**Uma aposta, não um investimento.** A roleta tem {top} de chance de parar numa "
@@ -837,12 +837,17 @@ class EconomyCog(commands.Cog):
             color=discord.Color.from_rgb(230, 181, 74),
         )
         message = await send(embed=waiting)
-        embed, reveal = await self.card_reveal(author, result, "PACOTE ÉPICO" if epic else "PACOTE")
+        embed, reveal = await self.card_reveal(
+            author, result, "PACOTE ÉPICO" if epic else "PACOTE", full_value=epic
+        )
         target = edit if edit is not None else message.edit
         await target(embed=embed, attachments=[discord.File(BytesIO(reveal), "pacote.gif")])
 
-    async def card_reveal(self, author, result, headline: str) -> tuple[discord.Embed, bytes]:
-        """Embed e GIF da carta que saiu num pacote ou no all-in."""
+    async def card_reveal(
+        self, author, result, headline: str, *, full_value: bool = False
+    ) -> tuple[discord.Embed, bytes]:
+        """Embed e GIF da carta que saiu num pacote ou no all-in (`full_value`: pacote épico,
+        cuja carta vende pelo valor cheio)."""
         player = result.player
         overall = int(player["effective_overall"] or 0)
         label = rarity_label(overall)
@@ -860,8 +865,12 @@ class EconomyCog(commands.Cog):
                 f"**{overall}** · {label} · {player.get('game_position') or '—'} · "
                 f"{player.get('club_name') or 'Passe livre'}\n"
                 f"Foi direto para o seu elenco.\n"
-                f"📦 Dá para vender na hora por {round(PACK_SALE_FACTOR * 100)}% do valor · "
-                f"livre para doar ou trocar <t:{int(result.locked_until.timestamp())}:R>."
+                + (
+                    "📦 Vende pelo valor cheio · "
+                    if full_value
+                    else f"📦 Dá para vender na hora por {round(PACK_SALE_FACTOR * 100)}% do valor · "
+                )
+                + f"livre para doar ou trocar <t:{int(result.locked_until.timestamp())}:R>."
             ),
             color=rarity_color(overall),
         )

@@ -199,6 +199,10 @@ class OpenPackTests(Case):
         with self.assertRaises(PackError):
             open_pack(100, "Pessoa A", self.database_path, rng=random.Random(2), epic=True)
         self.assertEqual(self.memilets(100), EPIC_PACK_PRICE)  # sem Raro livre, não cobra
+        quote = sale_quote(100, [rare], self.database_path)
+        self.assertEqual(quote["total"], sale_value(game_overall(75)))  # sem corte de pacote
+        with self.assertRaises(TransactionError):  # mas a trava de doar continua
+            give_players(100, "A", 200, "B", [rare], 0, self.database_path)
         self.assertGreater(EPIC_PACK_PRICE, PACK_PRICE * 3)
         self.assertEqual(min(EPIC_PACK_ODDS), 3)
         self.assertAlmostEqual(sum(EPIC_PACK_ODDS.values()), 1.0)
@@ -209,7 +213,7 @@ class OpenPackTests(Case):
         expected = 0.0
         for tier, chance in EPIC_PACK_ODDS.items():
             low, high = RARITY_TIERS[tier][2], RARITY_TIERS[tier][3]
-            values = [sale_value(overall) * PACK_SALE_FACTOR for overall in range(low, high + 1)]
+            values = [sale_value(overall) for overall in range(low, high + 1)]  # valor cheio
             expected += chance * sum(values) / len(values)
         self.assertLess(expected, EPIC_PACK_PRICE)
 
