@@ -54,7 +54,7 @@ reivindicados pelo botão: quem rolou tem 5 segundos de exclusividade (aumentáv
 minutos e cada pessoa tem um claim por ciclo (renova junto com os rolls).
 Os claims são atômicos e cada jogador só pode ter um dono.
 
-Comandos oficiais do **FUT.AE** incluem `mm!futae`, `mm!left`, `mm!top [categoria]`, `mm!scout <nome>`, `mm!daily`, `mm!upgrade`, `mm!crates`,
+Comandos oficiais do **FUT.AE** incluem `mm!futae`, `mm!left`, `mm!top [categoria]`, `mm!scout <nome>`, `mm!daily`, `mm!shop`, `mm!upgrade`, `mm!crates`,
 `mm!wish`, `mm!wishlist`/`mm!wl`, `mm!starwish`/`mm!sw`, `mm!vender`, `mm!proteger`, `mm!troca`, `mm!dar`, `mm!pacote`, `mm!personalizar`, `mm!time`,
 `mm!escalar`, `mm!tatica`, `mm!amistoso` e `mm!campeonato`. A economia diária
 usa cooldown de 24 horas; wishes e Star Wishes afetam a roleta e
@@ -283,8 +283,12 @@ O FUT.AE é um módulo do MeMi BOT, não um bot separado. O menu geral continua 
   os reservas do filtro de uma vez (sem titulares nem 🔒), com o total antes.
 - `mm!proteger <nome>` liga/desliga o 🔒: o jogador some de todas as vendas.
 - `mm!crates 5|10` abre várias caixas; os rolls da caixa ficam guardados (não expiram).
-- `mm!pacote` dá uma carta livre do mercado (nunca Base); carta de pacote vende por 25%
-  e fica 7 dias sem poder ser vendida, doada ou trocada.
+- `mm!pacote` dá uma carta livre do mercado (nunca Base); carta de pacote vende na hora
+  por 50% e fica 7 dias sem poder ser doada ou trocada.
+- `mm!shop` (ou `mm!loja`) mostra tudo o que dá para comprar, com botões: caixas, pacotes,
+  upgrades e torre. As versões épicas custam mais e rendem melhor: a **caixa épica**
+  (`mm!crates epica [1|5|10]`, 5× a caixa) sempre traz um item extra, Raro ou melhor em 75%;
+  o **pacote épico** (`mm!pacote epico`, 5.000) só traz Raro ou melhor, com chance de Ícone.
 - `mm!topi` mostra o top dos jogadores em cartas (◀ ▶ e lista).
 - `mm!semfoto [meus]` mostra os jogadores sem foto, do maior overall para o menor, um
   por vez: **📷 Enviar foto** salva a imagem (já vira a foto da carta) e passa para o

@@ -254,9 +254,10 @@ FUTAE_SECTIONS = (
         "🪙 Economia",
         "`mm!daily` — de 100 a 300 Memilets (+100 por cosmético equipado)\n"
         "`mm!carteira` — saldo, limites e timers\n"
-        "`mm!upgrade` — loja de upgrades (sempre pede confirmação)\n"
-        "`mm!crates [1|5|10]` — caixas com rolls guardados, cosméticos e bônus\n"
-        "`mm!pacote` — uma carta de jogador livre do mercado (nunca Base)\n"
+        "`mm!shop`/`mm!loja` — tudo o que dá para comprar, com botões\n"
+        "`mm!upgrade` — upgrades permanentes (sempre pede confirmação)\n"
+        "`mm!crates [epica] [1|5|10]` — caixas com rolls guardados, cosméticos e bônus\n"
+        "`mm!pacote [epico]` — uma carta de jogador livre do mercado (nunca Base)\n"
         "`mm!construir [1-12]` / `mm!destruir` — Centro de Treinamento (torre)\n"
         "`mm!renda` · `mm!bilheteria` — dinheiro do estádio e do campeonato\n"
         "`mm!missoes` — missões diárias e semanais · `mm!rt` — zera o claim (upgrade)",

@@ -8,8 +8,11 @@ from types import SimpleNamespace
 from src.cosmetics import CosmeticError, equip_key, grant
 from src.db import connect, initialize_database
 from src.economy import (
+    CRATE_EXTRA_CHANCES,
     CRATE_PITY_LIMIT,
     CRATE_PRICE,
+    EPIC_CRATE_EXTRA_CHANCES,
+    EPIC_CRATE_MULTIPLIER,
     CratePrize,
     InsufficientFunds,
     get_crate_pity,
@@ -17,7 +20,7 @@ from src.economy import (
 )
 from src.game import claim_player, get_wallet, register_user
 from src.ratings import game_overall
-from src.packs import PACK_PRICE, PackError, open_pack
+from src.packs import EPIC_PACK_ODDS, EPIC_PACK_PRICE, PACK_PRICE, PackError, open_pack
 from src.teams import ensure_team, get_team, set_lineup_slot
 from src.transactions import (
     PACK_SALE_FACTOR,
@@ -174,6 +177,31 @@ class OpenPackTests(Case):
             open_pack(100, "Pessoa A", self.database_path, rng=random.Random(3))
         self.assertEqual(self.memilets(100), PACK_PRICE * 2)  # o pacote falho não cobra
 
+    def test_epic_pack_costs_more_and_only_gives_rare_or_better(self):
+        self.add_player("Comum", 45)  # 63 no jogo: o épico não pode cair nele
+        rare = self.add_player("Raro", 75)  # 81 no jogo
+        self.set_memilets(100, EPIC_PACK_PRICE * 2)
+        result = open_pack(100, "Pessoa A", self.database_path, rng=random.Random(1), epic=True)
+        self.assertEqual(result.player["id"], rare)
+        self.assertEqual(result.price, EPIC_PACK_PRICE)
+        self.assertEqual(self.memilets(100), EPIC_PACK_PRICE)
+        with self.assertRaises(PackError):
+            open_pack(100, "Pessoa A", self.database_path, rng=random.Random(2), epic=True)
+        self.assertEqual(self.memilets(100), EPIC_PACK_PRICE)  # sem Raro livre, não cobra
+        self.assertGreater(EPIC_PACK_PRICE, PACK_PRICE * 3)
+        self.assertEqual(min(EPIC_PACK_ODDS), 3)
+        self.assertAlmostEqual(sum(EPIC_PACK_ODDS.values()), 1.0)
+
+    def test_epic_pack_instant_sale_stays_below_its_price(self):
+        from src.ratings import RARITY_TIERS
+
+        expected = 0.0
+        for tier, chance in EPIC_PACK_ODDS.items():
+            low, high = RARITY_TIERS[tier][2], RARITY_TIERS[tier][3]
+            values = [sale_value(overall) * PACK_SALE_FACTOR for overall in range(low, high + 1)]
+            expected += chance * sum(values) / len(values)
+        self.assertLess(expected, EPIC_PACK_PRICE)
+
 
 class CrateBatchTests(Case):
     def test_open_several_crates_and_check_balance_first(self):
@@ -237,6 +265,26 @@ class CrateBatchTests(Case):
         if rolls:
             self.assertIn(f"{rolls} roll{'s' if rolls > 1 else ''}", titles)
 
+    def test_epic_crate_costs_five_crates_and_always_brings_an_extra_item(self):
+        self.add_player("Atacante")
+        self.set_memilets(100, CRATE_PRICE * EPIC_CRATE_MULTIPLIER * 10)
+        results = open_crates(
+            100, "Pessoa A", 10, self.database_path, rng=random.Random(5), epic=True
+        )
+        # A primeira custa 5 caixas; o prêmio "-10 no preço da crate" barateia as seguintes.
+        self.assertEqual(results[0].price, CRATE_PRICE * EPIC_CRATE_MULTIPLIER)
+        self.assertTrue(
+            all(result.price <= CRATE_PRICE * EPIC_CRATE_MULTIPLIER for result in results)
+        )
+        self.assertTrue(all(result.best_rarity != "basico" for result in results))
+        self.assertAlmostEqual(sum(EPIC_CRATE_EXTRA_CHANCES.values()), 1.0)
+        for rarity, chance in EPIC_CRATE_EXTRA_CHANCES.items():
+            self.assertGreater(chance, CRATE_EXTRA_CHANCES[rarity] * 1.5)
+        self.set_memilets(100, 0)
+        with self.assertRaises(InsufficientFunds) as error:
+            open_crates(100, "Pessoa A", 1, self.database_path, epic=True)
+        self.assertIn("épica", str(error.exception))
+
     def test_prize_tiles_sum_coins_and_rolls_and_keep_items(self):
         from src.cogs.economy import EconomyCog
 
@@ -254,6 +302,36 @@ class CrateBatchTests(Case):
         self.assertIn("1.200", titles)
         self.assertIn("3 rolls", titles)
         self.assertIn("+1 Star Wish", titles)
+
+
+class ShopTests(Case, unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        Case.setUp(self)
+
+    async def test_shop_lists_everything_for_sale_with_buy_buttons(self):
+        from src.cogs.economy import EconomyCog
+
+        cog = EconomyCog(SimpleNamespace(database_path=self.database_path))
+        author = SimpleNamespace(id=100, display_name="Pessoa A")
+        embed, view = cog.shop_menu(author)
+        names = [field.name for field in embed.fields]
+        for section in ("📦 Caixas", "🃏 Pacotes de jogador", "🛒 Upgrades", "🏗️ Torre"):
+            self.assertIn(section, names)
+        text = " ".join(field.value for field in embed.fields)
+        self.assertIn("Caixa épica", text)
+        self.assertIn("Pacote épico", text)
+        labels = [item.label for item in view.children]
+        self.assertIn(
+            f"Caixa épica ({CRATE_PRICE * EPIC_CRATE_MULTIPLIER:,})".replace(",", "."), labels
+        )
+        self.assertIn(f"Pacote épico ({EPIC_PACK_PRICE:,})".replace(",", "."), labels)
+        self.assertIn("Upgrades", labels)
+
+    def test_loja_opens_the_shop_not_the_upgrades(self):
+        from src.cogs.economy import EconomyCog
+
+        self.assertIn("loja", EconomyCog.shop.aliases)
+        self.assertNotIn("loja", EconomyCog.upgrade.aliases)
 
 
 class CustomizeTests(Case, unittest.IsolatedAsyncioTestCase):

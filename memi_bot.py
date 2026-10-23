@@ -3715,9 +3715,13 @@ AJUDA_JOGO = [
         [
             ("mm!daily", "100 a 300 Memilets; cada cosmético equipado soma +100 ao máximo"),
             ("mm!carteira", "saldo, rolls, wishes, timers e preço da crate"),
-            ("mm!upgrade", "loja de upgrades (rolls, wishes, Star Wish, daily…), com confirmação"),
-            ("mm!crates [1|5|10]", "caixas: rolls guardados, cosméticos, bônus e upgrades"),
-            ("mm!pacote", "uma carta de jogador livre do mercado (nunca Base)"),
+            ("mm!shop / mm!loja", "tudo o que dá para comprar: caixas, pacotes, upgrades e torre"),
+            (
+                "mm!upgrade",
+                "upgrades permanentes (rolls, wishes, Star Wish, daily…), com confirmação",
+            ),
+            ("mm!crates [epica] [1|5|10]", "caixas: rolls guardados, cosméticos, bônus e upgrades"),
+            ("mm!pacote [epico]", "uma carta de jogador livre do mercado (nunca Base)"),
             (
                 "mm!construir [1-12] / mm!destruir",
                 "Centro de Treinamento: torre de upgrades eternos",

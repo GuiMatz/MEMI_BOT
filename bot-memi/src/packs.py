@@ -24,6 +24,10 @@ from src.transactions import PACK_LOCK, _utc_now
 PACK_PRICE = 1_500
 # Série de raridade (índice em RARITY_TIERS) → chance. Soma 1.
 PACK_ODDS = {1: 0.40, 2: 0.35, 3: 0.185, 4: 0.05, 5: 0.015}
+# Pacote épico: só Raro ou melhor, com chance de Ícone. Vendendo na hora (50%),
+# rende em média ~83% do preço (o comum, ~86%).
+EPIC_PACK_PRICE = 5_000
+EPIC_PACK_ODDS = {3: 0.45, 4: 0.35, 5: 0.17, 6: 0.03}
 
 
 class PackError(Exception):
@@ -37,9 +41,10 @@ class PackResult:
     locked_until: datetime
 
 
-def pack_odds_text() -> list[tuple[str, str, float]]:
+def pack_odds_text(epic: bool = False) -> list[tuple[str, str, float]]:
     """(emoji, rótulo, chance) de cada série, para o menu."""
-    return [(RARITY_TIERS[i][1], RARITY_TIERS[i][0], chance) for i, chance in PACK_ODDS.items()]
+    odds = EPIC_PACK_ODDS if epic else PACK_ODDS
+    return [(RARITY_TIERS[i][1], RARITY_TIERS[i][0], chance) for i, chance in odds.items()]
 
 
 def _free_player(connection, tier: int, rng) -> dict[str, Any] | None:
@@ -70,22 +75,29 @@ def open_pack(
     *,
     now: datetime | None = None,
     rng: random.Random | random.SystemRandom | None = None,
+    epic: bool = False,
 ) -> PackResult:
+    """Abre um pacote (`epic=True`: o pacote épico, mais caro e só Raro ou melhor)."""
     user_id = str(discord_user_id)
     generator = rng or random.SystemRandom()
     current_time = _utc_now(now)
     register_user(user_id, display_name, database_path)
-    tier = generator.choices(list(PACK_ODDS), weights=list(PACK_ODDS.values()), k=1)[0]
-    # A série sorteada primeiro; sem ninguém livre, as de baixo e depois as de cima.
-    order = [tier] + sorted((t for t in PACK_ODDS if t < tier), reverse=True)
-    order += sorted(t for t in PACK_ODDS if t > tier)
+    odds = EPIC_PACK_ODDS if epic else PACK_ODDS
+    price = EPIC_PACK_PRICE if epic else PACK_PRICE
+    tier = generator.choices(list(odds), weights=list(odds.values()), k=1)[0]
+    # A série sorteada primeiro; sem ninguém livre, as de baixo e depois as de cima
+    # (sempre dentro das séries do pacote: o épico nunca cai para Comum).
+    order = [tier] + sorted((t for t in odds if t < tier), reverse=True)
+    order += sorted(t for t in odds if t > tier)
     with connect(database_path) as connection:
         connection.execute("BEGIN IMMEDIATE")
         balance = connection.execute(
             "SELECT memilets FROM game_users WHERE discord_user_id = ?", (user_id,)
         ).fetchone()["memilets"]
-        if balance < PACK_PRICE:
-            raise PackError(f"Um pacote custa {PACK_PRICE:,} Memilets.".replace(",", "."))
+        if balance < price:
+            raise PackError(
+                (f"Um pacote {'épico ' if epic else ''}custa {price:,} Memilets.").replace(",", ".")
+            )
         player = next(
             (found for t in order if (found := _free_player(connection, t, generator))), None
         )
@@ -95,7 +107,7 @@ def open_pack(
         connection.execute(
             "UPDATE game_users SET memilets = memilets - ?, updated_at = CURRENT_TIMESTAMP "
             "WHERE discord_user_id = ?",
-            (PACK_PRICE, user_id),
+            (price, user_id),
         )
         connection.execute(
             """
@@ -105,4 +117,4 @@ def open_pack(
             (player["id"], user_id, locked_until.isoformat(timespec="seconds")),
         )
         record(connection, user_id, "pack", now=current_time)
-    return PackResult(player, PACK_PRICE, locked_until)
+    return PackResult(player, price, locked_until)

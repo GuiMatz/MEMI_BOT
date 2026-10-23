@@ -1,4 +1,4 @@
-"""Comandos de economia: daily, loja de upgrades, crates, wishes e demissão."""
+"""Comandos de economia: daily, loja, upgrades, crates, pacotes, wishes e demissão."""
 
 from __future__ import annotations
 
@@ -21,6 +21,8 @@ from src.economy import (
     CRATE_PITY_LIMIT,
     CRATE_EXTRA_CHANCES,
     CRATE_MEMILETS,
+    EPIC_CRATE_EXTRA_CHANCES,
+    EPIC_CRATE_MULTIPLIER,
     RARITY_LABELS,
     DailyCooldown,
     EconomyError,
@@ -38,12 +40,12 @@ from src.economy import (
     open_crates,
     reset_claim,
 )
-from src.packs import PACK_PRICE, PackError, open_pack, pack_odds_text
+from src.packs import EPIC_PACK_PRICE, PACK_PRICE, PackError, open_pack, pack_odds_text
 from src.ratings import rarity_label
 from src.transactions import PACK_LOCK, PACK_SALE_FACTOR
 from src.cogs.common import ConfirmView, PlayerChoiceView, ambiguity_text, intro_embed
 from src.game import find_player, get_wallet, register_user
-from src.perks import UPGRADES
+from src.perks import TOWER_FIRST_PRICE, UPGRADES
 
 UPGRADES_INTRO = (
     "Aqui você gasta Memilets em melhorias permanentes para o seu clube, como mais rolls, "
@@ -99,6 +101,15 @@ RARITY_STYLE = {
     "epico": ("🟠", discord.Color.from_rgb(240, 150, 60)),
     "lendario": ("🔴", discord.Color.from_rgb(235, 75, 75)),
 }
+SHOP_INTRO = (
+    "Tudo o que dá para comprar com Memilets. As versões **épicas** custam bem mais e têm "
+    "chances bem maiores de coisa boa. Os botões abaixo compram direto."
+)
+EPIC_PACK_INTRO = (
+    "O pacote épico traz **uma carta Raro ou melhor**, com chance de Ícone. "
+    "Como no pacote comum, a carta pode ser vendida na hora por {factor}% do valor e fica "
+    "{days} dias sem poder ser doada ou trocada."
+)
 PACK_INTRO = (
     "O pacote traz **uma carta de jogador** livre do mercado, direto para o seu elenco. "
     "Nunca vem Base. A carta de pacote pode ser vendida na hora, por {factor}% do valor, e "
@@ -111,6 +122,15 @@ RARITY_ITEMS_TEXT = {
     "epico": "+1 slot de Star Wish, +1 slot de wish ou -2 h no daily",
     "lendario": "+1 roll permanente, +1 nível de upgrade aleatório ou -10 no preço da crate",
 }
+
+
+EPIC_WORDS = {"epica", "epico", "epic"}
+
+
+def _crate_noun(count: int, epic: bool) -> str:
+    if epic:
+        return "caixas épicas" if count > 1 else "caixa épica"
+    return "crates" if count > 1 else "crate"
 
 
 def _thousands(value: int) -> str:
@@ -193,14 +213,27 @@ class CrateMenuView(discord.ui.View):
             )
             button.callback = self._opener(count)
             self.add_item(button)
-        pack = discord.ui.Button(
-            label=f"Pacote de jogador ({_thousands(PACK_PRICE)})",
-            emoji="🃏",
+        epic = discord.ui.Button(
+            label=f"Caixa épica ({_thousands(price * EPIC_CRATE_MULTIPLIER)})",
+            emoji="🟠",
             style=discord.ButtonStyle.secondary,
             row=1,
         )
-        pack.callback = self._pack
-        self.add_item(pack)
+        epic.callback = self._opener(1, epic=True)
+        self.add_item(epic)
+        for is_epic in (False, True):
+            pack = discord.ui.Button(
+                label=(
+                    f"Pacote épico ({_thousands(EPIC_PACK_PRICE)})"
+                    if is_epic
+                    else f"Pacote de jogador ({_thousands(PACK_PRICE)})"
+                ),
+                emoji="🃏",
+                style=discord.ButtonStyle.secondary,
+                row=1,
+            )
+            pack.callback = self._pack(is_epic)
+            self.add_item(pack)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.author.id:
@@ -210,23 +243,52 @@ class CrateMenuView(discord.ui.View):
             return False
         return True
 
-    def _opener(self, count: int):
+    def _opener(self, count: int, *, epic: bool = False):
         async def open_crates_button(interaction: discord.Interaction) -> None:
             await self.cog.open_with_animation(
                 interaction.user,
                 interaction.response.send_message,
                 interaction.edit_original_response,
                 count=count,
+                epic=epic,
             )
 
         return open_crates_button
 
-    async def _pack(self, interaction: discord.Interaction) -> None:
-        await self.cog.open_pack_with_animation(
-            interaction.user,
-            interaction.response.send_message,
-            interaction.edit_original_response,
+    def _pack(self, epic: bool):
+        async def open_pack_button(interaction: discord.Interaction) -> None:
+            await self.cog.open_pack_with_animation(
+                interaction.user,
+                interaction.response.send_message,
+                interaction.edit_original_response,
+                epic=epic,
+            )
+
+        return open_pack_button
+
+
+class ShopView(CrateMenuView):
+    """Loja: os mesmos botões de compra das caixas, mais o atalho para os upgrades."""
+
+    def __init__(self, cog: "EconomyCog", author: discord.abc.User, price: int):
+        super().__init__(cog, author, price)
+        upgrades = discord.ui.Button(
+            label="Upgrades", emoji="🛒", style=discord.ButtonStyle.secondary, row=2
         )
+        upgrades.callback = self._upgrades
+        self.add_item(upgrades)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.author.id:
+            await interaction.response.send_message(
+                "Use `mm!shop` para abrir a sua loja.", ephemeral=True
+            )
+            return False
+        return True
+
+    async def _upgrades(self, interaction: discord.Interaction) -> None:
+        embed, view = self.cog.upgrade_menu(interaction.user)
+        await interaction.response.send_message(embed=embed, view=view)
 
 
 class EconomyCog(commands.Cog):
@@ -311,7 +373,70 @@ class EconomyCog(commands.Cog):
             author.id, confirm, confirm_label="Comprar", cancel_text="Compra cancelada."
         )
 
-    @commands.command(name="upgrade", aliases=["upgrades", "loja"])
+    def shop_menu(self, author: discord.abc.User) -> tuple[discord.Embed, ShopView]:
+        price = get_crate_price(author.id, self.database_path)
+        epic_price = price * EPIC_CRATE_MULTIPLIER
+        embed = intro_embed("🏪 Loja", SHOP_INTRO, color=discord.Color.gold())
+
+        def odds(epic: bool) -> str:
+            return " · ".join(
+                f"{emoji} {_percent(chance)}" for emoji, _label, chance in pack_odds_text(epic)
+            )
+
+        def crate_odds(chances: dict[str, float]) -> str:
+            return " · ".join(
+                f"{RARITY_STYLE[rarity][0]} {_percent(chances[rarity])}"
+                for rarity in ("incomum", "raro", "epico", "lendario")
+            )
+
+        embed.add_field(
+            name="📦 Caixas",
+            value=(
+                f"**Caixa** · {icons.memilets(price)}\n└ {crate_odds(CRATE_EXTRA_CHANCES)}\n"
+                f"**Caixa épica** · {icons.memilets(epic_price)}\n"
+                f"└ {crate_odds(EPIC_CRATE_EXTRA_CHANCES)}\n"
+                "Detalhes em `mm!crates`"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="🃏 Pacotes de jogador",
+            value=(
+                f"**Pacote** · {icons.memilets(PACK_PRICE)}\n└ {odds(False)}\n"
+                f"**Pacote épico** · {icons.memilets(EPIC_PACK_PRICE)}\n└ {odds(True)}\n"
+                "Detalhes em `mm!pacote` e `mm!pacote epico`"
+            ),
+            inline=False,
+        )
+        levels = get_upgrade_levels(author.id, self.database_path)
+        open_upgrades = sum(1 for key, spec in UPGRADES.items() if levels[key] < spec.limit)
+        embed.add_field(
+            name="🛒 Upgrades",
+            value=(
+                f"{len(UPGRADES)} melhorias permanentes ({open_upgrades} ainda com nível "
+                "para comprar) · `mm!upgrade`"
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name="🏗️ Torre",
+            value=(
+                f"12 andares, a partir de {icons.memilets(TOWER_FIRST_PRICE)} · " "`mm!construir`"
+            ),
+            inline=False,
+        )
+        balance = get_wallet(author.id, self.database_path)["memilets"]
+        embed.add_field(name="Saldo", value=f"{icons.memilets(balance)} Memilets")
+        embed.set_footer(text="Toda compra tira o valor do saldo na hora")
+        return embed, ShopView(self, author, price)
+
+    @commands.command(name="shop", aliases=["loja", "store"])
+    async def shop(self, context: commands.Context) -> None:
+        register_user(context.author.id, context.author.display_name, self.database_path)
+        embed, view = self.shop_menu(context.author)
+        await context.reply(embed=embed, view=view, mention_author=False)
+
+    @commands.command(name="upgrade", aliases=["upgrades"])
     async def upgrade(
         self,
         context: commands.Context,
@@ -361,6 +486,15 @@ class EconomyCog(commands.Cog):
             name="🛡️ Garantia de Raro",
             value=f"**{pity}/{CRATE_PITY_LIMIT}** · faltam {CRATE_PITY_LIMIT - pity} caixas",
         )
+        epic_odds = " · ".join(
+            f"{RARITY_STYLE[rarity][0]} {_percent(EPIC_CRATE_EXTRA_CHANCES[rarity])}"
+            for rarity in ("incomum", "raro", "epico", "lendario")
+        )
+        embed.add_field(
+            name=f"🟠 Caixa épica · {icons.memilets(price * EPIC_CRATE_MULTIPLIER)}",
+            value=f"Mesmos prêmios, chances bem maiores: {epic_odds}",
+            inline=False,
+        )
         odds = " · ".join(
             f"{emoji} {label} {_percent(chance)}" for emoji, label, chance in pack_odds_text()
         )
@@ -370,8 +504,8 @@ class EconomyCog(commands.Cog):
             inline=False,
         )
         embed.set_footer(
-            text="mm!crates 5 abre 5 direto · mm!pacote abre um pacote · "
-            "rolls da caixa ficam guardados"
+            text="mm!crates 5 abre 5 direto · mm!crates epica abre uma épica · "
+            "mm!shop mostra a loja inteira"
         )
         return embed, CrateMenuView(self, author, price)
 
@@ -428,19 +562,23 @@ class EconomyCog(commands.Cog):
         # Itens raros primeiro, para aparecerem nos cartões do GIF.
         return sorted(tiles, key=lambda tile: -order.index(tile.rarity))
 
-    async def open_with_animation(self, author, send, edit, *, count: int = 1) -> None:
+    async def open_with_animation(
+        self, author, send, edit, *, count: int = 1, epic: bool = False
+    ) -> None:
         """O pacote treme e depois vem a revelação com os prêmios já à vista.
 
         `send(**kwargs)` manda a primeira mensagem; `edit(**kwargs)` a troca pela revelação.
         """
         try:
-            results = open_crates(author.id, author.display_name, count, self.database_path)
+            results = open_crates(
+                author.id, author.display_name, count, self.database_path, epic=epic
+            )
         except InsufficientFunds as error:
             await send(embed=discord.Embed(description=str(error), color=discord.Color.red()))
             return
         # Resposta rápida em texto; a revelação (com o pacote abrindo) entra no lugar dela.
         waiting = discord.Embed(
-            title=f"📦 Abrindo {count} crate{'s' if count > 1 else ''}…",
+            title=f"📦 Abrindo {count} {_crate_noun(count, epic)}…",
             color=discord.Color.from_rgb(230, 181, 74),
         )
         message = await send(embed=waiting)
@@ -455,15 +593,17 @@ class EconomyCog(commands.Cog):
             reveal = await asyncio.to_thread(
                 prize_gif, best, self.prize_tiles(author.id, prizes), counts=counts
             )
-            embed = self.crate_batch_embed(author, results)
+            embed = self.crate_batch_embed(author, results, epic=epic)
         else:
             reveal = await asyncio.to_thread(prize_gif, best, self.prize_tiles(author.id, prizes))
-            embed = self.crate_result_embed(author, results)
+            embed = self.crate_result_embed(author, results, epic=epic)
         embed.set_image(url="attachment://revelacao.gif")
         target = edit if edit is not None else message.edit
         await target(embed=embed, attachments=[discord.File(BytesIO(reveal), "revelacao.gif")])
 
-    def crate_batch_embed(self, author: discord.abc.User, results) -> discord.Embed:
+    def crate_batch_embed(
+        self, author: discord.abc.User, results, *, epic: bool = False
+    ) -> discord.Embed:
         """Lote de caixas: totais e destaques no topo, depois caixa por caixa."""
         order = list(RARITY_LABELS)
         best = max((result.best_rarity for result in results), key=order.index)
@@ -492,7 +632,8 @@ class EconomyCog(commands.Cog):
         if any(result.guaranteed for result in results):
             summary.append(f"🛡️ **Garantia ativada:** {CRATE_PITY_LIMIT} caixas sem Raro, veio um.")
         embed = discord.Embed(
-            title=f"{emoji} {len(results)} crates · melhor: {RARITY_LABELS[best]}",
+            title=f"{emoji} {len(results)} {_crate_noun(len(results), epic)} · "
+            f"melhor: {RARITY_LABELS[best]}",
             description="\n".join(summary),
             color=color,
         )
@@ -520,7 +661,9 @@ class EconomyCog(commands.Cog):
         )
         return embed
 
-    def crate_result_embed(self, author: discord.abc.User, results) -> discord.Embed:
+    def crate_result_embed(
+        self, author: discord.abc.User, results, *, epic: bool = False
+    ) -> discord.Embed:
         if not isinstance(results, list):
             results = [results]
         order = list(RARITY_LABELS)
@@ -552,7 +695,7 @@ class EconomyCog(commands.Cog):
             lines.append(f"🛡️ **Garantia ativada:** {CRATE_PITY_LIMIT} caixas sem Raro, veio um.")
         count = len(results)
         embed = discord.Embed(
-            title=f"{emoji} {count} crate{'s' if count > 1 else ''} · melhor: {RARITY_LABELS[best]}",
+            title=f"{emoji} {count} {_crate_noun(count, epic)} · melhor: {RARITY_LABELS[best]}",
             description="\n".join(lines),
             color=color,
         )
@@ -569,10 +712,10 @@ class EconomyCog(commands.Cog):
             )
         return embed
 
-    async def open_pack_with_animation(self, author, send, edit) -> None:
+    async def open_pack_with_animation(self, author, send, edit, *, epic: bool = False) -> None:
         try:
             result = await asyncio.to_thread(
-                open_pack, author.id, author.display_name, self.database_path
+                open_pack, author.id, author.display_name, self.database_path, epic=epic
             )
         except PackError as error:
             await send(embed=discord.Embed(description=str(error), color=discord.Color.red()))
@@ -580,7 +723,8 @@ class EconomyCog(commands.Cog):
         player = result.player
         overall = int(player["effective_overall"] or 0)
         waiting = discord.Embed(
-            title="🃏 Abrindo o pacote…", color=discord.Color.from_rgb(230, 181, 74)
+            title=f"🃏 Abrindo o pacote{' épico' if epic else ''}…",
+            color=discord.Color.from_rgb(230, 181, 74),
         )
         message = await send(embed=waiting)
         label = rarity_label(overall)
@@ -589,7 +733,7 @@ class EconomyCog(commands.Cog):
             card_reveal_gif,
             Image.open(card),
             rarity_color(overall).to_rgb(),
-            f"PACOTE · {label.split(' ', 1)[-1].upper()}",
+            f"PACOTE{' ÉPICO' if epic else ''} · {label.split(' ', 1)[-1].upper()}",
         )
         name = player.get("display_name") or player["name"]
         embed = discord.Embed(
@@ -611,14 +755,20 @@ class EconomyCog(commands.Cog):
         await target(embed=embed, attachments=[discord.File(BytesIO(reveal), "pacote.gif")])
 
     @commands.command(name="crates", aliases=["crate", "caixa", "caixas"])
-    async def crates(self, context: commands.Context, action: str | None = None) -> None:
+    async def crates(
+        self, context: commands.Context, action: str | None = None, amount: str | None = None
+    ) -> None:
         register_user(context.author.id, context.author.display_name, self.database_path)
         wanted = normalize_player_name(action or "")
+        epic = wanted in EPIC_WORDS
+        if epic:
+            wanted = normalize_player_name(amount or "1")
         count = 1 if wanted in {"abrir", "open"} else int(wanted) if wanted.isdigit() else None
         if count is not None:
             if count not in CRATE_BATCHES:
                 await context.reply(
-                    "Dá para abrir 1, 5 ou 10 de uma vez: `mm!crates 5`.", mention_author=False
+                    "Dá para abrir 1, 5 ou 10 de uma vez: `mm!crates 5` ou `mm!crates epica 5`.",
+                    mention_author=False,
                 )
                 return
             await self.open_with_animation(
@@ -626,45 +776,60 @@ class EconomyCog(commands.Cog):
                 lambda **kwargs: context.reply(mention_author=False, **kwargs),
                 None,
                 count=count,
+                epic=epic,
             )
             return
         embed, view = self.crate_menu(context.author)
         await context.reply(embed=embed, view=view, mention_author=False)
 
     @commands.command(name="pacote", aliases=["pack", "pacotes"])
-    async def pack(self, context: commands.Context, action: str | None = None) -> None:
+    async def pack(
+        self, context: commands.Context, action: str | None = None, amount: str | None = None
+    ) -> None:
         register_user(context.author.id, context.author.display_name, self.database_path)
-        if normalize_player_name(action or "") in {"abrir", "open", "1"}:
+        wanted = normalize_player_name(action or "")
+        epic = wanted in EPIC_WORDS
+        if epic:
+            wanted = normalize_player_name(amount or "")
+        if wanted in {"abrir", "open", "1"}:
             await self.open_pack_with_animation(
                 context.author,
                 lambda **kwargs: context.reply(mention_author=False, **kwargs),
                 None,
+                epic=epic,
             )
             return
+        price = EPIC_PACK_PRICE if epic else PACK_PRICE
         odds = "\n".join(
-            f"{emoji} **{label}** · {_percent(chance)}" for emoji, label, chance in pack_odds_text()
+            f"{emoji} **{label}** · {_percent(chance)}"
+            for emoji, label, chance in pack_odds_text(epic)
         )
         embed = intro_embed(
-            "🃏 Pacote de jogador",
-            PACK_INTRO.format(factor=round(PACK_SALE_FACTOR * 100), days=PACK_LOCK.days),
+            "🃏 Pacote épico" if epic else "🃏 Pacote de jogador",
+            (EPIC_PACK_INTRO if epic else PACK_INTRO).format(
+                factor=round(PACK_SALE_FACTOR * 100), days=PACK_LOCK.days
+            ),
             color=discord.Color.from_rgb(230, 181, 74),
         )
         embed.description += "\n\n" + odds
         balance = get_wallet(context.author.id, self.database_path)["memilets"]
-        embed.add_field(name="Preço", value=f"{icons.memilets(PACK_PRICE)}")
+        embed.add_field(name="Preço", value=f"{icons.memilets(price)}")
         embed.add_field(name="Saldo", value=f"{icons.memilets(balance)} Memilets")
+        if not epic:
+            embed.set_footer(text="Pacote épico (só Raro ou melhor): mm!pacote epico")
 
         async def done(interaction: discord.Interaction) -> None:
             await self.open_pack_with_animation(
                 interaction.user,
                 interaction.response.send_message,
                 interaction.edit_original_response,
+                epic=epic,
             )
 
         view = ConfirmView(
             context.author.id,
             done,
-            confirm_label=f"Abrir pacote ({_thousands(PACK_PRICE)})",
+            confirm_label=f"Abrir pacote{' épico' if epic else ''} ({_thousands(price)})",
             cancel_text="Pacote cancelado.",
         )
         view.message = await context.reply(embed=embed, view=view, mention_author=False)

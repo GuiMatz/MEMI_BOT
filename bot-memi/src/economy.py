@@ -34,6 +34,10 @@ UPGRADE_LABELS = {key: spec.name for key, spec in UPGRADES.items()}
 # As chances são baixas de propósito: tirar algo raro deve ser difícil de verdade.
 CRATE_RARITIES = ("basico", "incomum", "raro", "epico", "lendario")
 CRATE_EXTRA_CHANCES = {"lendario": 0.006, "epico": 0.018, "raro": 0.055, "incomum": 0.16}
+# Caixa épica: custa 5 caixas e sempre traz um item extra, Raro ou melhor em 75% (5 caixas
+# comuns dão em média 0,4) e Lendário em 10%. Em Memilets rende ~29% do preço.
+EPIC_CRATE_MULTIPLIER = 5
+EPIC_CRATE_EXTRA_CHANCES = {"lendario": 0.10, "epico": 0.25, "raro": 0.40, "incomum": 0.25}
 # Memilets que vêm no lugar dos itens de cada raridade (um OU outro, nunca os dois).
 # Calibrado para a caixa de Memilets devolver, em média, quase o preço (~480 de 500):
 # a caixa comum não parece prejuízo e os itens raros são o lucro.
@@ -377,12 +381,13 @@ def open_crates(
     database_path: str | Path = DATABASE_PATH,
     *,
     rng: random.Random | random.SystemRandom | None = None,
+    epic: bool = False,
 ) -> list[CrateResult]:
     """Abre `count` caixas seguidas; confere antes se o saldo paga todas."""
     if count not in CRATE_BATCHES:
         raise ValueError("Quantidade de caixas inválida.")
     register_user(discord_user_id, display_name, database_path)
-    price = get_crate_price(discord_user_id, database_path)
+    price = get_crate_price(discord_user_id, database_path) * (EPIC_CRATE_MULTIPLIER if epic else 1)
     with connect(database_path) as connection:
         balance = connection.execute(
             "SELECT memilets FROM game_users WHERE discord_user_id = ?",
@@ -390,11 +395,18 @@ def open_crates(
         ).fetchone()["memilets"]
     if balance < price * count:
         affordable = balance // price
+        noun = "caixa" if count == 1 else "caixas"
+        if epic:
+            noun += " épica" if count == 1 else " épicas"
+        verb = "custa" if count == 1 else "custam"
         raise InsufficientFunds(
-            f"{count} caixas custam {price * count:,} Memilets".replace(",", ".")
+            f"{count} {noun} {verb} {price * count:,} Memilets".replace(",", ".")
             + (f"; seu saldo paga {affordable}." if affordable else "; seu saldo não paga nenhuma.")
         )
-    return [open_crate(discord_user_id, display_name, database_path, rng=rng) for _ in range(count)]
+    return [
+        open_crate(discord_user_id, display_name, database_path, rng=rng, epic=epic)
+        for _ in range(count)
+    ]
 
 
 def get_crate_price(discord_user_id: int | str, database_path: str | Path = DATABASE_PATH) -> int:
@@ -409,8 +421,12 @@ def open_crate(
     *,
     now: datetime | None = None,
     rng: random.Random | random.SystemRandom | None = None,
+    epic: bool = False,
 ) -> CrateResult:
     """Abre uma crate: Básico sempre e, com sorte, 1 item de outra raridade.
+
+    `epic=True` abre a caixa épica: preço × `EPIC_CRATE_MULTIPLIER` e as chances de
+    `EPIC_CRATE_EXTRA_CHANCES`.
 
     A caixa vem inteira em itens ou inteira em Memilets: Memilets nunca vêm junto com
     item. Cosméticos são sempre novos para a pessoa. Em 5% das caixas com item, o item
@@ -423,13 +439,14 @@ def open_crate(
     with connect(database_path) as connection:
         connection.execute("BEGIN IMMEDIATE")
         perks = load_perks(connection, user_id)
-        price = perks.crate_price
+        price = perks.crate_price * (EPIC_CRATE_MULTIPLIER if epic else 1)
         balance = connection.execute(
             "SELECT memilets FROM game_users WHERE discord_user_id = ?",
             (user_id,),
         ).fetchone()["memilets"]
         if balance < price:
-            raise InsufficientFunds(f"Uma crate custa {price} Memilets.")
+            name = "Uma caixa épica" if epic else "Uma crate"
+            raise InsufficientFunds(f"{name} custa {price:,} Memilets.".replace(",", "."))
         connection.execute(
             """
             UPDATE game_users SET memilets = memilets - ?, updated_at = CURRENT_TIMESTAMP
@@ -441,7 +458,7 @@ def open_crate(
         extra = None
         draw = generator.random()
         cumulative = 0.0
-        for rarity, chance in CRATE_EXTRA_CHANCES.items():
+        for rarity, chance in (EPIC_CRATE_EXTRA_CHANCES if epic else CRATE_EXTRA_CHANCES).items():
             cumulative += chance
             if draw < cumulative:
                 extra = rarity
