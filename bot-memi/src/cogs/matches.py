@@ -27,7 +27,7 @@ from src.income import IncomeError, collect_income, income_status, venue_name
 from src.missions import record_event
 from src.narration import narrate
 from src.positions import slot_rating
-from src.pve import PveError, opponent_for, record_result
+from src.pve import PveError, opponent_for, pve_title, record_result
 from src.pve_crests import crest_for
 from src.cogs.pve_views import PveHubView, hub_embed
 from src.score_image import render_score_gif
@@ -416,27 +416,23 @@ class MatchesCog(commands.Cog):
         except (PveError, TeamError) as error:
             await interaction.response.send_message(str(error), ephemeral=True)
             return
-        titles = {
-            "escada": "Escada",
-            "dia": "Chefão do dia",
-            "semana": "Chefão da semana",
-            "livre": "Desafio livre",
-        }
+        title = pve_title(user.id, kind, self.database_path)
         await interaction.response.send_message(
-            f"⚔️ **{user.display_name}** × {team.label} (força {team.strength}) · {titles[kind]}"
+            f"⚔️ **{user.display_name}** × {team.label} (força {team.strength}) · {title}"
         )
         send = interaction.channel.send
-        won = await self._pve_match(send, user, team, titles[kind])
+        won = await self._pve_match(send, user, team, title)
         if won is None:
             return
         gains = await asyncio.to_thread(
             record_result, user.id, user.display_name, kind, team, won, self.database_path
         )
         if won:
-            reward = " · ".join(gains) if gains else "sem prêmio (já ganho hoje)"
-            await send(f"🏆 **{user.display_name}** venceu {team.label}! Prêmio: {reward}.")
+            reward = "\n".join(gains) if gains else "sem prêmio (já ganho hoje)"
+            await send(f"🏆 **{user.display_name}** venceu {team.label}!\n{reward}")
         else:
-            await send(f"💥 {team.label} venceu desta vez. Tente de novo!")
+            extra = ("\n" + "\n".join(gains)) if gains else ""
+            await send(f"💥 {team.label} venceu desta vez. Tente de novo!{extra}")
 
     async def _pve_match(self, send, user, team, title: str) -> bool | None:
         """Partida narrada do time da pessoa (mandante) contra um time lendário."""

@@ -427,6 +427,21 @@ CREATE TABLE IF NOT EXISTS pve_log (
 
 CREATE INDEX IF NOT EXISTS idx_pve_log_user ON pve_log(discord_user_id, kind, period);
 
+CREATE TABLE IF NOT EXISTS pve_campaigns (
+    discord_user_id TEXT NOT NULL REFERENCES game_users(discord_user_id) ON DELETE CASCADE,
+    campaign TEXT NOT NULL,
+    step INTEGER NOT NULL DEFAULT 0 CHECK (step >= 0),
+    completions INTEGER NOT NULL DEFAULT 0 CHECK (completions >= 0),
+    PRIMARY KEY (discord_user_id, campaign)
+);
+
+CREATE TABLE IF NOT EXISTS pve_achievements (
+    discord_user_id TEXT NOT NULL REFERENCES game_users(discord_user_id) ON DELETE CASCADE,
+    achievement TEXT NOT NULL,
+    earned_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (discord_user_id, achievement)
+);
+
 CREATE TABLE IF NOT EXISTS user_inventory (
     discord_user_id TEXT NOT NULL REFERENCES game_users(discord_user_id)
         ON DELETE CASCADE,

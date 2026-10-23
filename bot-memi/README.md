@@ -381,6 +381,12 @@ O FUT.AE é um módulo do MeMi BOT, não um bot separado. O menu geral continua 
   - **Chefão do dia**: um time lendário reforçado (+1), 1 tentativa; 3.000 + caixa épica.
   - **Chefão da semana**: uma seleção lendária (ou a Mundial) reforçada (+2), 3
     tentativas; 12.000 + pacote épico.
+  - **Campanhas** (300 por vitória): *Lendas do Brasileirão* (os 12 clubes, 15.000 + pacote
+    épico no fim), *Copa das Lendas* (oitavas à final contra seleções; perdeu, recomeça;
+    25.000 + pacote épico) e *Rumo ao Mundial* (as 5 seleções mais fortes e a Seleção
+    Mundial; 40.000 + 2 pacotes épicos).
+  - **Conquistas**: 9 metas únicas com prêmio (primeira lenda, chefões, escada completa,
+    cada campanha, vencer a Seleção Mundial), no botão Conquistas.
   - **Desafio livre**: qualquer time lendário; prêmio na primeira vitória do dia contra
     cada um. Empate vai para os pênaltis.
 - `mm!penaltis @pessoa` é uma disputa de pênaltis interativa: quem bate escolhe o canto e

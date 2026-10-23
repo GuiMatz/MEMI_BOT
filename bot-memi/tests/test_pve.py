@@ -108,6 +108,64 @@ class PveProgressTests(unittest.TestCase):
             opponent_for(100, "livre", "nao-existe", self.database_path, NOW)
 
 
+class CampaignAndAchievementTests(unittest.TestCase):
+    def setUp(self):
+        self.tempdir = tempfile.TemporaryDirectory()
+        self.database_path = Path(self.tempdir.name) / "pve.sqlite"
+        initialize_database(self.database_path)
+        register_user(100, "Ana", self.database_path)
+
+    def tearDown(self):
+        self.tempdir.cleanup()
+
+    def play(self, kind, won):
+        team = opponent_for(100, kind, None, self.database_path, NOW)
+        return team, record_result(100, "Ana", kind, team, won, self.database_path, NOW)
+
+    def test_copa_eliminates_on_a_loss_and_pays_the_champion(self):
+        from src.pve import CAMPAIGNS, campaign_progress, pve_title
+
+        copa = CAMPAIGNS["copa"]
+        first, _ = self.play("campanha:copa", True)
+        self.assertEqual(first.name, "Uruguai Lendária")
+        self.assertEqual(
+            pve_title(100, "campanha:copa", self.database_path),
+            "Copa das Lendas · Quartas de final",
+        )
+        _, gains = self.play("campanha:copa", False)
+        self.assertIn("recomeça", gains[0])
+        self.assertEqual(campaign_progress(100, self.database_path)["copa"], (0, 0))
+        start = get_wallet(100, self.database_path)["memilets"]
+        for _ in range(len(copa.teams())):
+            team, gains = self.play("campanha:copa", True)
+        self.assertEqual(team.name, "Brasil Lendária")  # a final
+        self.assertTrue(any("Copa das Lendas completa" in gain for gain in gains))
+        self.assertTrue(any("Campeão da Copa" in gain for gain in gains))  # conquista
+        self.assertEqual(campaign_progress(100, self.database_path)["copa"], (0, 1))
+        self.assertGreaterEqual(get_wallet(100, self.database_path)["memilets"] - start, copa.prize)
+        self.assertEqual(get_inventory(100, self.database_path).get("pacote_epico"), 1)
+
+    def test_other_campaigns_retry_the_same_match_after_a_loss(self):
+        from src.pve import campaign_progress
+
+        self.play("campanha:brasileirao", True)
+        self.play("campanha:brasileirao", False)
+        self.assertEqual(campaign_progress(100, self.database_path)["brasileirao"], (1, 0))
+
+    def test_achievements_are_paid_once(self):
+        from src.pve import earned_achievements
+
+        _, gains = self.play("dia", True)
+        self.assertTrue(any("Chefe do dia" in gain for gain in gains))
+        self.assertTrue(any("Primeira lenda" in gain for gain in gains))
+        self.assertEqual(
+            earned_achievements(100, self.database_path), {"chefao_dia", "primeira_lenda"}
+        )
+        team = legend_teams()[0]
+        again = record_result(100, "Ana", "livre", team, True, self.database_path, NOW)
+        self.assertFalse(any("Conquista" in gain for gain in again))
+
+
 class PveHubTests(unittest.IsolatedAsyncioTestCase):
     async def test_hub_shows_ladder_bosses_and_free_challenge(self):
         from types import SimpleNamespace
@@ -127,8 +185,18 @@ class PveHubTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("força **80**", embed.description)
         view = PveHubView(None, user, database_path)
         labels = [getattr(item, "label", None) for item in view.children]
-        self.assertEqual(labels[:3], ["Escada", "Chefão do dia", "Chefão da semana"])
-        self.assertEqual(len(view.children[3].options), len(legend_teams()))
+        self.assertEqual(
+            labels[:5], ["Escada", "Chefão do dia", "Chefão da semana", "Campanhas", "Conquistas"]
+        )
+        self.assertEqual(len(view.children[5].options), len(legend_teams()))
+        from src.cogs.pve_views import CampaignView, achievements_embed, campaigns_embed
+        from src.pve import ACHIEVEMENTS, CAMPAIGNS
+
+        self.assertEqual(len(campaigns_embed(user, database_path).fields), len(CAMPAIGNS))
+        self.assertEqual(
+            achievements_embed(user, database_path).title, f"🏅 Conquistas · 0/{len(ACHIEVEMENTS)}"
+        )
+        self.assertEqual(len(CampaignView(None, user).children), len(CAMPAIGNS))
         tempdir.cleanup()
 
 
