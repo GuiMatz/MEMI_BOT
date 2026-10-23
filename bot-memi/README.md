@@ -286,6 +286,10 @@ O FUT.AE é um módulo do MeMi BOT, não um bot separado. O menu geral continua 
   só valem depois de `mm!ativar [quantidade]`. Ativados, entram depois dos rolls do ciclo, e
   cada 10 ativados dão **+1 contratação extra** (usada quando o claim do ciclo já foi). A
   sobra conta para a próxima.
+- As caixas também dão caixas e pacotes: Raro dá +1 caixa ou pacote de jogador; Épico, caixa
+  épica ou pacote de jogador; Lendário, pacote épico. Eles vão para o `mm!inventario` (ou
+  `mm!inv`, `mm!mochila`), que tem um botão **Abrir** por item, com a animação de sempre e
+  sem cobrar. Os cosméticos ficam no `mm!cosmeticos`.
 - `mm!construir` mostra a torre com um menu para escolher o andar a construir e o botão de
   destruir; os dois pedem confirmação, como `mm!construir <1-12>` e `mm!destruir`.
 - `mm!pacote` dá uma carta livre do mercado (nunca Base); carta de pacote vende na hora

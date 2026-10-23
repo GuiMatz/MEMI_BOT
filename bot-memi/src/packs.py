@@ -20,6 +20,7 @@ from typing import Any
 
 from src.db import DATABASE_PATH, connect
 from src.game import register_user
+from src.inventory import InventoryEmpty, take
 from src.missions import record
 from src.ratings import EFFECTIVE_OVERALL_SQL, GAME_OVERALL_SQL, POOL_SQL, RARITY_TIERS
 from src.transactions import PACK_LOCK, _utc_now
@@ -92,8 +93,11 @@ def open_pack(
     now: datetime | None = None,
     rng: random.Random | random.SystemRandom | None = None,
     epic: bool = False,
+    from_inventory: bool = False,
 ) -> PackResult:
-    """Abre um pacote (`epic=True`: o pacote épico, mais caro e só Raro ou melhor)."""
+    """Abre um pacote (`epic=True`: o pacote épico, mais caro e só Raro ou melhor).
+
+    `from_inventory=True`: um pacote ganho numa caixa, do `mm!inventario` (sem cobrar)."""
     generator = rng or random.SystemRandom()
     odds = EPIC_PACK_ODDS if epic else PACK_ODDS
     price = EPIC_PACK_PRICE if epic else PACK_PRICE
@@ -108,6 +112,7 @@ def open_pack(
         name,
         now,
         generator,
+        inventory_item=("pacote_epico" if epic else "pacote") if from_inventory else None,
     )
 
 
@@ -160,16 +165,24 @@ def _buy_card(
     generator,
     *,
     needs: tuple[int, ...] = (),
+    inventory_item: str | None = None,
 ) -> PackResult:
     """Cobra `price` e entrega a primeira carta livre de `order`, marcada como de pacote.
 
     `needs`: séries das quais precisa haver alguém livre para a compra valer (o all-in só
-    gira se o prêmio grande existir de verdade)."""
+    gira se o prêmio grande existir de verdade). `inventory_item`: abre um pacote ganho,
+    tirando do inventário em vez de cobrar (se o mercado estiver vazio, ele volta)."""
     user_id = str(discord_user_id)
     current_time = _utc_now(now)
     register_user(user_id, display_name, database_path)
     with connect(database_path) as connection:
         connection.execute("BEGIN IMMEDIATE")
+        if inventory_item:
+            try:
+                take(connection, user_id, inventory_item)
+            except InventoryEmpty as error:
+                raise PackError(str(error)) from None
+            price = 0
         balance = connection.execute(
             "SELECT memilets FROM game_users WHERE discord_user_id = ?", (user_id,)
         ).fetchone()["memilets"]

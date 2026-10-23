@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from functools import partial
 from io import BytesIO
 
 import discord
@@ -58,6 +59,7 @@ from src.ratings import RARITY_TIERS, rarity_label
 from src.transactions import PACK_LOCK, PACK_SALE_FACTOR
 from src.cogs.common import ConfirmView, PlayerChoiceView, ambiguity_text, intro_embed
 from src.game import find_player, get_wallet, register_user
+from src.inventory import INVENTORY_ITEMS, get_inventory
 from src.perks import TOWER_FIRST_PRICE, UPGRADES
 
 UPGRADES_INTRO = (
@@ -139,9 +141,11 @@ PACK_INTRO = (
 RARITY_ITEMS_TEXT = {
     "basico": "1 a 3 rolls guardados (não expiram)",
     "incomum": "uniforme, emblema, estádio, técnico, liga ou mascote novo",
-    "raro": "-1 h no daily ou +1 s de proteção de wish",
-    "epico": "+1 slot de Star Wish, +1 slot de wish ou -2 h no daily",
-    "lendario": "+1 roll permanente, +1 nível de upgrade aleatório ou -10 no preço da crate",
+    "raro": "-1 h no daily, +1 s de proteção de wish, +1 caixa ou pacote de jogador",
+    "epico": "+1 slot de Star Wish, +1 slot de wish, -2 h no daily, caixa épica ou pacote "
+    "de jogador",
+    "lendario": "+1 roll permanente, +1 nível de upgrade aleatório, -10 no preço da crate ou "
+    "pacote épico",
 }
 
 
@@ -288,6 +292,43 @@ class CrateMenuView(discord.ui.View):
         return open_pack_button
 
 
+class InventoryView(discord.ui.View):
+    """Um botão "Abrir" por item do inventário; abre com a animação de sempre, sem cobrar."""
+
+    def __init__(self, cog: "EconomyCog", author: discord.abc.User, items: dict[str, int]):
+        super().__init__(timeout=300)
+        self.cog = cog
+        self.author = author
+        for item, amount in items.items():
+            emoji, name = INVENTORY_ITEMS[item]
+            button = discord.ui.Button(
+                label=f"Abrir {name.lower()} ({amount})",
+                emoji=emoji,
+                style=discord.ButtonStyle.success,
+            )
+            button.callback = self._opener(item)
+            self.add_item(button)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.author.id:
+            await interaction.response.send_message(
+                "Use `mm!inventario` para ver o seu.", ephemeral=True
+            )
+            return False
+        return True
+
+    def _opener(self, item: str):
+        async def open_item(interaction: discord.Interaction) -> None:
+            await self.cog.open_inventory_item(
+                interaction.user,
+                item,
+                interaction.response.send_message,
+                interaction.edit_original_response,
+            )
+
+        return open_item
+
+
 class ShopView(CrateMenuView):
     """Loja: os mesmos botões de compra das caixas, mais o atalho para os upgrades."""
 
@@ -306,6 +347,15 @@ class ShopView(CrateMenuView):
         )
         all_in.callback = self._all_in
         self.add_item(all_in)
+        inventory = discord.ui.Button(
+            label="Inventário", emoji="🎒", style=discord.ButtonStyle.secondary, row=2
+        )
+        inventory.callback = self._inventory
+        self.add_item(inventory)
+
+    async def _inventory(self, interaction: discord.Interaction) -> None:
+        embed, view = self.cog.inventory_menu(interaction.user)
+        await interaction.response.send_message(embed=embed, view=view)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.author.id:
@@ -579,6 +629,10 @@ class EconomyCog(commands.Cog):
             "wish_slot": ("plus", "+1 wish", "slot permanente"),
             "permanent_roll": ("rolls", "+1 roll", "por ciclo, para sempre"),
             "crate_discount": ("tag", "-10", "no preço da crate"),
+            "bonus_crate": ("box", "+1 caixa", "no inventário"),
+            "epic_crate": ("box", "+1 caixa", "épica, no inventário"),
+            "player_pack": ("card", "+1 pacote", "no inventário"),
+            "epic_pack": ("card", "+1 pacote", "épico, no inventário"),
         }
         for prize in sorted(prizes, key=lambda item: -order.index(item.rarity)):
             if prize.kind in {"memilets", "instant_rolls"}:
@@ -603,7 +657,14 @@ class EconomyCog(commands.Cog):
         return sorted(tiles, key=lambda tile: -order.index(tile.rarity))
 
     async def open_with_animation(
-        self, author, send, edit, *, count: int = 1, epic: bool = False
+        self,
+        author,
+        send,
+        edit,
+        *,
+        count: int = 1,
+        epic: bool = False,
+        from_inventory: bool = False,
     ) -> None:
         """O pacote treme e depois vem a revelação com os prêmios já à vista.
 
@@ -611,7 +672,12 @@ class EconomyCog(commands.Cog):
         """
         try:
             results = open_crates(
-                author.id, author.display_name, count, self.database_path, epic=epic
+                author.id,
+                author.display_name,
+                count,
+                self.database_path,
+                epic=epic,
+                from_inventory=from_inventory,
             )
         except InsufficientFunds as error:
             await send(embed=discord.Embed(description=str(error), color=discord.Color.red()))
@@ -753,10 +819,15 @@ class EconomyCog(commands.Cog):
             )
         return embed
 
-    async def open_pack_with_animation(self, author, send, edit, *, epic: bool = False) -> None:
+    async def open_pack_with_animation(
+        self, author, send, edit, *, epic: bool = False, from_inventory: bool = False
+    ) -> None:
         try:
             result = await asyncio.to_thread(
-                open_pack, author.id, author.display_name, self.database_path, epic=epic
+                partial(open_pack, epic=epic, from_inventory=from_inventory),
+                author.id,
+                author.display_name,
+                self.database_path,
             )
         except PackError as error:
             await send(embed=discord.Embed(description=str(error), color=discord.Color.red()))
@@ -954,6 +1025,39 @@ class EconomyCog(commands.Cog):
             cancel_text="Pacote cancelado.",
         )
         view.message = await context.reply(embed=embed, view=view, mention_author=False)
+
+    async def open_inventory_item(self, author, item: str, send, edit) -> None:
+        """Abre uma caixa ou pacote ganho, com a mesma animação da compra."""
+        if item in {"caixa", "caixa_epica"}:
+            await self.open_with_animation(
+                author, send, edit, epic=item == "caixa_epica", from_inventory=True
+            )
+        else:
+            await self.open_pack_with_animation(
+                author, send, edit, epic=item == "pacote_epico", from_inventory=True
+            )
+
+    def inventory_menu(self, author: discord.abc.User) -> tuple[discord.Embed, InventoryView]:
+        items = get_inventory(author.id, self.database_path)
+        embed = discord.Embed(title="🎒 Inventário", color=discord.Color.gold())
+        if items:
+            embed.description = "\n".join(
+                f"{INVENTORY_ITEMS[item][0]} **{INVENTORY_ITEMS[item][1]}** × {amount}"
+                for item, amount in items.items()
+            )
+            embed.set_footer(text="Abrir não custa nada: você já ganhou")
+        else:
+            embed.description = (
+                "Vazio por enquanto. As caixas podem dar **caixas**, **caixas épicas** e "
+                "**pacotes de jogador**, que ficam guardados aqui (`mm!crates`)."
+            )
+        return embed, InventoryView(self, author, items)
+
+    @commands.command(name="inventario", aliases=["inventário", "inv", "mochila"])
+    async def inventory(self, context: commands.Context) -> None:
+        register_user(context.author.id, context.author.display_name, self.database_path)
+        embed, view = self.inventory_menu(context.author)
+        await context.reply(embed=embed, view=view, mention_author=False)
 
     @commands.command(name="ativar", aliases=["ativarrolls", "usarrolls"])
     async def activate(self, context: commands.Context, amount: str | None = None) -> None:

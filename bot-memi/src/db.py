@@ -411,6 +411,14 @@ CREATE TABLE IF NOT EXISTS mascots (
     UNIQUE (name, owner)
 );
 
+CREATE TABLE IF NOT EXISTS user_inventory (
+    discord_user_id TEXT NOT NULL REFERENCES game_users(discord_user_id)
+        ON DELETE CASCADE,
+    item TEXT NOT NULL,
+    amount INTEGER NOT NULL DEFAULT 0 CHECK (amount >= 0),
+    PRIMARY KEY (discord_user_id, item)
+);
+
 CREATE TABLE IF NOT EXISTS user_bonuses (
     discord_user_id TEXT NOT NULL REFERENCES game_users(discord_user_id)
         ON DELETE CASCADE,

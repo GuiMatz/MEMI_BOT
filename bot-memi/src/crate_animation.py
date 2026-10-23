@@ -204,6 +204,16 @@ def _icon(kind: str, size: int, color, picture=None) -> Image.Image:
             (c + r * 0.15, c - big * 0.04, c + r * 0.15 + big * 0.08, c + big * 0.04),
             fill=(*BACKGROUND, 255),
         )
+    elif kind == "box":  # caixa: tampa e corpo, com a faixa no meio
+        draw.rectangle((c - r * 0.85, c - r * 0.2, c + r * 0.85, c + r * 0.85), fill=(*light, 255))
+        draw.rectangle((c - r, c - r * 0.6, c + r, c - r * 0.25), fill=(*light, 255))
+        band = big * 0.05
+        draw.rectangle((c - band, c - r * 0.6, c + band, c + r * 0.85), fill=(*BACKGROUND, 255))
+    elif kind == "card":  # pacote de jogador: uma carta em pé
+        draw.rounded_rectangle(
+            (c - r * 0.62, c - r, c + r * 0.62, c + r), radius=int(big * 0.06), fill=(*light, 255)
+        )
+        draw.polygon(star(c, c - r * 0.1, r * 0.32, r * 0.14), fill=(*BACKGROUND, 255))
     else:  # cosmético sem imagem: um losango
         draw.polygon([(c, c - r), (c + r, c), (c, c + r), (c - r, c)], fill=(*light, 255))
     return layer.resize((size, size), Image.LANCZOS)

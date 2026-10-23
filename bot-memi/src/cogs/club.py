@@ -556,7 +556,7 @@ class ClubCog(commands.Cog):
 
     # Cosméticos ---------------------------------------------------------------------------
 
-    @commands.command(name="cosmeticos", aliases=["cosméticos", "inventario", "inventário", "inv"])
+    @commands.command(name="cosmeticos", aliases=["cosméticos"])
     async def cosmetics(self, context: commands.Context, kind: str | None = None) -> None:
         ensure_team(context.author.id, context.author.display_name, self.database_path)
         wanted = KIND_ALIASES.get(normalize_player_name(kind)) if kind else None

@@ -12,6 +12,7 @@ from src.clock import BRASILIA
 from src.cosmetics import COSMETIC_KINDS, grant, random_new_item
 from src.db import DATABASE_PATH, connect
 from src.game import register_user
+from src.inventory import InventoryEmpty, give, take
 from src.missions import record
 from src.perks import (
     BONUS_LIMITS,
@@ -62,9 +63,16 @@ CRATE_DOUBLE_CHANCE = 0.05
 CRATE_INSTANT_ROLLS = (1, 3)
 CRATE_ITEMS = {
     "incomum": ("cosmetic",),
-    "raro": ("daily_1h", "wish_protection"),
-    "epico": ("star_wish_slot", "wish_slot", "daily_2h"),
-    "lendario": ("permanent_roll", "random_upgrade", "crate_discount"),
+    "raro": ("daily_1h", "wish_protection", "bonus_crate", "player_pack"),
+    "epico": ("star_wish_slot", "wish_slot", "daily_2h", "epic_crate", "player_pack"),
+    "lendario": ("permanent_roll", "random_upgrade", "crate_discount", "epic_pack"),
+}
+# Itens de crate que vão para o inventário (`mm!inventario`) para abrir depois.
+CRATE_INVENTORY_ITEMS = {
+    "bonus_crate": "caixa",
+    "epic_crate": "caixa_epica",
+    "player_pack": "pacote",
+    "epic_pack": "pacote_epico",
 }
 # Item de crate -> (bônus permanente, quanto soma).
 CRATE_BONUS_ITEMS = {
@@ -388,11 +396,25 @@ def open_crates(
     *,
     rng: random.Random | random.SystemRandom | None = None,
     epic: bool = False,
+    from_inventory: bool = False,
 ) -> list[CrateResult]:
-    """Abre `count` caixas seguidas; confere antes se o saldo paga todas."""
+    """Abre `count` caixas seguidas; confere antes se o saldo paga todas.
+
+    `from_inventory=True`: uma caixa ganha, do inventário (sem cobrar)."""
     if count not in CRATE_BATCHES:
         raise ValueError("Quantidade de caixas inválida.")
     register_user(discord_user_id, display_name, database_path)
+    if from_inventory:
+        return [
+            open_crate(
+                discord_user_id,
+                display_name,
+                database_path,
+                rng=rng,
+                epic=epic,
+                from_inventory=True,
+            )
+        ]
     price = get_crate_price(discord_user_id, database_path) * (EPIC_CRATE_MULTIPLIER if epic else 1)
     with connect(database_path) as connection:
         balance = connection.execute(
@@ -428,11 +450,13 @@ def open_crate(
     now: datetime | None = None,
     rng: random.Random | random.SystemRandom | None = None,
     epic: bool = False,
+    from_inventory: bool = False,
 ) -> CrateResult:
     """Abre uma crate: Básico sempre e, com sorte, 1 item de outra raridade.
 
     `epic=True` abre a caixa épica: preço × `EPIC_CRATE_MULTIPLIER` e as chances de
-    `EPIC_CRATE_EXTRA_CHANCES`.
+    `EPIC_CRATE_EXTRA_CHANCES`. `from_inventory=True` abre uma caixa ganha (do
+    `mm!inventario`): tira do inventário em vez de cobrar.
 
     A caixa vem inteira em itens ou inteira em Memilets: Memilets nunca vêm junto com
     item. Cosméticos são sempre novos para a pessoa. Em 5% das caixas com item, o item
@@ -446,6 +470,12 @@ def open_crate(
         connection.execute("BEGIN IMMEDIATE")
         perks = load_perks(connection, user_id)
         price = perks.crate_price * (EPIC_CRATE_MULTIPLIER if epic else 1)
+        if from_inventory:
+            try:
+                take(connection, user_id, "caixa_epica" if epic else "caixa")
+            except InventoryEmpty as error:
+                raise InsufficientFunds(str(error)) from None
+            price = 0
         balance = connection.execute(
             "SELECT memilets FROM game_users WHERE discord_user_id = ?",
             (user_id,),
@@ -622,6 +652,9 @@ def _give_item(
             key = rng.choice(open_upgrades)
             _raise_upgrade(connection, user_id, key)
             return CratePrize(rarity, "random_upgrade", 1, UPGRADES[key].name)
+        if item in CRATE_INVENTORY_ITEMS:
+            give(connection, user_id, CRATE_INVENTORY_ITEMS[item])
+            return CratePrize(rarity, item, 1)
         bonus_key, amount = CRATE_BONUS_ITEMS[item]
         if perks.bonuses[bonus_key] + amount > BONUS_LIMITS[bonus_key]:
             continue
@@ -652,6 +685,10 @@ def describe_prize(prize: CratePrize) -> str:
         "permanent_roll": "+1 roll permanente por ciclo",
         "random_upgrade": f"+1 nível em **{prize.name}**",
         "crate_discount": "-10 Memilets no preço da crate (permanente)",
+        "bonus_crate": "+1 caixa no inventário (mm!inventario)",
+        "epic_crate": "+1 caixa épica no inventário (mm!inventario)",
+        "player_pack": "+1 pacote de jogador no inventário (mm!inventario)",
+        "epic_pack": "+1 pacote épico no inventário (mm!inventario)",
     }
     return texts[prize.kind]
 

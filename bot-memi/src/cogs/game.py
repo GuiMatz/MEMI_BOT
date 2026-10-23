@@ -258,6 +258,7 @@ FUTAE_SECTIONS = (
         "`mm!upgrade` — upgrades permanentes (sempre pede confirmação)\n"
         "`mm!crates [epica] [1|5|10]` — caixas com rolls guardados, cosméticos e bônus\n"
         "`mm!ativar [quantidade]` — ativa os rolls guardados (+1 contratação a cada 10)\n"
+        "`mm!inventario` — caixas e pacotes ganhos nas caixas, para abrir de graça\n"
         "`mm!pacote [epico]` — uma carta de jogador livre do mercado (nunca Base)\n"
         "`mm!allin` — aposta de 30 mil: roleta com 1 em 10 de Ícone ou melhor\n"
         "`mm!construir [1-12]` / `mm!destruir` — Centro de Treinamento (torre)\n"

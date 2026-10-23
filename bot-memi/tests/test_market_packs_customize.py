@@ -399,6 +399,91 @@ class CrateBatchTests(Case):
         self.assertIn("+1 Star Wish", titles)
 
 
+class InventoryTests(Case, unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        Case.setUp(self)
+
+    def give(self, item, amount=1):
+        from src.inventory import give
+
+        with connect(self.database_path) as connection:
+            give(connection, "100", item, amount)
+
+    def test_crate_can_give_crates_and_packs_that_go_to_the_inventory(self):
+        from unittest.mock import patch
+
+        from src import economy
+        from src.inventory import get_inventory
+
+        self.assertIn("player_pack", economy.CRATE_ITEMS["raro"])
+        self.assertIn("player_pack", economy.CRATE_ITEMS["epico"])
+        self.assertIn("epic_pack", economy.CRATE_ITEMS["lendario"])
+        for rarity, item, stored in (
+            ("raro", "bonus_crate", "caixa"),
+            ("raro", "player_pack", "pacote"),
+            ("epico", "epic_crate", "caixa_epica"),
+            ("lendario", "epic_pack", "pacote_epico"),
+        ):
+            with (
+                patch.dict(economy.CRATE_ITEMS, {rarity: (item,)}),
+                connect(self.database_path) as connection,
+            ):
+                prize = economy._give_item(
+                    connection, "100", rarity, random.Random(1), self.database_path
+                )
+            self.assertEqual((prize.kind, prize.rarity), (item, rarity))
+            self.assertIn("mm!inventario", economy.describe_prize(prize))
+        self.assertEqual(
+            get_inventory(100, self.database_path),
+            {"caixa": 1, "caixa_epica": 1, "pacote": 1, "pacote_epico": 1},
+        )
+
+    def test_inventory_crate_opens_for_free_and_only_once(self):
+        from src.inventory import get_inventory
+
+        self.add_player("Atacante")
+        self.set_memilets(100, 0)
+        self.give("caixa")
+        (result,) = open_crates(100, "Pessoa A", 1, self.database_path, from_inventory=True)
+        self.assertEqual(result.price, 0)
+        self.assertEqual(get_inventory(100, self.database_path), {})
+        with self.assertRaises(InsufficientFunds):
+            open_crates(100, "Pessoa A", 1, self.database_path, from_inventory=True)
+
+    def test_inventory_pack_is_free_and_comes_back_if_the_market_is_empty(self):
+        from src.inventory import get_inventory
+
+        self.set_memilets(100, 0)
+        self.give("pacote")
+        with self.assertRaises(PackError):
+            open_pack(100, "Pessoa A", self.database_path, from_inventory=True)
+        self.assertEqual(get_inventory(100, self.database_path), {"pacote": 1})
+        player = self.add_player("Bom", 45)
+        result = open_pack(
+            100, "Pessoa A", self.database_path, rng=random.Random(1), from_inventory=True
+        )
+        self.assertEqual((result.player["id"], result.price), (player, 0))
+        self.assertEqual(self.memilets(100), 0)
+        self.assertEqual(get_inventory(100, self.database_path), {})
+
+    async def test_inventory_menu_has_one_open_button_per_item(self):
+        from src.cogs.economy import EconomyCog
+
+        cog = EconomyCog(SimpleNamespace(database_path=self.database_path))
+        author = SimpleNamespace(id=100, display_name="Pessoa A")
+        embed, view = cog.inventory_menu(author)
+        self.assertIn("Vazio", embed.description)
+        self.assertEqual(view.children, [])
+        self.give("caixa_epica", 2)
+        self.give("pacote")
+        embed, view = cog.inventory_menu(author)
+        self.assertIn("Caixa épica** × 2", embed.description)
+        self.assertEqual(
+            [item.label for item in view.children],
+            ["Abrir caixa épica (2)", "Abrir pacote de jogador (1)"],
+        )
+
+
 class ShopTests(Case, unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         Case.setUp(self)
