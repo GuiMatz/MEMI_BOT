@@ -187,6 +187,11 @@ class RollLayout(discord.ui.LayoutView):
             await interaction.followup.send(
                 f"✅ {interaction.user.mention} contratou **{self.player_name}**.{bonus}"
                 + equipped_text
+                + (
+                    "\n⚡ **Contrato relâmpago!** Seu claim do ciclo continua livre."
+                    if outcome.free_claim
+                    else ""
+                )
             )
             return
         if outcome.status == "reward_claimed":

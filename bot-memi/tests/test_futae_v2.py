@@ -513,7 +513,7 @@ class MenuTests(unittest.IsolatedAsyncioTestCase):
         economy = EconomyCog(self.bot)
         embed, view = economy.upgrade_menu(self.user)
         self.assertTrue(embed.description.startswith(f"*{UPGRADES_INTRO}*"))
-        self.assertEqual(len(view.children[0].options), 11)
+        self.assertEqual(len(view.children[0].options), 12)
         embed, _ = economy.crate_menu(self.user)
         self.assertTrue(embed.description.startswith(f"*{CRATES_INTRO}*"))
         club = ClubCog(self.bot)

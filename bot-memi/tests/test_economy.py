@@ -100,7 +100,7 @@ class EconomyTests(unittest.TestCase):
             rng=random.Random(5),
         )
         self.assertEqual(reward.cap, DAILY_BASE_CAP + DAILY_MAX_STEP)
-        self.assertEqual(reward.available_at, NOW + timedelta(hours=24) - timedelta(minutes=10))
+        self.assertEqual(reward.available_at, NOW + timedelta(hours=24) - timedelta(minutes=15))
         self.assertEqual(get_wallet(100, self.database_path)["memilets"], 96_500 + reward.amount)
 
     def test_upgrade_purchase_rejects_insufficient_balance(self):

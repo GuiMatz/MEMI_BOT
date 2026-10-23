@@ -278,9 +278,11 @@ O FUT.AE é um módulo do MeMi BOT, não um bot separado. O menu geral continua 
   depois, menos as reduções de upgrades, torre e crates (mínimo de 8 horas).
 - `mm!wishlist` e `mm!wl` mostram a lista completa de wishes em embed.
 - `mm!starwish` e `mm!sw` identificam Star Wishes com o emoji `⭐`.
-- `mm!upgrade` tem 10 upgrades com limite (rolls, wishes, Star Wish, daily, proteção
-  de wish, teto do daily, exclusividade, reembolso da demissão, bilheteria e renda), sempre
-  com confirmação.
+- `mm!upgrade` tem 12 upgrades com limite (rolls, wishes, Star Wish, daily, proteção
+  de wish, teto do daily, exclusividade, valor de venda, `mm!rt`, bilheteria, renda e o
+  **Contrato Relâmpago**: até 20% de chance de a contratação não gastar o claim do ciclo),
+  sempre com confirmação. O Seguro de Contrato (+10% de venda por nível) custa 5 mil + 5 mil
+  por nível.
 - `mm!crates`, `mm!construir`, `mm!destruir`, `mm!renda`, `mm!bilheteria` e
   `mm!cosmeticos` (com `mm!emblema`, `mm!uniforme`, `mm!estadio`, `mm!tecnico`,
   `mm!liga` e `mm!mascote`) completam a economia do clube.

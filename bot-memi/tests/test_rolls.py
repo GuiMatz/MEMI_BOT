@@ -320,6 +320,32 @@ class RollTests(unittest.TestCase):
                 0,
             )
 
+    def test_contrato_relampago_can_keep_the_cycle_claim(self):
+        from src.perks import FREE_CLAIM_STEP, UPGRADES
+
+        class Lucky(random.Random):
+            def random(self):
+                return 0.0
+
+        self.assertEqual((UPGRADES["free_claim"].limit, FREE_CLAIM_STEP), (5, 0.04))
+        for name in ("Um", "Dois"):
+            self.add_player(name=name)
+        register_user(100, "Pessoa", self.database_path)
+        with connect(self.database_path) as connection:
+            connection.execute(
+                "INSERT INTO user_upgrades (discord_user_id, upgrade_key, level) "
+                "VALUES ('100', 'free_claim', 5)"
+            )
+        first = roll_player(100, "Pessoa", self.database_path, now=NOW, rng=random.Random(0))
+        outcome = claim_roll_offer(first.offer_id, 100, self.database_path, now=NOW, rng=Lucky())
+        self.assertEqual((outcome.status, outcome.free_claim), ("player_claimed", True))
+        with connect(self.database_path) as connection:
+            self.assertIsNone(
+                connection.execute(
+                    "SELECT last_claim_at FROM game_users WHERE discord_user_id = '100'"
+                ).fetchone()["last_claim_at"]
+            )  # o claim do ciclo continua livre
+
     def test_star_wish_relative_bonus_can_select_target_and_wish_claims_bypass_window(self):
         target_id = self.add_player(name="Alvo da Star Wish")
         self.add_player(name="Outro jogador")

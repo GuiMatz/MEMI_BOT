@@ -117,6 +117,8 @@ UPGRADE_ALIASES = {
     "ampliar": "box_office_cap",
     "renda": "match_income",
     "patrocinio": "match_income",
+    "relampago": "free_claim",
+    "raio": "free_claim",
 }
 
 # Mesma palavra, mesma cor em todo o bot: as cores seguem as séries das cartas.

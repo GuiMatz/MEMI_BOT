@@ -67,6 +67,7 @@ class ClaimOutcome:
     reward_amount: int | None = None
     retry_at: datetime | None = None
     protected_until: datetime | None = None
+    free_claim: bool = False  # Contrato Relâmpago: não gastou o claim do ciclo
 
 
 def _utc_now(value: datetime | None) -> datetime:
@@ -378,10 +379,12 @@ def claim_roll_offer(
     database_path: str | Path = DATABASE_PATH,
     *,
     now: datetime | None = None,
+    rng: random.Random | random.SystemRandom | None = None,
 ) -> ClaimOutcome:
     """Resgata a moeda ou atribui o jogador em uma transação atômica."""
     current_time = _utc_now(now)
     user_id = str(discord_user_id)
+    generator = rng or random.SystemRandom()
     with connect(database_path) as connection:
         connection.execute("BEGIN IMMEDIATE")
         offer = connection.execute(
@@ -479,7 +482,13 @@ def claim_roll_offer(
             "INSERT INTO player_ownership (player_id, discord_user_id) VALUES (?, ?)",
             (offer["player_id"], user_id),
         )
-        if use_bonus:
+        # Contrato Relâmpago: com sorte, a contratação não gasta nada (nem o claim do
+        # ciclo, nem uma contratação extra).
+        chance = claimer_perks.free_claim_chance
+        free_claim = bool(chance) and generator.random() < chance
+        if free_claim:
+            pass
+        elif use_bonus:
             connection.execute(
                 "UPDATE game_users SET bonus_claims = bonus_claims - 1, "
                 "updated_at = CURRENT_TIMESTAMP WHERE discord_user_id = ?",
@@ -517,4 +526,4 @@ def claim_roll_offer(
                     "UPDATE game_users SET memilets = memilets + ? WHERE discord_user_id = ?",
                     (reward, user_id),
                 )
-        return ClaimOutcome("player_claimed", reward_amount=reward or None)
+        return ClaimOutcome("player_claimed", reward_amount=reward or None, free_claim=free_claim)
