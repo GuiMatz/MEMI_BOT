@@ -4,6 +4,10 @@ Só dá para equipar o que a conta possui. Cosméticos saem nas crates (`mm!crat
 nunca repetem um item que a pessoa já tem. Clubes e logos são a mesma coisa: os dois
 viram **emblemas**.
 
+Uniforme, estádio, técnico e mascote são **únicos**, como as cartas de jogador: cada item
+tem um dono só, e a caixa só sorteia o que ainda não é de ninguém. Emblema e liga podem
+se repetir entre times.
+
 Cada cosmético equipado, menos o estádio, soma +100 ao máximo do daily; o estádio
 libera a renda do amistoso (`src.income`).
 """
@@ -33,6 +37,11 @@ COSMETIC_KINDS: dict[str, tuple[str, str, str, bool]] = {
     "liga": ("Liga", "🏆", "favorite_league", False),
     "mascote": ("Mascote", "🐾", "mascot", False),
 }
+
+# Tipos com dono único (um item, uma pessoa), como as cartas.
+UNIQUE_KINDS = frozenset({"uniforme", "estadio", "tecnico", "mascote"})
+# Compensação, em Memilets, de quem perdeu um item repetido quando eles viraram únicos.
+DUPLICATE_REFUND = 2_500
 
 # Como cada tipo aparece nos comandos (`mm!time tecnico X`, `mm!emblema X`…).
 KIND_ALIASES = {
@@ -146,7 +155,17 @@ def grant(
     item: dict[str, Any],
     source: str = "crate",
 ) -> bool:
-    """Entrega o item; devolve False se a pessoa já o tinha."""
+    """Entrega o item; devolve False se a pessoa já o tinha ou se é de dono único e já
+    pertence a outra pessoa."""
+    key = item.get("key") or item_key(item["name"])
+    if (
+        kind in UNIQUE_KINDS
+        and connection.execute(
+            "SELECT 1 FROM user_cosmetics WHERE kind = ? AND item_key = ? AND discord_user_id != ?",
+            (kind, key, str(discord_user_id)),
+        ).fetchone()
+    ):
+        return False
     cursor = connection.execute(
         """
         INSERT OR IGNORE INTO user_cosmetics
@@ -156,7 +175,7 @@ def grant(
         (
             str(discord_user_id),
             kind,
-            item.get("key") or item_key(item["name"]),
+            key,
             item["name"],
             item.get("image_path"),
             source,
@@ -171,13 +190,13 @@ def unowned_items(
     kind: str,
     database_path: str | Path = DATABASE_PATH,
 ) -> list[dict[str, Any]]:
-    owned = {
-        row["item_key"]
-        for row in connection.execute(
-            "SELECT item_key FROM user_cosmetics WHERE discord_user_id = ? AND kind = ?",
-            (str(discord_user_id), kind),
-        )
-    }
+    if kind in UNIQUE_KINDS:
+        # Dono único: some do sorteio assim que alguém tem.
+        query, arguments = "SELECT item_key FROM user_cosmetics WHERE kind = ?", (kind,)
+    else:
+        query = "SELECT item_key FROM user_cosmetics WHERE discord_user_id = ? AND kind = ?"
+        arguments = (str(discord_user_id), kind)
+    owned = {row["item_key"] for row in connection.execute(query, arguments)}
     return [item for item in catalog(kind, database_path) if item["key"] not in owned]
 
 
@@ -383,6 +402,49 @@ def refresh_names(database_path: str | Path = DATABASE_PATH) -> int:
     return changed
 
 
+def resolve_unique_duplicates(database_path: str | Path = DATABASE_PATH) -> int:
+    """Itens de dono único que ficaram com mais de um dono (da regra antiga).
+
+    Fica com quem pegou primeiro; os outros perdem o item (desequipa, se estava em uso) e
+    recebem `DUPLICATE_REFUND` Memilets por item. Devolve quantos itens foram tirados.
+    Sem repetidos, não faz nada: dá para rodar toda vez que o bot liga."""
+    removed = 0
+    with connect(database_path) as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        for kind in sorted(UNIQUE_KINDS):
+            _, _, column, stores_path = COSMETIC_KINDS[kind]
+            rows = connection.execute(
+                """
+                SELECT rowid, discord_user_id, item_key, name, image_path FROM user_cosmetics
+                WHERE kind = ? AND item_key IN (
+                    SELECT item_key FROM user_cosmetics WHERE kind = ?
+                    GROUP BY item_key HAVING COUNT(*) > 1
+                )
+                ORDER BY item_key, acquired_at, rowid
+                """,
+                (kind, kind),
+            ).fetchall()
+            first_owner: set[str] = set()
+            for row in rows:
+                if row["item_key"] not in first_owner:
+                    first_owner.add(row["item_key"])  # o mais antigo fica
+                    continue
+                user_id = row["discord_user_id"]
+                connection.execute("DELETE FROM user_cosmetics WHERE rowid = ?", (row["rowid"],))
+                value = row["image_path"] if stores_path else row["name"]
+                connection.execute(
+                    f"UPDATE game_teams SET {column} = NULL "
+                    f"WHERE discord_user_id = ? AND {column} = ?",
+                    (user_id, value),
+                )
+                connection.execute(
+                    "UPDATE game_users SET memilets = memilets + ? WHERE discord_user_id = ?",
+                    (DUPLICATE_REFUND, user_id),
+                )
+                removed += 1
+    return removed
+
+
 def grandfather_equipped(database_path: str | Path = DATABASE_PATH) -> int:
     """Quem já tinha algo equipado antes da regra de posse passa a possuir esse item."""
     granted = 0
@@ -416,5 +478,8 @@ def give_item(
         )
     register_user(discord_user_id, display_name, database_path)
     with connect(database_path) as connection:
-        grant(connection, discord_user_id, kind, found[0], "admin")
+        if not grant(connection, discord_user_id, kind, found[0], "admin") and kind in UNIQUE_KINDS:
+            owner = owners_of(kind, found[0]["name"], database_path)
+            if owner and owner != [display_name]:
+                raise CosmeticError(f"{found[0]['name']} já é de {owner[0]} (item único).")
     return found[0]

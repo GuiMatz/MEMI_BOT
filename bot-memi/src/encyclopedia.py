@@ -531,7 +531,7 @@ def seed_cartola_extra(database_path: str | Path = DATABASE_PATH) -> int:
 
 def prepare_game_data(database_path: str | Path = DATABASE_PATH) -> dict[str, int]:
     """Tudo que o bot sincroniza ao iniciar: enciclopédia, lendas, craques, escudos e fotos."""
-    from src.cosmetics import grandfather_equipped, refresh_names
+    from src.cosmetics import grandfather_equipped, refresh_names, resolve_unique_duplicates
     from src.game import sync_club_logos
     from src.photos import sync_existing_photos
 
@@ -544,6 +544,8 @@ def prepare_game_data(database_path: str | Path = DATABASE_PATH) -> dict[str, in
     stars = apply_current_stars(database_path)
     report["current_stars"] = stars["applied"]
     report["current_stars_missing"] = stars["missing"]
+    # Cosméticos de dono único: repetidos da regra antiga ficam com quem pegou primeiro.
+    report["cosmetics_duplicates_removed"] = resolve_unique_duplicates(database_path)
     report["cosmetics_grandfathered"] = grandfather_equipped(database_path)
     report["cosmetics_renamed"] = refresh_names(database_path)
     logos = sync_club_logos(database_path)

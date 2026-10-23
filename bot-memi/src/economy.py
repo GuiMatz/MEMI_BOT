@@ -46,12 +46,14 @@ EPIC_CRATE_EXTRA_CHANCES = {
 # Memilets que vêm no lugar dos itens de cada raridade (um OU outro, nunca os dois).
 # Calibrado para a caixa de Memilets devolver, em média, quase o preço (~480 de 500):
 # a caixa comum não parece prejuízo e os itens raros são o lucro.
+# Uma caixa de Memilets rende em média ~34% do preço: a caixa não se paga, o valor está
+# nos itens (rolls, cosméticos, bônus, caixas e pacotes).
 CRATE_MEMILETS = {
-    "basico": (240, 390),
-    "incomum": (450, 600),
-    "raro": (900, 900),
-    "epico": (1_500, 1_500),
-    "lendario": (2_500, 2_500),
+    "basico": (60, 140),
+    "incomum": (150, 250),
+    "raro": (350, 350),
+    "epico": (700, 700),
+    "lendario": (1_400, 1_400),
 }
 # Garantias: em 15 caixas sem Raro (ou melhor) vem um Raro; em 50 sem Épico (ou melhor),
 # um Épico. Cada uma tem seu contador; a de Épico vale primeiro.

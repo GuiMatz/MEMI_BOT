@@ -503,12 +503,13 @@ class MatchesCog(commands.Cog):
             return
         title = pve_title(user.id, kind, self.database_path)
         await interaction.response.send_message(
-            f"⚔️ **{user.display_name}** × {team.label} (força {team.strength}) · {title}"
+            f"⚔️ **{user.display_name}** × {team.label} (força {team.power}) · {title}"
         )
         send = interaction.channel.send
-        won = await self._pve_match(send, user, team, title)
-        if won is None:
+        outcome = await self._pve_match(send, user, team, title)
+        if outcome is None:
             return
+        won = outcome == "vitoria"
         gains = await asyncio.to_thread(
             record_result, user.id, user.display_name, kind, team, won, self.database_path
         )
@@ -517,10 +518,18 @@ class MatchesCog(commands.Cog):
             await send(f"🏆 **{user.display_name}** venceu {team.label}!\n{reward}")
         else:
             extra = ("\n" + "\n".join(gains)) if gains else ""
-            await send(f"💥 {team.label} venceu desta vez. Tente de novo!{extra}")
+            first = (
+                f"🤝 Empate com {team.label}: contra lendas, só a vitória conta."
+                if outcome == "empate"
+                else f"💥 {team.label} venceu desta vez. Tente de novo!"
+            )
+            await send(first + extra)
 
-    async def _pve_match(self, send, user, team, title: str) -> bool | None:
-        """Partida narrada do time da pessoa (mandante) contra um time lendário."""
+    async def _pve_match(self, send, user, team, title: str) -> str | None:
+        """Partida narrada do time da pessoa (mandante) contra um time lendário.
+
+        Devolve "vitoria", "empate" ou "derrota" (None se o time da pessoa ficou inválido).
+        Contra lendas não tem pênaltis: só a vitória conta."""
         try:
             home, home_players = get_valid_lineup(user.id, self.database_path)
         except TeamError as error:
@@ -532,32 +541,23 @@ class MatchesCog(commands.Cog):
             away["logo_path"] = await asyncio.to_thread(crest_for, team.key, self.database_path)
         except Exception:
             away["logo_path"] = None
-        away_players = list(team.players)
         result = simulate_match(
             home["team_name"],
             home_players,
             away["team_name"],
-            away_players,
+            list(team.players),
             home_style=home["style"],
             away_style="balanced",
             home_tactics=home,
+            away_tactics=away,
             home_advantage=True,
         )
-        timeline = list(result.events)
-        penalties = None
-        if result.home_goals == result.away_goals:
-            kicks = penalty_shootout_kicks(
-                home_players, away_players, home_taker_id=home.get("penalty_player_id")
-            )
-            timeline += penalty_events(kicks, result.home_name, result.away_name)
-            penalties = (kicks[-1].home_score, kicks[-1].away_score)
         await narrate(
             lambda embed: send(embed=embed),
             result.home_name,
             result.away_name,
-            timeline,
+            list(result.events),
             title=title,
-            penalties=penalties,
             home_color=home.get("color"),
         )
         await send(
@@ -569,12 +569,11 @@ class MatchesCog(commands.Cog):
                 result.goals,
                 title=title,
                 venue=venue_name(home),
-                penalties=penalties,
             )
         )
-        return result.home_goals > result.away_goals or (
-            penalties is not None and penalties[0] > penalties[1]
-        )
+        if result.home_goals > result.away_goals:
+            return "vitoria"
+        return "empate" if result.home_goals == result.away_goals else "derrota"
 
     @commands.command(name="penaltis", aliases=["pênaltis", "penalti", "penaltys", "pk"])
     async def penalties(

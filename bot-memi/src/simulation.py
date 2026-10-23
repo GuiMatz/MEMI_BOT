@@ -234,6 +234,15 @@ def team_profile(
     if captain_id is not None and any(player.get("id") == captain_id for player in players):
         control += CAPTAIN_CONTROL
     keeper = max(groups["G"])
+    # Times lendários do `mm!desafio` jogam acima do overall (`strength_bonus`, ex. 0,10 =
+    # +10% em ataque, defesa, meio e goleiro). Times de gente nunca têm isso.
+    bonus = 1 + float((tactics or {}).get("strength_bonus") or 0)
+    attack, defense, control, keeper = (
+        attack * bonus,
+        defense * bonus,
+        control * bonus,
+        keeper * bonus,
+    )
     averages = {group: sum(values) / len(values) for group, values in groups.items()}
     return TeamProfile(
         attack=attack,
