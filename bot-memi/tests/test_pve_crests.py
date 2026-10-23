@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from src import pve_crests
-from src.db import connect, initialize_database
+from src.db import initialize_database
 
 
 class PveCrestTests(unittest.TestCase):
@@ -22,30 +22,57 @@ class PveCrestTests(unittest.TestCase):
         self.patch.stop()
         self.tempdir.cleanup()
 
-    def club(self, name, country, file_name):
-        (self.photos / "clubs").mkdir(parents=True, exist_ok=True)
-        (self.photos / "clubs" / file_name).write_bytes(b"png")
-        with connect(self.database_path) as connection:
-            connection.execute(
-                "INSERT INTO clubs (name, country, logo_path) VALUES (?, ?, ?)",
-                (name, country, f"clubs/{file_name}"),
-            )
+    def test_club_crest_takes_the_exact_brazilian_club(self):
+        teams = [
+            {
+                "strTeam": "Santos Laguna",
+                "strSport": "Soccer",
+                "strCountry": "Mexico",
+                "strBadge": "https://x/laguna.png",
+            },
+            {
+                "strTeam": "Santos",
+                "strSport": "Soccer",
+                "strCountry": "Mexico",
+                "strBadge": "https://x/outro.png",
+            },
+            {
+                "strTeam": "Santos",
+                "strSport": "Soccer",
+                "strCountry": "Brazil",
+                "strGender": "Male",
+                "strBadge": "https://x/santos.png",
+            },
+        ]
 
-    def test_club_crest_prefers_the_brazilian_club(self):
-        self.club("Santos Laguna", "Mexico", "1.png")
-        self.club("Santos FC", "Brasil", "2.png")
-        self.club("CR Vasco da Gama", "Brasil", "3.png")
-        self.club("Clube Atlético Mineiro", "Brazil", "4.png")
-        self.assertEqual(pve_crests.club_crest("Santos", self.database_path), "clubs/2.png")
-        self.assertEqual(
-            pve_crests.crest_for("clube:vasco da gama", self.database_path), "clubs/3.png"
-        )
-        # Chefão do dia: a chave tem a data no fim.
-        self.assertEqual(
-            pve_crests.crest_for("clube:atlético-mg:2026-10-23", self.database_path),
-            "clubs/4.png",
-        )
-        self.assertIsNone(pve_crests.club_crest("Flamengo", self.database_path))
+        class FakeSportsDB:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def get(self, endpoint, **params):
+                return {"teams": teams}
+
+        with patch("src.sportsdb_images.SportsDB", FakeSportsDB):
+            self.assertEqual(pve_crests._sportsdb_badge("Santos", "Brazil"), "https://x/santos.png")
+            self.assertIsNone(pve_crests._sportsdb_badge("Santos Futebol", "Brazil"))
+
+    def test_club_crest_is_downloaded_once_into_its_folder(self):
+        def fake_download(collector, url, entity, entity_id):
+            path = Path(entity) / f"{entity_id}.png"
+            (self.photos / path).parent.mkdir(parents=True, exist_ok=True)
+            (self.photos / path).write_bytes(b"png")
+            return path
+
+        with (
+            patch.object(pve_crests, "_sportsdb_badge", return_value="https://x/cam.png") as badge,
+            patch("src.photos.PhotoCollector._download", fake_download),
+        ):
+            first = pve_crests.crest_for("clube:atlético-mg:2026-10-23", self.database_path)
+            again = pve_crests.crest_for("clube:atlético-mg", self.database_path)
+        self.assertEqual(first, "lendas_clubes/atletico-mg.png")
+        self.assertEqual(again, first)
+        self.assertEqual(badge.call_count, 1)
+        self.assertEqual(badge.call_args.args, ("Atletico Mineiro", "Brazil"))
 
     def test_national_crest_uses_the_saved_file_and_gives_up_quietly(self):
         (self.photos / "selecoes").mkdir(parents=True)

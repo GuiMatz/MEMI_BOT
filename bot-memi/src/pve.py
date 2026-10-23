@@ -53,9 +53,14 @@ NATION_EMOJIS = {
     "Portugal": "🇵🇹",
     "Uruguai": "🇺🇾",
 }
-DAILY_BOSS_BOOST = 1  # pontos de overall a mais em cada jogador
+# Força acima do overall (multiplica ataque, defesa, meio e goleiro na simulação). O
+# overall das lendas não muda; um time de força 85 vence um clube lendário ~1 em 5.
+CLUB_BONUS = 0.08
+NATION_BONUS = 0.10
+WORLD_BONUS = 0.12
+DAILY_BOSS_BONUS = 0.15
+WEEKLY_BOSS_BONUS = 0.20
 IMPROVISED = 0.6  # peso, na escolha, de quem jogaria fora de posição (só se não houver outro)
-WEEKLY_BOSS_BOOST = 2
 DAILY_BOSS_TRIES = 1
 WEEKLY_BOSS_TRIES = 3
 DAILY_BOSS_PRIZE = 3_000
@@ -73,6 +78,7 @@ class PveTeam:
     emoji: str
     formation: str
     players: tuple[dict[str, Any], ...]
+    bonus: float = 0.0  # força acima do overall (ataque, defesa, meio e goleiro)
 
     @property
     def strength(self) -> int:
@@ -89,20 +95,27 @@ class PveTeam:
     def label(self) -> str:
         return f"{self.emoji} {self.name}"
 
-    def as_team(self) -> dict[str, Any]:
-        """O dicionário de time que a simulação e o placar esperam."""
-        return {"team_name": self.name, "style": "balanced", "formation": self.formation}
+    @property
+    def power(self) -> str:
+        """Força para mostrar: o overall do time e o bônus de lenda ("94 +10%")."""
+        return f"{self.strength}" + (f" +{round(self.bonus * 100)}%" if self.bonus else "")
 
-    def boosted(self, points: int, suffix: str) -> "PveTeam":
-        players = tuple(
-            {
-                **p,
-                "overall": min(99, p["overall"] + points),
-                "effective_overall": min(99, p["overall"] + points),
-            }
-            for p in self.players
+    def as_team(self) -> dict[str, Any]:
+        """O dicionário de time que a simulação e o placar esperam (com capitão e bônus)."""
+        captain = max(self.players, key=lambda player: player["overall"])
+        return {
+            "team_name": self.name,
+            "style": "balanced",
+            "formation": self.formation,
+            "captain_player_id": captain["id"],
+            "strength_bonus": self.bonus,
+        }
+
+    def as_boss(self, bonus: float, suffix: str) -> "PveTeam":
+        """O mesmo time como chefão: mesmo overall, mais força."""
+        return PveTeam(
+            f"{self.key}:{suffix}", self.name, self.emoji, self.formation, self.players, bonus
         )
-        return PveTeam(f"{self.key}:{suffix}", self.name, self.emoji, self.formation, players)
 
 
 def _best_eleven(candidates: list[dict[str, Any]], id_start: int) -> tuple[str, list[dict]]:
@@ -162,7 +175,9 @@ def legend_teams() -> tuple[PveTeam, ...]:
         ]
         formation, players = _best_eleven(candidates, -1000 * (index + 1))
         key = "clube:" + club["club"].lower()
-        teams.append(PveTeam(key, f"{club['club']} Lendário", "🛡️", formation, tuple(players)))
+        teams.append(
+            PveTeam(key, f"{club['club']} Lendário", "🛡️", formation, tuple(players), CLUB_BONUS)
+        )
     legends = load_encyclopedia()["legends"]
     for index, (country, emoji) in enumerate(NATION_EMOJIS.items()):
         candidates = [
@@ -185,6 +200,7 @@ def legend_teams() -> tuple[PveTeam, ...]:
                 emoji,
                 formation,
                 tuple(players),
+                NATION_BONUS,
             )
         )
     everyone = [
@@ -198,7 +214,9 @@ def legend_teams() -> tuple[PveTeam, ...]:
     # Só os melhores de cada posição entram na conta (o resultado é o mesmo e fica rápido).
     top = sorted(everyone, key=lambda c: -c["overall"])[:120]
     formation, players = _best_eleven(top, -90_000)
-    teams.append(PveTeam("mundial", "Seleção Mundial", "🌍", formation, tuple(players)))
+    teams.append(
+        PveTeam("mundial", "Seleção Mundial", "🌍", formation, tuple(players), WORLD_BONUS)
+    )
     return tuple(sorted(teams, key=lambda team: team.strength))
 
 
@@ -270,14 +288,14 @@ def daily_boss(now: datetime | None = None) -> PveTeam:
     """Um time lendário por dia (clube ou seleção), um pouco reforçado."""
     day = today(now)
     team = _pick([t for t in legend_teams() if t.key != "mundial"], "dia:" + day)
-    return team.boosted(DAILY_BOSS_BOOST, day)
+    return team.as_boss(DAILY_BOSS_BONUS, day)
 
 
 def weekly_boss(now: datetime | None = None) -> PveTeam:
     """Uma seleção lendária (ou a Mundial) por semana, mais reforçada."""
     week = this_week(now)
     teams = [t for t in legend_teams() if t.key.startswith("selecao:") or t.key == "mundial"]
-    return _pick(teams, "semana:" + week).boosted(WEEKLY_BOSS_BOOST, week)
+    return _pick(teams, "semana:" + week).as_boss(WEEKLY_BOSS_BONUS, week)
 
 
 @dataclass(frozen=True)

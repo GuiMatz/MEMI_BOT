@@ -376,16 +376,20 @@ O FUT.AE é um módulo do MeMi BOT, não um bot separado. O menu geral continua 
     aberto, ele saca sozinho o que já foi ganho.
 - `mm!desafio` (`pve`, `lendas`) abre os desafios contra times lendários, montados na hora
   com as lendas da enciclopédia (12 clubes brasileiros, seleções lendárias e a Seleção
-  Mundial), cada um na formação em que rende mais. No placar, os clubes usam o escudo real
-  (o que o bot já baixou para a tabela `clubs`), as seleções usam o escudo da federação
-  (baixado do TheSportsDB na primeira partida para `data/photos/selecoes/`; sem
-  `THESPORTSDB_API_KEY`, usa a chave pública de teste `123`) e a Seleção Mundial tem um
-  escudo próprio (globo dourado). Sem escudo encontrado, fica o escudo gerado:
+  Mundial), cada um na formação em que rende mais, com o melhor jogador de capitão. As
+  lendas jogam **acima do overall**: um bônus de força multiplica ataque, defesa, meio e
+  goleiro na simulação (clubes +8%, seleções +10%, Seleção Mundial +12%, chefão do dia +15%,
+  chefão da semana +20%); o overall dos jogadores não muda. Contra lendas não tem pênaltis:
+  **só a vitória conta**. No placar, clubes e seleções usam o escudo real, buscado no
+  TheSportsDB pelo nome exato (clube conferido como brasileiro) e guardado em
+  `data/photos/lendas_clubes/` e `data/photos/selecoes/` (sem `THESPORTSDB_API_KEY`, usa a
+  chave pública de teste `123`); a Seleção Mundial tem um escudo próprio (globo dourado).
+  Sem escudo encontrado, fica o escudo gerado:
   - **Escada**: 28 degraus do mais fácil (times do mercado, força ~62) à Seleção Mundial
     (~97); vencer libera o próximo e paga 400 + 200 por degrau (só na primeira vez), com
     uma caixa a cada 5 degraus.
-  - **Chefão do dia**: um time lendário reforçado (+1), 1 tentativa; 3.000 + caixa épica.
-  - **Chefão da semana**: uma seleção lendária (ou a Mundial) reforçada (+2), 3
+  - **Chefão do dia**: um time lendário com +15% de força, 1 tentativa; 3.000 + caixa épica.
+  - **Chefão da semana**: uma seleção lendária (ou a Mundial) com +20% de força, 3
     tentativas; 12.000 + pacote épico.
   - **Campanhas** (300 por vitória): *Lendas do Brasileirão* (os 12 clubes, 15.000 + pacote
     épico no fim), *Copa das Lendas* (oitavas à final contra seleções; perdeu, recomeça;
@@ -394,7 +398,7 @@ O FUT.AE é um módulo do MeMi BOT, não um bot separado. O menu geral continua 
   - **Conquistas**: 9 metas únicas com prêmio (primeira lenda, chefões, escada completa,
     cada campanha, vencer a Seleção Mundial), no botão Conquistas.
   - **Desafio livre**: qualquer time lendário; prêmio na primeira vitória do dia contra
-    cada um. Empate vai para os pênaltis.
+    cada um.
 - `mm!comparar @pessoa` (`vs`, `versus`) põe os dois times lado a lado: imagem com as duas
   escalações, tabela de força, ataque, defesa, meio, goleiro e elenco (▲ em quem é melhor),
   melhor jogador, valor do elenco, forma dos últimos 5 jogos, confronto direto e o

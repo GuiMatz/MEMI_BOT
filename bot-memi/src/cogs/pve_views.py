@@ -45,7 +45,7 @@ def hub_embed(user, database_path, team_strength: int | None) -> discord.Embed:
         nxt = ladder(database_path)[status.ladder_step]
         step = (
             f"Degrau **{status.ladder_step + 1}/{status.ladder_total}**: {nxt.label} "
-            f"(força {nxt.strength})\nPrêmio: {icons.memilets(ladder_prize(status.ladder_step))}"
+            f"(força {nxt.power})\nPrêmio: {icons.memilets(ladder_prize(status.ladder_step))}"
             + (" + 📦 caixa" if (status.ladder_step + 1) % 5 == 0 else "")
         )
     else:
@@ -59,7 +59,7 @@ def hub_embed(user, database_path, team_strength: int | None) -> discord.Embed:
     )
     embed.add_field(
         name="☀️ Chefão do dia",
-        value=f"{boss.label} (força {boss.strength}) · {daily}\n"
+        value=f"{boss.label} (força {boss.power}) · {daily}\n"
         f"Prêmio: {icons.memilets(DAILY_BOSS_PRIZE)} + 🟠 caixa épica",
         inline=False,
     )
@@ -71,7 +71,7 @@ def hub_embed(user, database_path, team_strength: int | None) -> discord.Embed:
     )
     embed.add_field(
         name="🗓️ Chefão da semana",
-        value=f"{weekly.label} (força {weekly.strength}) · {tries}\n"
+        value=f"{weekly.label} (força {weekly.power}) · {tries}\n"
         f"Prêmio: {icons.memilets(WEEKLY_BOSS_PRIZE)} + 🎴 pacote épico",
         inline=False,
     )
@@ -81,7 +81,7 @@ def hub_embed(user, database_path, team_strength: int | None) -> discord.Embed:
         "contra cada um.",
         inline=False,
     )
-    embed.set_footer(text="Empate vai para os pênaltis · as partidas são narradas no canal")
+    embed.set_footer(text="Contra lendas só a vitória conta · lendas jogam acima do overall")
     return embed
 
 
@@ -130,7 +130,7 @@ class PveHubView(discord.ui.View):
                 discord.SelectOption(
                     label=team.name[:100],
                     emoji=team.emoji,
-                    description=f"Força {team.strength} · prêmio {free_prize(team):,}".replace(
+                    description=f"Força {team.power} · prêmio {free_prize(team):,}".replace(
                         ",", "."
                     ),
                     value=team.key,
@@ -187,7 +187,7 @@ def campaigns_embed(user, database_path) -> discord.Embed:
         nxt = teams[step]
         lines = [
             campaign.description,
-            f"Próximo: **{campaign.stage(step)}** contra {nxt.label} (força {nxt.strength}) · "
+            f"Próximo: **{campaign.stage(step)}** contra {nxt.label} (força {nxt.power}) · "
             f"{step}/{len(teams)}",
             f"Prêmio final: {icons.memilets(campaign.prize)}"
             + (f" + {campaign.epic_packs} 🎴 pacote(s) épico(s)" if campaign.epic_packs else ""),

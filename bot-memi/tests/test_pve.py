@@ -51,6 +51,39 @@ class LegendTeamTests(unittest.TestCase):
         self.assertEqual(steps[-1].key, "mundial")
         tempdir.cleanup()
 
+    def test_bosses_get_more_strength_not_more_overall(self):
+        import random
+
+        from src.pve import DAILY_BOSS_BONUS, WEEKLY_BOSS_BONUS, daily_boss, weekly_boss
+
+        boss = weekly_boss(NOW)
+        base = next(team for team in legend_teams() if boss.key.startswith(team.key + ":"))
+        self.assertEqual([p["overall"] for p in boss.players], [p["overall"] for p in base.players])
+        self.assertEqual((boss.bonus, daily_boss(NOW).bonus), (WEEKLY_BOSS_BONUS, DAILY_BOSS_BONUS))
+        tactics = boss.as_team()
+        self.assertEqual(tactics["strength_bonus"], WEEKLY_BOSS_BONUS)
+        self.assertIn(tactics["captain_player_id"], [p["id"] for p in boss.players])
+        # O bônus pesa: um time 85 quase nunca vence o chefão da semana.
+        home = [
+            {"id": i + 1, "name": f"U{i}", "position": p, "natural_position": p, "overall": 85}
+            for i, p in enumerate(FORMATIONS["4-3-3"])
+        ]
+        rng = random.Random(3)
+        results = [
+            simulate_match(
+                "U",
+                home,
+                boss.name,
+                list(boss.players),
+                away_tactics=tactics,
+                home_advantage=True,
+                rng=rng,
+            )
+            for _ in range(300)
+        ]
+        wins = sum(result.home_goals > result.away_goals for result in results)
+        self.assertLess(wins / 300, 0.08)
+
     def test_a_legend_team_can_be_simulated(self):
         world = legend_teams()[-1]
         weaker = legend_teams()[0]
@@ -239,7 +272,7 @@ class PveMatchFlowTests(unittest.IsolatedAsyncioTestCase):
             await cog.start_pve(interaction, "escada", None)
         self.assertIn("Escada", interaction.response.send_message.call_args.args[0])
         final = channel.send.call_args.args[0]
-        self.assertTrue("venceu" in final)
+        self.assertTrue("venceu" in final or "Empate" in final)
         with connect(database_path) as connection:
             played = connection.execute("SELECT COUNT(*) FROM pve_log").fetchone()[0]
         self.assertEqual(played, 1)
