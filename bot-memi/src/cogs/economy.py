@@ -113,8 +113,8 @@ RARITY_STYLE = {
     "lendario": ("🔴", discord.Color.from_rgb(235, 75, 75)),
 }
 SHOP_INTRO = (
-    "Tudo o que dá para comprar com Memilets. As versões **épicas** custam bem mais e têm "
-    "chances bem maiores de coisa boa. Os botões abaixo compram direto."
+    "Tudo o que dá para comprar com Memilets. A **caixa épica** nunca vem só com o básico; "
+    "o **pacote épico** só traz Raro ou melhor. Os botões abaixo compram direto."
 )
 EPIC_PACK_INTRO = (
     "O pacote épico traz **uma carta Raro ou melhor**, com chance de Ícone. "
@@ -530,7 +530,7 @@ class EconomyCog(commands.Cog):
         )
         embed.add_field(
             name=f"🟠 Caixa épica · {icons.memilets(price * EPIC_CRATE_MULTIPLIER)}",
-            value=f"Mesmos prêmios, chances bem maiores: {epic_odds}",
+            value=f"Nunca vem só o básico: o item extra sempre vem · {epic_odds}",
             inline=False,
         )
         odds = " · ".join(

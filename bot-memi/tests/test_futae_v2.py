@@ -522,6 +522,32 @@ class MenuTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("`12` ", embed.description)
         self.assertEqual(embed.image.url, "attachment://torre.png")
 
+    async def test_tower_menu_builds_and_destroys_through_confirmation(self):
+        from src.cogs.club import ClubCog, TowerView
+        from src.cogs.common import ConfirmView
+
+        club = ClubCog(self.bot)
+        view = TowerView(club, self.user)
+        self.assertEqual(len(view.children), 1)  # sem andares: só o menu, sem destruir
+        self.assertEqual(len(view.children[0].options), 12)
+        with connect(self.database_path) as connection:
+            connection.execute(
+                "UPDATE game_users SET memilets = 100000 WHERE discord_user_id = '100'"
+            )
+        build_floor(100, "Pessoa", 3, self.database_path)
+        view = TowerView(club, self.user)
+        select, destroy = view.children
+        self.assertNotIn("3", [option.value for option in select.options])
+        self.assertEqual(destroy.label, "Destruir a torre")
+        content, confirm = club.build_prompt(self.user, 5)
+        self.assertIsInstance(confirm, ConfirmView)
+        self.assertIn("andar **5**", content)
+        _, refused = club.build_prompt(self.user, 3)
+        self.assertIsNone(refused)
+        embed, confirm = club.destroy_prompt(self.user)
+        self.assertIn("Andar 3", embed.description)
+        self.assertIsInstance(confirm, ConfirmView)
+
     async def test_purchase_prompt_asks_before_buying(self):
         from src.cogs.economy import EconomyCog, resolve_upgrade
 

@@ -34,10 +34,14 @@ UPGRADE_LABELS = {key: spec.name for key, spec in UPGRADES.items()}
 # As chances são baixas de propósito: tirar algo raro deve ser difícil de verdade.
 CRATE_RARITIES = ("basico", "incomum", "raro", "epico", "lendario")
 CRATE_EXTRA_CHANCES = {"lendario": 0.006, "epico": 0.018, "raro": 0.055, "incomum": 0.16}
-# Caixa épica: custa 5 caixas e sempre traz um item extra, Raro ou melhor em 75% (5 caixas
-# comuns dão em média 0,4) e Lendário em 10%. Em Memilets rende ~29% do preço.
-EPIC_CRATE_MULTIPLIER = 5
-EPIC_CRATE_EXTRA_CHANCES = {"lendario": 0.10, "epico": 0.25, "raro": 0.40, "incomum": 0.25}
+# Caixa épica: a caixa comum sem a chance de vir só o Básico. O item extra sempre vem, nas
+# mesmas proporções da comum (Incomum ~67%, Raro ~23%, Épico ~7,5%, Lendário ~2,5%).
+# Custa 4 caixas: 4 comuns dão em média ~1 item extra.
+EPIC_CRATE_MULTIPLIER = 4
+EPIC_CRATE_EXTRA_CHANCES = {
+    rarity: chance / sum(CRATE_EXTRA_CHANCES.values())
+    for rarity, chance in CRATE_EXTRA_CHANCES.items()
+}
 # Memilets que vêm no lugar dos itens de cada raridade (um OU outro, nunca os dois).
 # Calibrado para a caixa de Memilets devolver, em média, quase o preço (~480 de 500):
 # a caixa comum não parece prejuízo e os itens raros são o lucro.

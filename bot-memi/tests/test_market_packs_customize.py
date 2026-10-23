@@ -358,7 +358,7 @@ class CrateBatchTests(Case):
         if rolls:
             self.assertIn(f"{rolls} roll{'s' if rolls > 1 else ''}", titles)
 
-    def test_epic_crate_costs_five_crates_and_always_brings_an_extra_item(self):
+    def test_epic_crate_never_comes_with_only_the_basic_item(self):
         self.add_player("Atacante")
         self.set_memilets(100, CRATE_PRICE * EPIC_CRATE_MULTIPLIER * 10)
         results = open_crates(
@@ -371,8 +371,10 @@ class CrateBatchTests(Case):
         )
         self.assertTrue(all(result.best_rarity != "basico" for result in results))
         self.assertAlmostEqual(sum(EPIC_CRATE_EXTRA_CHANCES.values()), 1.0)
+        # Mesmas proporções da caixa comum, só sem a chance de vir só o básico.
+        total = sum(CRATE_EXTRA_CHANCES.values())
         for rarity, chance in EPIC_CRATE_EXTRA_CHANCES.items():
-            self.assertGreater(chance, CRATE_EXTRA_CHANCES[rarity] * 1.5)
+            self.assertAlmostEqual(chance, CRATE_EXTRA_CHANCES[rarity] / total)
         self.set_memilets(100, 0)
         with self.assertRaises(InsufficientFunds) as error:
             open_crates(100, "Pessoa A", 1, self.database_path, epic=True)
