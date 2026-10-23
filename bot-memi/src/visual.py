@@ -90,9 +90,18 @@ def load_picture(path: Any, entity: str | None = None, entity_id: Any = None) ->
 
 
 def contain(picture: Image.Image, size: tuple[int, int]) -> Image.Image:
-    """Redimensiona sem cortar e centraliza numa tela transparente do tamanho pedido."""
+    """Redimensiona sem cortar e centraliza numa tela transparente do tamanho pedido.
+
+    Corta antes a borda transparente e amplia figuras pequenas: um escudo de 40 px ou com
+    muita sobra em volta ocupa o espaço todo, em vez de ficar minúsculo no meio."""
     fitted = picture.copy()
-    fitted.thumbnail(size, Image.LANCZOS)
+    box = fitted.getchannel("A").getbbox() if fitted.mode == "RGBA" else None
+    if box:
+        fitted = fitted.crop(box)
+    scale = min(size[0] / fitted.width, size[1] / fitted.height)
+    fitted = fitted.resize(
+        (max(1, round(fitted.width * scale)), max(1, round(fitted.height * scale))), Image.LANCZOS
+    )
     canvas = Image.new("RGBA", size, (0, 0, 0, 0))
     canvas.alpha_composite(fitted, ((size[0] - fitted.width) // 2, (size[1] - fitted.height) // 2))
     return canvas
