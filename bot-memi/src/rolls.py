@@ -418,6 +418,28 @@ def _wish_protection(
     return wishers, protection
 
 
+def open_claim_offers(
+    offer_ids, database_path: str | Path = DATABASE_PATH, *, now: datetime | None = None
+) -> set[int]:
+    """Das ofertas de contratação dadas, as que ainda dá para reivindicar agora."""
+    ids = [int(offer_id) for offer_id in offer_ids]
+    if not ids:
+        return set()
+    current_time = _utc_now(now).isoformat(timespec="seconds")
+    marks = ", ".join("?" * len(ids))
+    with connect(database_path) as connection:
+        rows = connection.execute(
+            f"""
+            SELECT o.id FROM claim_offers AS o
+            LEFT JOIN player_ownership AS po ON po.player_id = o.player_id
+            WHERE o.id IN ({marks}) AND o.offer_type = 'player_claim'
+              AND o.status = 'pending' AND o.expires_at > ? AND po.player_id IS NULL
+            """,
+            (*ids, current_time),
+        ).fetchall()
+    return {int(row["id"]) for row in rows}
+
+
 def claim_roll_offer(
     offer_id: int,
     discord_user_id: int | str,

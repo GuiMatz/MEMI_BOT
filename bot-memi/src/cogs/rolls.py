@@ -29,6 +29,7 @@ from src.rolls import (
     RollOutcome,
     roll_player,
     claim_roll_offer,
+    open_claim_offers,
 )
 from src.ratings import rarity_label
 
@@ -87,6 +88,15 @@ def roll_details(result: RollOutcome, overall: int, upgrade: dict | None = None)
     return "\n".join(lines)
 
 
+def best_roll(layouts: list["RollLayout"]) -> "RollLayout | None":
+    """O melhor overall; no empate, o rolado mais tarde."""
+    best = None
+    for layout in layouts:
+        if best is None or layout.overall >= best.overall:
+            best = layout
+    return best
+
+
 class RollLayout(discord.ui.LayoutView):
     """A carta rolada, com o botão de claim (ou de resgate) dentro da moldura."""
 
@@ -99,9 +109,14 @@ class RollLayout(discord.ui.LayoutView):
         roller_id: int | None = None,
         reroll=None,
         upgrade: dict | None = None,
+        header: str | None = None,
     ):
         super().__init__(timeout=300)
         self.result = result
+        self.header = header
+        # A mesma oferta mostrada em outra mensagem (o roll e o resumo do melhor da rodada):
+        # contratou numa, a outra também fecha.
+        self.twin: RollLayout | None = None
         self.roller_id = roller_id
         self.reroll_button: discord.ui.Button | None = None
         if reroll is not None:
@@ -132,6 +147,8 @@ class RollLayout(discord.ui.LayoutView):
     def _build(self) -> None:
         self.clear_items()
         items: list[discord.ui.Item[Any]] = []
+        if self.header:
+            items.append(discord.ui.TextDisplay(self.header))
         if self.result.wished_by:
             mentions = " ".join(f"<@{user_id}>" for user_id in self.result.wished_by[:10])
             wish = f"💫 Na wish de {mentions}"
@@ -168,6 +185,7 @@ class RollLayout(discord.ui.LayoutView):
             self._build()
             self.stop()
             await interaction.response.edit_message(view=self)
+            await self._close_twin()
             # Melhor que um titular de quem contratou: já entra no time.
             equipped = await asyncio.to_thread(
                 equip_if_better,
@@ -215,6 +233,18 @@ class RollLayout(discord.ui.LayoutView):
         else:
             message = CLAIM_ERRORS.get(outcome.status, "Não foi possível concluir o claim.")
         await interaction.response.send_message(message, ephemeral=True)
+
+    async def _close_twin(self) -> None:
+        twin = self.twin
+        if twin is None or twin.status or twin.message is None:
+            return
+        twin.status = self.status
+        twin._build()
+        twin.stop()
+        try:
+            await twin.message.edit(view=twin)
+        except discord.HTTPException:
+            pass
 
     async def _reroll(self, interaction: discord.Interaction) -> None:
         if interaction.user.id != self.roller_id:
@@ -281,6 +311,49 @@ class RollsCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.database_path = getattr(bot, "database_path", DATABASE_PATH)
+        # Jogadores livres rolados no ciclo, por pessoa: no último roll sai o melhor deles.
+        self.cycle_rolls: dict[int, tuple[Any, list[RollLayout]]] = {}
+
+    def remember_roll(self, user_id: int, layout: RollLayout) -> list[RollLayout]:
+        """Guarda o roll no ciclo de quem rolou e devolve os rolls do ciclo até agora."""
+        resets_at = layout.result.cycle_resets_at
+        cycle, layouts = self.cycle_rolls.get(user_id, (None, []))
+        if cycle != resets_at:
+            layouts = []
+        if layout.result.kind == "unowned":
+            layouts.append(layout)
+        self.cycle_rolls[user_id] = (resets_at, layouts)
+        return layouts
+
+    async def send_best_roll(self, user, send, layouts: list[RollLayout]) -> None:
+        """Acabaram os rolls: mostra o melhor jogador ainda livre, com o botão de contratar."""
+        if len(layouts) < 2:
+            return
+        open_ids = await asyncio.to_thread(
+            open_claim_offers, [layout.result.offer_id for layout in layouts], self.database_path
+        )
+        best = best_roll([layout for layout in layouts if layout.result.offer_id in open_ids])
+        if best is None or best.status:
+            return
+        image = await card_file({**best.result.player, "effective_overall": best.overall})
+        summary = RollLayout(
+            best.result,
+            best.overall,
+            image.filename,
+            self.database_path,
+            roller_id=user.id,
+            upgrade=best.upgrade,
+            header=(
+                f"🏆 **Melhor da rodada** · o melhor entre os {len(layouts)} jogadores livres "
+                "que você rolou"
+            ),
+        )
+        summary.twin, best.twin = best, summary
+        summary.message = await send(
+            view=summary,
+            file=image,
+            allowed_mentions=discord.AllowedMentions(users=True, replied_user=False),
+        )
 
     @commands.command(name="roll", aliases=["obter", "rolls"])
     async def roll(self, context: commands.Context) -> None:
@@ -357,6 +430,9 @@ class RollsCog(commands.Cog):
             file=image,
             allowed_mentions=discord.AllowedMentions(users=True, replied_user=False),
         )
+        layouts = self.remember_roll(user.id, layout)
+        if result.rolls_remaining <= 0:
+            await self.send_best_roll(user, send, layouts)
 
 
 async def setup(bot: commands.Bot) -> None:
