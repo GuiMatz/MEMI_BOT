@@ -593,7 +593,11 @@ class GameCog(commands.Cog):
                     await send(content=message, embed=None, view=None)
                     return
                 start = added["id"]
-                notice = "✅ Imagem cadastrada. Toque em ⭐ para usar como principal."
+                notice = (
+                    "✅ Imagem cadastrada e já aplicada na carta (o jogador não tinha foto)."
+                    if added["main"]
+                    else "✅ Imagem cadastrada. Toque em ⭐ para usar como principal."
+                )
             view = ImageGalleryView(
                 player, context.author.id, can_edit, self.database_path, start=start
             )

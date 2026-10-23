@@ -152,7 +152,11 @@ def add_image(
     *,
     root: Path = PHOTO_ROOT,
 ) -> dict[str, Any]:
-    """Cadastra a imagem (sem trocar a principal) e devolve o registro dela."""
+    """Cadastra a imagem e devolve o registro dela.
+
+    Se o jogador ainda não tinha foto nenhuma, a imagem já vira a principal da carta;
+    se tinha, a principal continua a mesma até alguém escolher outra (⭐).
+    """
     content, extension = normalize_image(data)
     with connect(database_path) as connection:
         _ensure_original(connection, player_id, root)
@@ -172,7 +176,16 @@ def add_image(
         connection.execute(
             "UPDATE player_images SET image_path = ? WHERE id = ?", (relative, image_id)
         )
-    return {"id": image_id, "image_path": relative, "source": "custom", "main": False}
+        current = connection.execute(
+            "SELECT photo_path FROM players WHERE id = ?", (player_id,)
+        ).fetchone()["photo_path"]
+        main = _original_file(current, player_id, root) is None
+        if main:
+            connection.execute(
+                "UPDATE players SET photo_path = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (relative, player_id),
+            )
+    return {"id": image_id, "image_path": relative, "source": "custom", "main": main}
 
 
 def set_main(player_id: int, image_id: int, database_path: str | Path = DATABASE_PATH) -> None:
