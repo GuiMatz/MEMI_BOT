@@ -14,7 +14,7 @@ from src.db import DATABASE_PATH, normalize_player_name
 from src.accents import rarity_color
 from src.card_image import render_player_card
 from src.cosmetics import COSMETIC_KINDS, list_owned
-from src.crate_animation import PrizeTile, card_reveal_gif, opening_gif, prize_gif
+from src.crate_animation import PrizeTile, card_reveal_gif, prize_gif
 from src.economy import (
     CRATE_BATCHES,
     CRATE_DOUBLE_CHANCE,
@@ -438,20 +438,18 @@ class EconomyCog(commands.Cog):
         except InsufficientFunds as error:
             await send(embed=discord.Embed(description=str(error), color=discord.Color.red()))
             return
-        opening = await asyncio.to_thread(opening_gif)
+        # Resposta rápida em texto; a revelação (com o pacote abrindo) entra no lugar dela.
         waiting = discord.Embed(
             title=f"📦 Abrindo {count} crate{'s' if count > 1 else ''}…",
             color=discord.Color.from_rgb(230, 181, 74),
         )
-        waiting.set_image(url="attachment://abrindo.gif")
-        message = await send(embed=waiting, file=discord.File(BytesIO(opening), "abrindo.gif"))
+        message = await send(embed=waiting)
         prizes = [prize for result in results for prize in result.prizes]
         best = max((result.best_rarity for result in results), key=list(RARITY_LABELS).index)
         headline = f"{count} caixas abertas" if count > 1 else None
         reveal = await asyncio.to_thread(
             prize_gif, best, self.prize_tiles(author.id, prizes), headline=headline
         )
-        await asyncio.sleep(1.2)
         embed = self.crate_result_embed(author, results)
         embed.set_image(url="attachment://revelacao.gif")
         target = edit if edit is not None else message.edit
@@ -516,12 +514,10 @@ class EconomyCog(commands.Cog):
             return
         player = result.player
         overall = int(player["effective_overall"] or 0)
-        opening = await asyncio.to_thread(opening_gif)
         waiting = discord.Embed(
             title="🃏 Abrindo o pacote…", color=discord.Color.from_rgb(230, 181, 74)
         )
-        waiting.set_image(url="attachment://abrindo.gif")
-        message = await send(embed=waiting, file=discord.File(BytesIO(opening), "abrindo.gif"))
+        message = await send(embed=waiting)
         label = rarity_label(overall)
         card = await asyncio.to_thread(render_player_card, {**player, "effective_overall": overall})
         reveal = await asyncio.to_thread(
@@ -530,7 +526,6 @@ class EconomyCog(commands.Cog):
             rarity_color(overall).to_rgb(),
             f"PACOTE · {label.split(' ', 1)[-1].upper()}",
         )
-        await asyncio.sleep(1.2)
         name = player.get("display_name") or player["name"]
         embed = discord.Embed(
             title=f"🃏 {name}",

@@ -1,8 +1,8 @@
-"""Animações da crate em GIF: o pacote tremendo e a revelação dos prêmios.
+"""Animações das caixas e do pacote de jogador em GIF.
 
-A abertura acontece em dois tempos no Discord: primeiro o pacote treme (GIF neutro, que
-não entrega a raridade, em loop); depois a mensagem é editada com a revelação daquela
-raridade, que toca uma vez e para no último quadro (GIF sem extensão de loop).
+A revelação começa com o pacote tremendo e a aba voando (a luz já tem a cor da raridade),
+mostra os prêmios (ou a carta do pacote), faz um brilho e **para no último quadro** (GIF
+sem loop e último quadro longo), para a pessoa olhar sem a animação reiniciar.
 
 O pacote é a arte `assets/ilustracoes/pacote.png` (corpo) e `pacote_topo.png` (aba);
 a animação é montada aqui com Pillow e guardada em memória.
@@ -22,13 +22,9 @@ from PIL import Image, ImageChops, ImageDraw, ImageFilter
 from src.art import artwork
 from src.visual import contain, font, glow, load_picture, mix, star
 
-WIDTH, HEIGHT = 480, 300
-SCALE = 2  # desenha em dobro e reduz: bordas suaves
-BIG = (WIDTH * SCALE, HEIGHT * SCALE)
 BACKGROUND = (12, 15, 22)
 GOLD = (230, 181, 74)
-PACK_HEIGHT = 430  # altura do pacote no quadro grande
-PACK_BASE = 560  # onde fica o pé do pacote
+PACK_HEIGHT = 430  # altura da arte do pacote antes de reduzir para cada GIF
 
 # Mesma palavra, mesma cor das séries das cartas (Incomum azul, Raro roxo…).
 RARITY_COLORS = {
@@ -61,13 +57,6 @@ def _clamp(value: float) -> float:
     return max(0.0, min(1.0, value))
 
 
-@lru_cache(maxsize=1)
-def _background() -> Image.Image:
-    image = Image.new("RGBA", BIG, (*BACKGROUND, 255))
-    image.alpha_composite(glow(BIG, (BIG[0] / 2, BIG[1] * 0.55), 380, (40, 52, 76), 120))
-    return image
-
-
 @lru_cache(maxsize=2)
 def _pack_parts() -> tuple[Image.Image, Image.Image]:
     body = artwork("pacote") or Image.new("RGBA", (340, 480), (30, 36, 48, 255))
@@ -75,63 +64,6 @@ def _pack_parts() -> tuple[Image.Image, Image.Image]:
     ratio = PACK_HEIGHT / body.height
     size = (int(body.width * ratio), PACK_HEIGHT)
     return body.resize(size, Image.LANCZOS), top.resize(size, Image.LANCZOS)
-
-
-def _place(image: Image.Image, part: Image.Image, dx=0.0, dy=0.0, angle=0.0, alpha=1.0) -> None:
-    piece = part.rotate(angle, resample=Image.BICUBIC, expand=True) if angle else part
-    if alpha < 1:
-        piece = piece.copy()
-        piece.putalpha(piece.getchannel("A").point(lambda value: int(value * alpha)))
-    x = int(BIG[0] / 2 - piece.width / 2 + dx)
-    y = int(PACK_BASE - part.height - (piece.height - part.height) / 2 + dy)
-    image.alpha_composite(piece, (x, y))
-
-
-def _to_gif(frames: list[Image.Image], durations: list[int], loop: bool) -> bytes:
-    # Paleta única tirada de vários quadros: sem faixas nem piscadas.
-    picks = [frames[0], frames[len(frames) // 3], frames[2 * len(frames) // 3], frames[-1]]
-    strip = Image.new("RGB", (WIDTH, HEIGHT * len(picks)))
-    for index, frame in enumerate(picks):
-        strip.paste(frame, (0, HEIGHT * index))
-    palette = strip.quantize(colors=255, method=Image.Quantize.MEDIANCUT)
-    paletted = [frame.quantize(palette=palette, dither=Image.Dither.NONE) for frame in frames]
-    buffer = BytesIO()
-    paletted[0].save(
-        buffer,
-        format="GIF",
-        save_all=True,
-        append_images=paletted[1:],
-        duration=durations,
-        disposal=1,
-        **({"loop": 0} if loop else {}),
-    )
-    return buffer.getvalue()
-
-
-def _finish(image: Image.Image) -> Image.Image:
-    return image.resize((WIDTH, HEIGHT), Image.LANCZOS).convert("RGB")
-
-
-@lru_cache(maxsize=1)
-def opening_gif() -> bytes:
-    """O pacote tremendo cada vez mais forte, em loop (não revela a raridade)."""
-    body, top = _pack_parts()
-    frames, durations = [], []
-    total = 20
-    for index in range(total):
-        t = index / total
-        image = _background().copy()
-        image.alpha_composite(
-            glow(BIG, (BIG[0] / 2, PACK_BASE - PACK_HEIGHT / 2), 200, GOLD, int(30 + 50 * t))
-        )
-        intensity = 2 + 9 * t
-        dx = math.sin(index * 2.1) * intensity
-        angle = math.sin(index * 1.7) * (1 + 3.5 * t)
-        _place(image, body, dx=dx, angle=angle)
-        _place(image, top, dx=dx, dy=-abs(math.sin(index * 1.3)) * 6 * t, angle=angle)
-        frames.append(_finish(image))
-        durations.append(60)
-    return _to_gif(frames, durations, loop=True)
 
 
 def _tracked(draw, center, text: str, size: int, fill, spacing: int):
@@ -151,7 +83,6 @@ def _tracked(draw, center, text: str, size: int, fill, spacing: int):
 
 PRIZE_SIZE = (640, 360)
 TILE = (168, 196)
-ICONS = ("coin", "rolls", "clock", "shield", "star", "plus", "up", "tag", "cosmetic")
 
 
 @dataclass(frozen=True)
@@ -293,8 +224,89 @@ def _tile(tile: PrizeTile) -> Image.Image:
     return card
 
 
+# Caixa e pacote têm abertura: o pacote treme, a aba voa e o conteúdo aparece. Depois
+# vem o brilho e o GIF **para no último quadro** (sem loop), com tudo à vista, para a
+# pessoa olhar com calma sem a animação reiniciar.
+INTRO_FRAMES = 16
+REVEAL_FRAMES = 12
+SHIMMER_FRAMES = 24
+FRAME_MS = 60
+HOLD_MS = 60_000
+
+
+def _mini_pack(height: int) -> tuple[Image.Image, Image.Image]:
+    body, top = _pack_parts()
+    ratio = height / body.height
+    size = (max(1, int(body.width * ratio)), height)
+    return body.resize(size, Image.LANCZOS), top.resize(size, Image.LANCZOS)
+
+
+def _put(image, part, center_x, bottom, dx=0.0, dy=0.0, angle=0.0, alpha=1.0) -> None:
+    piece = part.rotate(angle, resample=Image.BICUBIC, expand=True) if angle else part
+    if alpha < 1:
+        piece = piece.copy()
+        piece.putalpha(piece.getchannel("A").point(lambda value: int(value * max(0.0, alpha))))
+    x = int(center_x - piece.width / 2 + dx)
+    y = int(bottom - part.height - (piece.height - part.height) / 2 + dy)
+    image.alpha_composite(piece, (x, y))
+
+
+def _opening(base: Image.Image, color, power: int, pack_height: int, bottom: int) -> list:
+    """O pacote treme, a aba voa e a luz da raridade sai de dentro (quadros RGBA)."""
+    width, height = base.size
+    body, top = _mini_pack(pack_height)
+    frames = []
+    for index in range(INTRO_FRAMES):
+        t = index / (INTRO_FRAMES - 1)
+        image = base.copy()
+        shake = t < 0.45
+        intensity = (2 + 7 * t) if shake else 0
+        dx = math.sin(index * 2.3) * intensity
+        angle = math.sin(index * 1.7) * intensity * 0.5
+        burst = _ease_out_cubic(_clamp((t - 0.45) / 0.55))
+        image.alpha_composite(
+            glow(
+                (width, height),
+                (width / 2, bottom - pack_height * 0.7),
+                60 + 260 * burst,
+                color if burst else GOLD,
+                int(40 + (100 + 20 * power) * burst),
+            )
+        )
+        _put(image, body, width / 2, bottom, dx=dx, angle=angle, alpha=1 - _clamp((t - 0.8) / 0.2))
+        lid = burst
+        _put(
+            image,
+            top,
+            width / 2,
+            bottom,
+            dx=dx + 40 * lid,
+            dy=-160 * lid,
+            angle=angle - 25 * lid,
+            alpha=1 - _clamp((t - 0.6) / 0.3),
+        )
+        frames.append(image)
+    return frames
+
+
+def _faded_layer(layer: Image.Image, alpha: float) -> Image.Image:
+    if alpha >= 1:
+        return layer
+    faded = layer.copy()
+    faded.putalpha(layer.getchannel("A").point(lambda value: int(value * max(0.0, alpha))))
+    return faded
+
+
+def _finish_reveal(frames: list[Image.Image], shimmer_ms: int = 70) -> bytes:
+    """Abertura e revelação a 60 ms, brilho a 70 ms e o último quadro parado."""
+    reveal = INTRO_FRAMES + REVEAL_FRAMES
+    durations = [FRAME_MS] * reveal + [shimmer_ms] * (len(frames) - reveal)
+    durations[-1] = HOLD_MS
+    return _gif([frame.convert("RGB") for frame in frames], durations, loop=False)
+
+
 def prize_gif(rarity: str, tiles: list[PrizeTile], *, headline: str | None = None) -> bytes:
-    """A raridade em cima e os prêmios em cartões, visíveis desde o primeiro quadro."""
+    """O pacote abre, os cartões dos prêmios surgem um a um e o GIF para com tudo à vista."""
     color = RARITY_COLORS[rarity]
     power = RARITY_POWER[rarity]
     width, height = PRIZE_SIZE
@@ -334,8 +346,29 @@ def prize_gif(rarity: str, tiles: list[PrizeTile], *, headline: str | None = Non
         )
         for _ in range(10 + power * 8)
     ]
-    total = 24
-    frames = []
+    frames = _opening(base, color, power, 220, height - 40)
+    title_layer = Image.new("RGBA", PRIZE_SIZE, (0, 0, 0, 0))
+    title_layer.alpha_composite(content.crop((0, 0, width, top)), (0, 0))
+    for index in range(REVEAL_FRAMES):
+        t = index / (REVEAL_FRAMES - 1)
+        image = base.copy()
+        image.alpha_composite(
+            glow(PRIZE_SIZE, (width / 2, top + TILE[1] / 2), 260, color, int(60 + 25 * power))
+        )
+        image.alpha_composite(_faded_layer(title_layer, _ease_out_cubic(t)))
+        x = x0
+        for number, card in enumerate(cards):
+            local = _clamp((t - number * 0.18) / 0.55)
+            if local > 0:
+                scale = 0.7 + 0.3 * _ease_out_back(local)
+                size = (max(1, int(card.width * scale)), max(1, int(card.height * scale)))
+                small = _faded_layer(card.resize(size, Image.LANCZOS), local)
+                image.alpha_composite(
+                    small, (x + (card.width - size[0]) // 2, top + (card.height - size[1]) // 2)
+                )
+            x += card.width + gap
+        frames.append(image)
+    total = SHIMMER_FRAMES
     for index in range(total):
         t = index / total
         pulse = 0.5 + 0.5 * math.sin(t * 2 * math.pi)
@@ -372,12 +405,12 @@ def prize_gif(rarity: str, tiles: list[PrizeTile], *, headline: str | None = Non
             )
         image.alpha_composite(dots)
         image.alpha_composite(content)
-        frames.append(image.convert("RGB"))
-    return _gif(frames, [70] * total)
+        frames.append(image)
+    return _finish_reveal(frames)
 
 
 def card_reveal_gif(card: Image.Image, color, headline: str) -> bytes:
-    """Carta de jogador do pacote, inteira desde o primeiro quadro, com um brilho passando."""
+    """O pacote abre, a carta sobe de dentro dele, um brilho passa e o GIF para na carta."""
     width, height = 560, 500
     card = card.convert("RGBA")
     card.thumbnail((300, 420), Image.LANCZOS)
@@ -386,8 +419,17 @@ def card_reveal_gif(card: Image.Image, color, headline: str) -> bytes:
     title = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     _tracked(ImageDraw.Draw(title), (width / 2, 32), headline, 22, (255, 255, 255, 255), 5)
     mask = card.getchannel("A")
-    total = 26
-    frames = []
+    frames = _opening(base, color, 3, 260, height - 30)
+    for index in range(REVEAL_FRAMES):
+        t = _ease_out_cubic(index / (REVEAL_FRAMES - 1))
+        image = base.copy()
+        image.alpha_composite(
+            glow((width, height), (width / 2, y + card.height / 2), 250, color, 110)
+        )
+        image.alpha_composite(_faded_layer(card, min(1.0, t * 1.5)), (x, int(y + 160 * (1 - t))))
+        image.alpha_composite(_faded_layer(title, t))
+        frames.append(image)
+    total = SHIMMER_FRAMES + 2
     for index in range(total):
         t = index / total
         pulse = 0.5 + 0.5 * math.sin(t * 2 * math.pi)
@@ -419,5 +461,5 @@ def card_reveal_gif(card: Image.Image, color, headline: str) -> bytes:
         shine.putalpha(sweep)
         image.alpha_composite(shine, (x, y))
         image.alpha_composite(title)
-        frames.append(image.convert("RGB"))
-    return _gif(frames, [70] * total)
+        frames.append(image)
+    return _finish_reveal(frames)

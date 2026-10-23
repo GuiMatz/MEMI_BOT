@@ -8,14 +8,14 @@ from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
 
-from PIL import Image, ImageChops, ImageStat
+from PIL import Image, ImageStat
 
 from src.boards_image import render_missions, render_season
 from src.card_image import render_player_card
 from src.championship import play_championship, register_team
 from src.club_card import render_club_card
 from src.cosmetic_card import render_cosmetic_card
-from src.crate_animation import PrizeTile, opening_gif, prize_gif
+from src.crate_animation import PrizeTile, card_reveal_gif, prize_gif
 from src.db import connect, initialize_database
 from src.economy import (
     CRATE_PITY_LIMIT,
@@ -132,24 +132,26 @@ class ImageTests(unittest.TestCase):
                 with Image.open(BytesIO(image.getvalue())) as opened:
                     self.assertGreater(opened.height, opened.width)
 
-    def test_crate_gifs_show_the_prize_from_the_first_frame(self):
-        with Image.open(BytesIO(opening_gif())) as image:
-            self.assertEqual(image.format, "GIF")
-            self.assertEqual(image.info.get("loop"), 0)
+    def test_crate_and_pack_reveals_open_then_stop_on_the_prizes(self):
         tiles = [PrizeTile("basico", "coin", "300", "Memilets")]
-        for rarity in ("basico", "lendario"):
-            data = prize_gif(rarity, tiles)
+        card = Image.new("RGBA", (300, 420), (200, 160, 60, 255))
+        reveals = [prize_gif(rarity, tiles) for rarity in ("basico", "lendario")]
+        reveals.append(card_reveal_gif(card, (240, 200, 60), "PACOTE"))
+        for data in reveals:
             self.assertLess(len(data), 3_000_000)
             with Image.open(BytesIO(data)) as image:
-                first = image.convert("RGB").copy()
-                image.seek(image.n_frames - 1)
+                self.assertNotIn("loop", image.info)  # toca uma vez e para
+                durations = []
+                for index in range(image.n_frames):
+                    image.seek(index)
+                    durations.append(image.info.get("duration", 0))
                 last = image.convert("RGB")
-            # O cartão do prêmio já está no primeiro quadro e não muda até o último.
-            box = (246, 140, 394, 316)
-            tile = first.crop(box)
-            self.assertGreater(max(ImageStat.Stat(tile).extrema[0]), 200)  # tem texto claro
-            difference = ImageStat.Stat(ImageChops.difference(tile, last.crop(box))).mean
-            self.assertLess(max(difference), 6)
+            self.assertGreaterEqual(sum(durations[:-1]), 2_500)  # animação de verdade
+            self.assertGreaterEqual(durations[-1], 30_000)  # e para no último quadro
+            # O último quadro mostra o conteúdo (texto/carta claros no meio).
+            self.assertGreaterEqual(
+                max(ImageStat.Stat(last.crop((246, 140, 394, 316))).extrema[0]), 180
+            )
 
 
 class MissionTests(Case):

@@ -332,6 +332,22 @@ CREATE TABLE IF NOT EXISTS trade_items (
 
 CREATE INDEX IF NOT EXISTS idx_trades_pending ON trades(recipient_id, status, expires_at);
 
+-- Amistosos jogados (para o mm!stats); o campeonato usa championship_fixtures.
+CREATE TABLE IF NOT EXISTS friendly_matches (
+    id INTEGER PRIMARY KEY,
+    played_at TEXT NOT NULL,
+    home_user_id TEXT NOT NULL REFERENCES game_users(discord_user_id) ON DELETE CASCADE,
+    away_user_id TEXT NOT NULL REFERENCES game_users(discord_user_id) ON DELETE CASCADE,
+    home_goals INTEGER NOT NULL,
+    away_goals INTEGER NOT NULL,
+    home_penalties INTEGER,
+    away_penalties INTEGER,
+    details_json TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_friendly_matches_home ON friendly_matches(home_user_id);
+CREATE INDEX IF NOT EXISTS idx_friendly_matches_away ON friendly_matches(away_user_id);
+
 -- Galeria do mm!img: a principal é players.photo_path; a original fica como 'original'.
 CREATE TABLE IF NOT EXISTS player_images (
     id INTEGER PRIMARY KEY,

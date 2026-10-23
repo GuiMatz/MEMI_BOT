@@ -3698,6 +3698,7 @@ AJUDA_JOGO = [
             ("mm!top [categoria]", "catálogo: jogadores, cartola, técnicos, emblemas, mascotes…"),
             ("mm!left", "jogadores e cosméticos (emblemas, uniformes…) ainda livres"),
             ("mm!topi", "o top dos jogadores em cartas, passando para o lado"),
+            ("mm!stats [@pessoa]", "estatísticas do time, por campeonato, amistoso e rival"),
             ("mm!img <jogador>", "galeria de imagens; anexe imagem ou GIF para cadastrar"),
             (
                 "mm!elenco [@pessoa] [filtro]",

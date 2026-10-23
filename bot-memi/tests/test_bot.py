@@ -29,6 +29,7 @@ class DiscordBotSetupTests(unittest.IsolatedAsyncioTestCase):
                         "starwish",
                         "elenco",
                         "topi",
+                        "stats",
                         "img",
                         "carteira",
                         "vender",

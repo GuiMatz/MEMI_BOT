@@ -234,6 +234,7 @@ FUTAE_SECTIONS = (
         "`mm!scout <nome>` — ficha de jogador, técnico, estádio, emblema, uniforme…\n"
         "`mm!top [categoria]` — catálogo por overall ou nome\n"
         "`mm!left` — jogadores e cosméticos ainda livres\n"
+        "`mm!stats [@pessoa]` — vitórias, gols e artilheiros, por campeonato ou amistoso\n"
         "`mm!topi` — o top dos jogadores em cartas, passando para o lado\n"
         "`mm!img <jogador>` — galeria de imagens; anexe uma imagem ou GIF para cadastrar\n"
         "`mm!elenco [@pessoa] [titulares|reservas|filtro]` — cartas com ⭐ nos titulares "
