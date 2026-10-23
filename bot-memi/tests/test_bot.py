@@ -38,6 +38,7 @@ class DiscordBotSetupTests(unittest.IsolatedAsyncioTestCase):
                         "dar",
                         "pay",
                         "penaltis",
+                        "desafio",
                         "troca",
                         "pacote",
                         "shop",

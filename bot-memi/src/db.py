@@ -411,6 +411,22 @@ CREATE TABLE IF NOT EXISTS mascots (
     UNIQUE (name, owner)
 );
 
+CREATE TABLE IF NOT EXISTS pve_progress (
+    discord_user_id TEXT PRIMARY KEY REFERENCES game_users(discord_user_id) ON DELETE CASCADE,
+    ladder INTEGER NOT NULL DEFAULT 0 CHECK (ladder >= 0)
+);
+
+CREATE TABLE IF NOT EXISTS pve_log (
+    discord_user_id TEXT NOT NULL REFERENCES game_users(discord_user_id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    period TEXT NOT NULL,
+    team_key TEXT NOT NULL,
+    won INTEGER NOT NULL DEFAULT 0,
+    played_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_pve_log_user ON pve_log(discord_user_id, kind, period);
+
 CREATE TABLE IF NOT EXISTS user_inventory (
     discord_user_id TEXT NOT NULL REFERENCES game_users(discord_user_id)
         ON DELETE CASCADE,

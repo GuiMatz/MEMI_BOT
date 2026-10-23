@@ -1,0 +1,422 @@
+"""Desafios contra times lendários (`mm!desafio`): escada, desafio livre e chefões.
+
+Os adversários não são de ninguém: são montados na hora a partir das lendas da
+enciclopédia (seleções por país e a Seleção Mundial), dos 11 lendários de cada grande
+clube brasileiro e, nos primeiros degraus da escada, de jogadores do mercado num overall
+alvo. Cada time joga na formação em que seus jogadores rendem mais.
+
+- **Escada**: degraus do mais fácil ao mais difícil; vencer libera o próximo e paga o
+  prêmio do degrau (só na primeira vez), com uma caixa a cada 5 degraus.
+- **Desafio livre**: qualquer time lendário; o prêmio sai na primeira vitória do dia
+  contra cada time.
+- **Chefão do dia** (1 tentativa) e **chefão da semana** (3 tentativas): um time
+  lendário reforçado, com prêmio grande.
+"""
+
+from __future__ import annotations
+
+import random
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from functools import lru_cache
+from pathlib import Path
+from typing import Any
+
+from src.clock import BRASILIA
+from src.db import DATABASE_PATH, connect
+from src.encyclopedia import CLUB_LEGEND_POSITIONS, load_club_legends, load_encyclopedia
+from src.encyclopedia import legend_overall
+from src.game import register_user
+from src.inventory import give
+from src.positions import fit, slot_rating
+from src.ratings import GAME_OVERALL_SQL, POOL_SQL, game_overall
+from src.teams import FORMATIONS, best_assignment
+
+# Degraus fáceis do começo da escada: (nome, overall alvo).
+WARMUP_TEAMS = (
+    ("Várzea FC", 62),
+    ("Amadores do Bairro", 67),
+    ("Reservas Unidos", 72),
+    ("Seleção Sub-20", 76),
+    ("Combinado Estadual", 79),
+)
+# Seleções lendárias: países com lendas suficientes para um time inteiro.
+NATION_EMOJIS = {
+    "Brasil": "🇧🇷",
+    "Itália": "🇮🇹",
+    "Inglaterra": "🏴",
+    "Alemanha": "🇩🇪",
+    "França": "🇫🇷",
+    "Argentina": "🇦🇷",
+    "Espanha": "🇪🇸",
+    "Holanda": "🇳🇱",
+    "Portugal": "🇵🇹",
+    "Uruguai": "🇺🇾",
+}
+DAILY_BOSS_BOOST = 1  # pontos de overall a mais em cada jogador
+IMPROVISED = 0.6  # peso, na escolha, de quem jogaria fora de posição (só se não houver outro)
+WEEKLY_BOSS_BOOST = 2
+DAILY_BOSS_TRIES = 1
+WEEKLY_BOSS_TRIES = 3
+DAILY_BOSS_PRIZE = 3_000
+WEEKLY_BOSS_PRIZE = 12_000
+
+
+class PveError(Exception):
+    """Desafio recusado (tentativas, degrau); a mensagem vai para a pessoa."""
+
+
+@dataclass(frozen=True)
+class PveTeam:
+    key: str
+    name: str
+    emoji: str
+    formation: str
+    players: tuple[dict[str, Any], ...]
+
+    @property
+    def strength(self) -> int:
+        """Média do quanto os 11 rendem nas vagas (o "overall do time")."""
+        return round(
+            sum(
+                slot_rating(p["overall"], p["natural_position"], p["position"])
+                for p in self.players
+            )
+            / len(self.players)
+        )
+
+    @property
+    def label(self) -> str:
+        return f"{self.emoji} {self.name}"
+
+    def as_team(self) -> dict[str, Any]:
+        """O dicionário de time que a simulação e o placar esperam."""
+        return {"team_name": self.name, "style": "balanced", "formation": self.formation}
+
+    def boosted(self, points: int, suffix: str) -> "PveTeam":
+        players = tuple(
+            {
+                **p,
+                "overall": min(99, p["overall"] + points),
+                "effective_overall": min(99, p["overall"] + points),
+            }
+            for p in self.players
+        )
+        return PveTeam(f"{self.key}:{suffix}", self.name, self.emoji, self.formation, players)
+
+
+def _best_eleven(candidates: list[dict[str, Any]], id_start: int) -> tuple[str, list[dict]]:
+    """A formação e os 11 que rendem mais (cada um na vaga em que mais rende).
+
+    Se nenhuma formação fecha com as posições compatíveis (um clube com um zagueiro só),
+    alguém joga improvisado: assume a vaga com 15% a menos de overall."""
+    if len(candidates) < 11:
+        raise ValueError("Não dá para montar 11 com esses jogadores.")
+
+    def score(candidate, slot) -> float:
+        if fit(candidate["natural"], slot):
+            return slot_rating(candidate["overall"], candidate["natural"], slot)
+        return candidate["overall"] * IMPROVISED  # improvisado: última opção
+
+    best = None
+    for formation, slots in FORMATIONS.items():
+        scores = [[score(c, slot) for c in candidates] for slot in slots]
+        pairs = best_assignment(scores)
+        total = sum(scores[row][column] for row, column in pairs)
+        if best is None or total > best[0]:
+            best = (total, formation, pairs)
+    _, formation, pairs = best
+    slots = FORMATIONS[formation]
+    players = []
+    for row, column in sorted(pairs):
+        chosen = candidates[column]
+        natural, overall = chosen["natural"], chosen["overall"]
+        if not fit(natural, slots[row]):
+            natural, overall = slots[row], round(overall * 0.85)
+        players.append(
+            {
+                "id": id_start - row,
+                "name": chosen["name"],
+                "display_name": chosen["name"],
+                "position": slots[row],
+                "natural_position": natural,
+                "overall": overall,
+                "effective_overall": overall,
+            }
+        )
+    return formation, players
+
+
+@lru_cache(maxsize=1)
+def legend_teams() -> tuple[PveTeam, ...]:
+    """Clubes brasileiros lendários, seleções lendárias e a Seleção Mundial."""
+    teams = []
+    for index, club in enumerate(load_club_legends()):
+        candidates = [
+            {
+                "name": player["name"],
+                "natural": CLUB_LEGEND_POSITIONS.get(player["position"], player["position"]),
+                "overall": game_overall(int(player["overall"])),
+            }
+            for player in club["players"]
+        ]
+        formation, players = _best_eleven(candidates, -1000 * (index + 1))
+        key = "clube:" + club["club"].lower()
+        teams.append(PveTeam(key, f"{club['club']} Lendário", "🛡️", formation, tuple(players)))
+    legends = load_encyclopedia()["legends"]
+    for index, (country, emoji) in enumerate(NATION_EMOJIS.items()):
+        candidates = [
+            {
+                "name": legend["name"],
+                "natural": legend["position"],
+                "overall": legend_overall(legend["name"]),
+            }
+            for legend in legends
+            if legend["country"] == country
+        ]
+        try:
+            formation, players = _best_eleven(candidates, -50_000 - 1000 * index)
+        except ValueError:
+            continue
+        teams.append(
+            PveTeam(
+                "selecao:" + country.lower(),
+                f"{country} Lendária",
+                emoji,
+                formation,
+                tuple(players),
+            )
+        )
+    everyone = [
+        {
+            "name": legend["name"],
+            "natural": legend["position"],
+            "overall": legend_overall(legend["name"]),
+        }
+        for legend in legends
+    ]
+    # Só os melhores de cada posição entram na conta (o resultado é o mesmo e fica rápido).
+    top = sorted(everyone, key=lambda c: -c["overall"])[:120]
+    formation, players = _best_eleven(top, -90_000)
+    teams.append(PveTeam("mundial", "Seleção Mundial", "🌍", formation, tuple(players)))
+    return tuple(sorted(teams, key=lambda team: team.strength))
+
+
+def warmup_team(name: str, target: int, database_path: str | Path = DATABASE_PATH) -> PveTeam:
+    """Degrau fácil: jogadores do mercado perto de `target` (sempre os mesmos para o nome)."""
+    rng = random.Random(name)
+    slots = FORMATIONS["4-3-3"]
+    players = []
+    with connect(database_path) as connection:
+        for row, slot in enumerate(slots):
+            options = connection.execute(
+                f"""
+                SELECT COALESCE(NULLIF(p.display_name, ''), p.name) AS name, p.game_position,
+                       {GAME_OVERALL_SQL} AS overall
+                FROM players AS p
+                WHERE {POOL_SQL} AND p.game_position = ? AND {GAME_OVERALL_SQL} BETWEEN ? AND ?
+                ORDER BY p.id LIMIT 40
+                """,
+                (slot, target - 3, target + 3),
+            ).fetchall()
+            if options:
+                chosen = rng.choice(options)
+                name_, overall = chosen["name"], int(chosen["overall"])
+            else:
+                name_, overall = f"Reserva ({slot})", target
+            players.append(
+                {
+                    "id": -100 - row,
+                    "name": name_,
+                    "display_name": name_,
+                    "position": slot,
+                    "natural_position": slot,
+                    "overall": overall,
+                    "effective_overall": overall,
+                }
+            )
+    return PveTeam("treino:" + name.lower(), name, "⚽", "4-3-3", tuple(players))
+
+
+def ladder(database_path: str | Path = DATABASE_PATH) -> list[PveTeam]:
+    """Os degraus da escada, do mais fácil ao mais difícil."""
+    warmups = [warmup_team(name, target, database_path) for name, target in WARMUP_TEAMS]
+    return warmups + list(legend_teams())
+
+
+def ladder_prize(step: int) -> int:
+    """Memilets do degrau `step` (0 = o primeiro)."""
+    return 400 + 200 * step
+
+
+def free_prize(team: PveTeam) -> int:
+    return max(300, (team.strength - 70) * 60)
+
+
+def today(now: datetime | None = None) -> str:
+    return (now or datetime.now(timezone.utc)).astimezone(BRASILIA).date().isoformat()
+
+
+def this_week(now: datetime | None = None) -> str:
+    year, week, _ = (now or datetime.now(timezone.utc)).astimezone(BRASILIA).isocalendar()
+    return f"{year}-W{week:02d}"
+
+
+def _pick(teams: list[PveTeam], seed: str) -> PveTeam:
+    return teams[random.Random(seed).randrange(len(teams))]
+
+
+def daily_boss(now: datetime | None = None) -> PveTeam:
+    """Um time lendário por dia (clube ou seleção), um pouco reforçado."""
+    day = today(now)
+    team = _pick([t for t in legend_teams() if t.key != "mundial"], "dia:" + day)
+    return team.boosted(DAILY_BOSS_BOOST, day)
+
+
+def weekly_boss(now: datetime | None = None) -> PveTeam:
+    """Uma seleção lendária (ou a Mundial) por semana, mais reforçada."""
+    week = this_week(now)
+    teams = [t for t in legend_teams() if t.key.startswith("selecao:") or t.key == "mundial"]
+    return _pick(teams, "semana:" + week).boosted(WEEKLY_BOSS_BOOST, week)
+
+
+@dataclass(frozen=True)
+class PveStatus:
+    ladder_step: int  # degraus já vencidos
+    ladder_total: int
+    daily_tries: int
+    daily_won: bool
+    weekly_tries: int
+    weekly_won: bool
+
+
+def _count(connection, user_id: str, kind: str, period: str, won: bool | None = None) -> int:
+    query = "SELECT COUNT(*) FROM pve_log WHERE discord_user_id = ? AND kind = ? AND period = ?"
+    arguments: list[Any] = [user_id, kind, period]
+    if won is not None:
+        query += " AND won = ?"
+        arguments.append(int(won))
+    return connection.execute(query, arguments).fetchone()[0]
+
+
+def pve_status(
+    discord_user_id: int | str,
+    database_path: str | Path = DATABASE_PATH,
+    now: datetime | None = None,
+) -> PveStatus:
+    user_id = str(discord_user_id)
+    with connect(database_path) as connection:
+        row = connection.execute(
+            "SELECT ladder FROM pve_progress WHERE discord_user_id = ?", (user_id,)
+        ).fetchone()
+        day, week = today(now), this_week(now)
+        return PveStatus(
+            int(row["ladder"]) if row else 0,
+            len(WARMUP_TEAMS) + len(legend_teams()),
+            _count(connection, user_id, "dia", day),
+            bool(_count(connection, user_id, "dia", day, True)),
+            _count(connection, user_id, "semana", week),
+            bool(_count(connection, user_id, "semana", week, True)),
+        )
+
+
+def opponent_for(
+    discord_user_id: int | str,
+    kind: str,
+    team_key: str | None = None,
+    database_path: str | Path = DATABASE_PATH,
+    now: datetime | None = None,
+) -> PveTeam:
+    """O adversário de um desafio, se ainda dá para jogar (senão, `PveError`)."""
+    status = pve_status(discord_user_id, database_path, now)
+    if kind == "escada":
+        if status.ladder_step >= status.ladder_total:
+            raise PveError("Você já venceu a escada inteira! 🏆 Desafie os chefões.")
+        return ladder(database_path)[status.ladder_step]
+    if kind == "dia":
+        if status.daily_won or status.daily_tries >= DAILY_BOSS_TRIES:
+            raise PveError("O chefão de hoje já foi enfrentado. Volta amanhã!")
+        return daily_boss(now)
+    if kind == "semana":
+        if status.weekly_won:
+            raise PveError("Você já derrubou o chefão desta semana!")
+        if status.weekly_tries >= WEEKLY_BOSS_TRIES:
+            raise PveError("Suas tentativas contra o chefão da semana acabaram.")
+        return weekly_boss(now)
+    if kind == "livre":
+        for team in legend_teams():
+            if team.key == team_key:
+                return team
+        raise PveError("Não achei esse time lendário.")
+    raise PveError("Modo de desafio desconhecido.")
+
+
+def record_result(
+    discord_user_id: int | str,
+    display_name: str,
+    kind: str,
+    team: PveTeam,
+    won: bool,
+    database_path: str | Path = DATABASE_PATH,
+    now: datetime | None = None,
+) -> list[str]:
+    """Guarda o resultado, avança a escada e paga os prêmios. Devolve o que a pessoa ganhou."""
+    user_id = str(discord_user_id)
+    register_user(user_id, display_name, database_path)
+    period = this_week(now) if kind == "semana" else today(now)
+    gains: list[str] = []
+    with connect(database_path) as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        already = 0
+        if kind == "livre":
+            already = connection.execute(
+                "SELECT COUNT(*) FROM pve_log WHERE discord_user_id = ? AND kind = 'livre' "
+                "AND period = ? AND team_key = ? AND won = 1",
+                (user_id, period, team.key),
+            ).fetchone()[0]
+        connection.execute(
+            "INSERT INTO pve_log (discord_user_id, kind, period, team_key, won) VALUES (?, ?, ?, ?, ?)",
+            (user_id, kind, period, team.key, int(won)),
+        )
+        if not won:
+            return gains
+        memilets = 0
+        if kind == "escada":
+            row = connection.execute(
+                "SELECT ladder FROM pve_progress WHERE discord_user_id = ?", (user_id,)
+            ).fetchone()
+            step = int(row["ladder"]) if row else 0
+            connection.execute(
+                """
+                INSERT INTO pve_progress (discord_user_id, ladder) VALUES (?, ?)
+                ON CONFLICT(discord_user_id) DO UPDATE SET ladder = excluded.ladder
+                """,
+                (user_id, step + 1),
+            )
+            memilets = ladder_prize(step)
+            if (step + 1) % 5 == 0:
+                give(connection, user_id, "caixa")
+                gains.append("📦 +1 caixa no inventário")
+        elif kind == "livre" and not already:
+            memilets = free_prize(team)
+        elif kind == "dia":
+            memilets = DAILY_BOSS_PRIZE
+            give(connection, user_id, "caixa_epica")
+            gains.append("🟠 +1 caixa épica no inventário")
+        elif kind == "semana":
+            memilets = WEEKLY_BOSS_PRIZE
+            give(connection, user_id, "pacote_epico")
+            gains.append("🎴 +1 pacote épico no inventário")
+        if memilets:
+            connection.execute(
+                "UPDATE game_users SET memilets = memilets + ? WHERE discord_user_id = ?",
+                (memilets, user_id),
+            )
+            gains.insert(0, f"{memilets:,} Memilets".replace(",", "."))
+    return gains
+
+
+def seconds_until_tomorrow(now: datetime | None = None) -> int:
+    local = (now or datetime.now(timezone.utc)).astimezone(BRASILIA)
+    tomorrow = (local + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    return int((tomorrow - local).total_seconds())

@@ -357,6 +357,17 @@ O FUT.AE é um módulo do MeMi BOT, não um bot separado. O menu geral continua 
   `mm!penaltis @pessoa 1000`. O outro aceita, cada um entra com o valor (ou ninguém, se
   faltar saldo) e quem vence leva o pote. Amistoso apostado não gera renda; se a partida
   não acontecer, as apostas voltam.
+- `mm!desafio` (`pve`, `lendas`) abre os desafios contra times lendários, montados na hora
+  com as lendas da enciclopédia (12 clubes brasileiros, seleções lendárias e a Seleção
+  Mundial), cada um na formação em que rende mais:
+  - **Escada**: 28 degraus do mais fácil (times do mercado, força ~62) à Seleção Mundial
+    (~97); vencer libera o próximo e paga 400 + 200 por degrau (só na primeira vez), com
+    uma caixa a cada 5 degraus.
+  - **Chefão do dia**: um time lendário reforçado (+1), 1 tentativa; 3.000 + caixa épica.
+  - **Chefão da semana**: uma seleção lendária (ou a Mundial) reforçada (+2), 3
+    tentativas; 12.000 + pacote épico.
+  - **Desafio livre**: qualquer time lendário; prêmio na primeira vitória do dia contra
+    cada um. Empate vai para os pênaltis.
 - `mm!penaltis @pessoa` é uma disputa de pênaltis interativa: quem bate escolhe o canto e
   quem defende escolhe onde pular, em segredo. Acertar o canto defende 75% das vezes; errar
   ainda pode dar trave (6%). 5 cobranças para cada lado, morte súbita no empate, e quem

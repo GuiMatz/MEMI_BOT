@@ -285,6 +285,7 @@ FUTAE_SECTIONS = (
         "`mm!pay @pessoa <quantia>` — manda Memilets para outra pessoa\n"
         "`mm!amistoso @pessoa [idaevolta] [aposta N]` — partida narrada, ida e volta, apostada\n"
         "`mm!penaltis @pessoa [aposta]` — disputa de pênaltis escolhendo o canto\n"
+        "`mm!desafio` — times lendários: escada, chefões do dia e da semana, desafio livre\n"
         "`mm!campeonato` — campeonato diário; o campeão leva 500 Memilets\n"
         "`mm!temporada [mês]` — tabela do mês · `mm!temporadas` — campeão de cada mês",
     ),

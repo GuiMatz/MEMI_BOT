@@ -26,6 +26,9 @@ from src.db import DATABASE_PATH, connect, normalize_player_name
 from src.income import IncomeError, collect_income, income_status, venue_name
 from src.missions import record_event
 from src.narration import narrate
+from src.positions import slot_rating
+from src.pve import PveError, opponent_for, record_result
+from src.cogs.pve_views import PveHubView, hub_embed
 from src.score_image import render_score_gif
 from src.simulation import penalty_events, penalty_shootout_kicks, simulate_match
 from src.team_stats import (
@@ -382,6 +385,109 @@ class MatchesCog(commands.Cog):
             return
         view = StatsView(context.author.id, target.id, self.database_path)
         view.message = await context.reply(embed=view.embed(), view=view, mention_author=False)
+
+    @commands.command(name="desafio", aliases=["desafios", "pve", "lendas", "chefao", "chefão"])
+    async def pve_hub(self, context: commands.Context) -> None:
+        """`mm!desafio`: escada, chefões e desafio livre contra times lendários."""
+        try:
+            _, players = get_valid_lineup(context.author.id, self.database_path)
+            strength = round(
+                sum(
+                    slot_rating(p["effective_overall"], p["natural_position"], p["position"])
+                    for p in players
+                )
+                / len(players)
+            )
+        except TeamError:
+            strength = None
+        await context.reply(
+            embed=hub_embed(context.author, self.database_path, strength),
+            view=PveHubView(self, context.author, self.database_path),
+            mention_author=False,
+        )
+
+    async def start_pve(self, interaction: discord.Interaction, kind: str, team_key) -> None:
+        """Um clique no painel: confere se dá para jogar, narra a partida e paga o prêmio."""
+        user = interaction.user
+        try:
+            team = opponent_for(user.id, kind, team_key, self.database_path)
+            get_valid_lineup(user.id, self.database_path)
+        except (PveError, TeamError) as error:
+            await interaction.response.send_message(str(error), ephemeral=True)
+            return
+        titles = {
+            "escada": "Escada",
+            "dia": "Chefão do dia",
+            "semana": "Chefão da semana",
+            "livre": "Desafio livre",
+        }
+        await interaction.response.send_message(
+            f"⚔️ **{user.display_name}** × {team.label} (força {team.strength}) · {titles[kind]}"
+        )
+        send = interaction.channel.send
+        won = await self._pve_match(send, user, team, titles[kind])
+        if won is None:
+            return
+        gains = await asyncio.to_thread(
+            record_result, user.id, user.display_name, kind, team, won, self.database_path
+        )
+        if won:
+            reward = " · ".join(gains) if gains else "sem prêmio (já ganho hoje)"
+            await send(f"🏆 **{user.display_name}** venceu {team.label}! Prêmio: {reward}.")
+        else:
+            await send(f"💥 {team.label} venceu desta vez. Tente de novo!")
+
+    async def _pve_match(self, send, user, team, title: str) -> bool | None:
+        """Partida narrada do time da pessoa (mandante) contra um time lendário."""
+        try:
+            home, home_players = get_valid_lineup(user.id, self.database_path)
+        except TeamError as error:
+            await send(str(error))
+            return None
+        away = team.as_team()
+        away_players = list(team.players)
+        result = simulate_match(
+            home["team_name"],
+            home_players,
+            away["team_name"],
+            away_players,
+            home_style=home["style"],
+            away_style="balanced",
+            home_tactics=home,
+            home_advantage=True,
+        )
+        timeline = list(result.events)
+        penalties = None
+        if result.home_goals == result.away_goals:
+            kicks = penalty_shootout_kicks(
+                home_players, away_players, home_taker_id=home.get("penalty_player_id")
+            )
+            timeline += penalty_events(kicks, result.home_name, result.away_name)
+            penalties = (kicks[-1].home_score, kicks[-1].away_score)
+        await narrate(
+            lambda embed: send(embed=embed),
+            result.home_name,
+            result.away_name,
+            timeline,
+            title=title,
+            penalties=penalties,
+            home_color=home.get("color"),
+        )
+        await send(
+            file=await score_file(
+                home,
+                away,
+                result.home_goals,
+                result.away_goals,
+                result.goals,
+                title=title,
+                venue=venue_name(home),
+                penalties=penalties,
+            )
+        )
+        return result.home_goals > result.away_goals or (
+            penalties is not None and penalties[0] > penalties[1]
+        )
 
     @commands.command(name="penaltis", aliases=["pênaltis", "penalti", "penaltys", "pk"])
     async def penalties(

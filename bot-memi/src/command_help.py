@@ -153,6 +153,14 @@ COMMAND_HELP: dict[str, tuple[str, str, tuple[str, ...]]] = {
             "..amistoso @Ana ida aposta 5k",
         ),
     ),
+    "desafio": (
+        "mm!desafio",
+        "Partidas contra times lendários (clubes brasileiros de todos os tempos, seleções "
+        "lendárias e a Seleção Mundial). Escada de 28 degraus com prêmio em cada um, chefão "
+        "do dia (1 tentativa), chefão da semana (3 tentativas) e desafio livre contra quem "
+        "você escolher.",
+        ("mm!desafio", "..pve"),
+    ),
     "penaltis": (
         "mm!penaltis @pessoa [aposta]",
         "Disputa de pênaltis: quem bate escolhe o canto e quem defende escolhe onde pular, "
