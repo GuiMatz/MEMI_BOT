@@ -4,6 +4,10 @@ Só dá para equipar o que a conta possui. Cosméticos saem nas crates (`mm!crat
 nunca repetem um item que a pessoa já tem. Clubes e logos são a mesma coisa: os dois
 viram **emblemas**.
 
+Uniforme, estádio, técnico e mascote são **únicos**, como as cartas de jogador: cada item
+tem um dono só, e a caixa só sorteia o que ainda não é de ninguém. Emblema e liga podem
+se repetir entre times.
+
 Cada cosmético equipado, menos o estádio, soma +100 ao máximo do daily; o estádio
 libera a renda do amistoso (`src.income`).
 """
@@ -33,6 +37,9 @@ COSMETIC_KINDS: dict[str, tuple[str, str, str, bool]] = {
     "liga": ("Liga", "🏆", "favorite_league", False),
     "mascote": ("Mascote", "🐾", "mascot", False),
 }
+
+# Tipos com dono único (um item, uma pessoa), como as cartas.
+UNIQUE_KINDS = frozenset({"uniforme", "estadio", "tecnico", "mascote"})
 
 # Como cada tipo aparece nos comandos (`mm!time tecnico X`, `mm!emblema X`…).
 KIND_ALIASES = {
@@ -146,7 +153,17 @@ def grant(
     item: dict[str, Any],
     source: str = "crate",
 ) -> bool:
-    """Entrega o item; devolve False se a pessoa já o tinha."""
+    """Entrega o item; devolve False se a pessoa já o tinha ou se é de dono único e já
+    pertence a outra pessoa."""
+    key = item.get("key") or item_key(item["name"])
+    if (
+        kind in UNIQUE_KINDS
+        and connection.execute(
+            "SELECT 1 FROM user_cosmetics WHERE kind = ? AND item_key = ? AND discord_user_id != ?",
+            (kind, key, str(discord_user_id)),
+        ).fetchone()
+    ):
+        return False
     cursor = connection.execute(
         """
         INSERT OR IGNORE INTO user_cosmetics
@@ -156,7 +173,7 @@ def grant(
         (
             str(discord_user_id),
             kind,
-            item.get("key") or item_key(item["name"]),
+            key,
             item["name"],
             item.get("image_path"),
             source,
@@ -171,13 +188,13 @@ def unowned_items(
     kind: str,
     database_path: str | Path = DATABASE_PATH,
 ) -> list[dict[str, Any]]:
-    owned = {
-        row["item_key"]
-        for row in connection.execute(
-            "SELECT item_key FROM user_cosmetics WHERE discord_user_id = ? AND kind = ?",
-            (str(discord_user_id), kind),
-        )
-    }
+    if kind in UNIQUE_KINDS:
+        # Dono único: some do sorteio assim que alguém tem.
+        query, arguments = "SELECT item_key FROM user_cosmetics WHERE kind = ?", (kind,)
+    else:
+        query = "SELECT item_key FROM user_cosmetics WHERE discord_user_id = ? AND kind = ?"
+        arguments = (str(discord_user_id), kind)
+    owned = {row["item_key"] for row in connection.execute(query, arguments)}
     return [item for item in catalog(kind, database_path) if item["key"] not in owned]
 
 
@@ -416,5 +433,8 @@ def give_item(
         )
     register_user(discord_user_id, display_name, database_path)
     with connect(database_path) as connection:
-        grant(connection, discord_user_id, kind, found[0], "admin")
+        if not grant(connection, discord_user_id, kind, found[0], "admin") and kind in UNIQUE_KINDS:
+            owner = owners_of(kind, found[0]["name"], database_path)
+            if owner and owner != [display_name]:
+                raise CosmeticError(f"{found[0]['name']} já é de {owner[0]} (item único).")
     return found[0]
