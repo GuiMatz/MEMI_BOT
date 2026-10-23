@@ -63,7 +63,7 @@ class LegendTeamTests(unittest.TestCase):
         tactics = boss.as_team()
         self.assertEqual(tactics["strength_bonus"], WEEKLY_BOSS_BONUS)
         self.assertIn(tactics["captain_player_id"], [p["id"] for p in boss.players])
-        # O bônus pesa: um time 85 quase nunca vence o chefão da semana.
+        # O bônus pesa, sem deixar impossível.
         home = [
             {"id": i + 1, "name": f"U{i}", "position": p, "natural_position": p, "overall": 85}
             for i, p in enumerate(FORMATIONS["4-3-3"])
@@ -82,7 +82,8 @@ class LegendTeamTests(unittest.TestCase):
             for _ in range(300)
         ]
         wins = sum(result.home_goals > result.away_goals for result in results)
-        self.assertLess(wins / 300, 0.08)
+        # Difícil, mas possível: um time 85 vence o chefão da semana de vez em quando.
+        self.assertTrue(0.02 <= wins / 300 <= 0.2, wins)
 
     def test_a_legend_team_can_be_simulated(self):
         world = legend_teams()[-1]

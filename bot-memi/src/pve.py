@@ -54,12 +54,14 @@ NATION_EMOJIS = {
     "Uruguai": "🇺🇾",
 }
 # Força acima do overall (multiplica ataque, defesa, meio e goleiro na simulação). O
-# overall das lendas não muda; um time de força 85 vence um clube lendário ~1 em 5.
-CLUB_BONUS = 0.08
-NATION_BONUS = 0.10
-WORLD_BONUS = 0.12
-DAILY_BOSS_BONUS = 0.15
-WEEKLY_BOSS_BONUS = 0.20
+# overall das lendas não muda. Um time de força 85 vence: clube ~32%, seleção ~12%,
+# Seleção Mundial ~7%, chefão do dia ~26% (clube) ou ~10% (seleção), chefão da semana
+# ~6-9% por tentativa.
+CLUB_BONUS = 0.02
+NATION_BONUS = 0.02
+WORLD_BONUS = 0.03
+DAILY_BOSS_BONUS = 0.04
+WEEKLY_BOSS_BONUS = 0.05
 IMPROVISED = 0.6  # peso, na escolha, de quem jogaria fora de posição (só se não houver outro)
 DAILY_BOSS_TRIES = 1
 WEEKLY_BOSS_TRIES = 3
