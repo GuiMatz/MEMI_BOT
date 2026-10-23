@@ -7,6 +7,11 @@ começa quando a anterior está completa.
 
 `mm!destruir` devolve tudo que foi gasto e apaga os andares, inclusive as bolas dadas
 pelo andar 12. Nada disso mexe na simulação das partidas.
+
+O andar 12 dá uma bola a um dos 11 titulares (o time precisa estar completo). O sorteio
+fica guardado: destruir a torre tira a bola, mas ao reconstruir o andar 12 ela volta para
+o **mesmo** jogador. Assim não dá para destruir e reconstruir até a bola cair em quem se
+quer; só há sorteio novo se aquele jogador foi vendido ou já está com o máximo de bolas.
 """
 
 from __future__ import annotations
@@ -110,11 +115,26 @@ def build_floor(
             raise TowerError(f"O andar custa {price:,} Memilets.".replace(",", "."))
         ball_player = None
         if floor == 12:
-            ball_player = _pick_ball_player(connection, user_id, generator)
+            starters = connection.execute(
+                """
+                SELECT COUNT(*) AS n FROM team_lineups AS l
+                JOIN player_ownership AS o
+                  ON o.player_id = l.player_id AND o.discord_user_id = l.discord_user_id
+                WHERE l.discord_user_id = ?
+                """,
+                (user_id,),
+            ).fetchone()["n"]
+            if starters < 11:
+                raise TowerError(
+                    "O andar 12 dá uma bola a um dos titulares, e o time precisa estar "
+                    f"completo ({starters}/11). Escale os 11 com `mm!escalar`."
+                )
+            pending = _pending_ball(connection, user_id)
+            ball_player = pending or _pick_ball_player(connection, user_id, generator)
             if ball_player is None:
                 raise TowerError(
                     "O andar 12 dá uma bola a um dos 11 escalados, mas nenhum titular pode "
-                    "receber bola agora. Escale seu time com `mm!escalar`."
+                    "receber bola agora (todos no máximo)."
                 )
             connection.execute(
                 """
@@ -124,10 +144,15 @@ def build_floor(
                 """,
                 (ball_player["id"],),
             )
-            connection.execute(
-                "INSERT INTO tower_ball_grants (discord_user_id, player_id) VALUES (?, ?)",
-                (user_id, ball_player["id"]),
-            )
+            if pending:
+                connection.execute(
+                    "UPDATE tower_ball_grants SET active = 1 WHERE id = ?", (pending["grant_id"],)
+                )
+            else:
+                connection.execute(
+                    "INSERT INTO tower_ball_grants (discord_user_id, player_id) VALUES (?, ?)",
+                    (user_id, ball_player["id"]),
+                )
         connection.execute(
             """
             UPDATE game_users
@@ -146,6 +171,26 @@ def build_floor(
         )
         record(connection, user_id, "tower")
         return BuildResult(floor, price, status.construction, ball_player)
+
+
+def _pending_ball(connection, user_id: str) -> dict[str, Any] | None:
+    """Bola tirada por uma destruição: volta para o mesmo jogador, se ainda for possível."""
+    row = connection.execute(
+        """
+        SELECT g.id AS grant_id, p.id, COALESCE(NULLIF(p.display_name, ''), p.name) AS name,
+               COALESCE(b.balls, 0) AS balls
+        FROM tower_ball_grants AS g
+        JOIN player_ownership AS o
+          ON o.player_id = g.player_id AND o.discord_user_id = g.discord_user_id
+        JOIN players AS p ON p.id = g.player_id
+        LEFT JOIN player_balls AS b ON b.player_id = p.id
+        WHERE g.discord_user_id = ? AND g.active = 0 AND COALESCE(b.balls, 0) < ?
+        ORDER BY g.id
+        LIMIT 1
+        """,
+        (user_id, MAX_DUPLICATE_BALLS),
+    ).fetchone()
+    return dict(row) if row else None
 
 
 def _pick_ball_player(connection, user_id: str, rng) -> dict[str, Any] | None:
@@ -188,7 +233,7 @@ def destroy_preview(
                 """
                 SELECT COALESCE(NULLIF(p.display_name, ''), p.name) AS name
                 FROM tower_ball_grants AS g JOIN players AS p ON p.id = g.player_id
-                WHERE g.discord_user_id = ? ORDER BY g.id
+                WHERE g.discord_user_id = ? AND g.active = 1 ORDER BY g.id
                 """,
                 (user_id,),
             )
@@ -209,7 +254,8 @@ def destroy_tower(
     with connect(database_path) as connection:
         connection.execute("BEGIN IMMEDIATE")
         grants = connection.execute(
-            "SELECT player_id FROM tower_ball_grants WHERE discord_user_id = ?", (user_id,)
+            "SELECT player_id FROM tower_ball_grants WHERE discord_user_id = ? AND active = 1",
+            (user_id,),
         ).fetchall()
         for grant in grants:
             # A bola do andar 12 sai; quem ficaria sem nenhuma perde a linha de bolas.
@@ -224,7 +270,10 @@ def destroy_tower(
                 """,
                 (grant["player_id"],),
             )
-        connection.execute("DELETE FROM tower_ball_grants WHERE discord_user_id = ?", (user_id,))
+        # O sorteio fica guardado (active = 0): reconstruir devolve a bola ao mesmo jogador.
+        connection.execute(
+            "UPDATE tower_ball_grants SET active = 0 WHERE discord_user_id = ?", (user_id,)
+        )
         connection.execute("DELETE FROM tower_floors WHERE discord_user_id = ?", (user_id,))
         spent = connection.execute(
             "SELECT tower_spent FROM game_users WHERE discord_user_id = ?", (user_id,)

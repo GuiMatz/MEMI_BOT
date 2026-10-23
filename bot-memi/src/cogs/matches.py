@@ -26,6 +26,14 @@ from src.missions import record_event
 from src.narration import narrate
 from src.score_image import render_score_gif
 from src.simulation import penalty_events, penalty_shootout_kicks, simulate_match
+from src.team_stats import (
+    KINDS,
+    PERIODS,
+    compute_stats,
+    filter_records,
+    match_records,
+    record_friendly,
+)
 from src.teams import TeamError, get_team, get_valid_lineup
 
 SET_PIECE_MARK = {"penalti": " (pênalti)", "falta": " (falta)", "contra": " (contra)"}
@@ -86,6 +94,192 @@ class IncomeChoiceView(discord.ui.View):
                 pass
 
 
+OUTCOME_WORDS = {
+    "V": ("vitória", "vitórias"),
+    "E": ("empate", "empates"),
+    "D": ("derrota", "derrotas"),
+}
+
+
+class StatsView(discord.ui.View):
+    """`mm!stats`: números do time com filtros de tipo, período e adversário."""
+
+    def __init__(self, viewer_id: int, owner_id: int, database_path):
+        super().__init__(timeout=300)
+        self.viewer_id = viewer_id
+        self.owner_id = str(owner_id)
+        self.database_path = database_path
+        self.kind = "all"
+        self.period = "all"
+        self.opponent: str | None = None
+        self.records = match_records(owner_id, database_path)
+        with connect(database_path) as connection:
+            self.names = {
+                row["discord_user_id"]: row["team_name"]
+                for row in connection.execute("SELECT discord_user_id, team_name FROM game_teams")
+            }
+        self.team = get_team(owner_id, database_path) or {}
+        self.message: discord.Message | None = None
+        self._build()
+
+    def _build(self) -> None:
+        self.clear_items()
+        kind = discord.ui.Select(
+            options=[
+                discord.SelectOption(label=label, value=key, default=key == self.kind)
+                for key, label in KINDS.items()
+            ],
+            row=0,
+        )
+        kind.callback = self._kind
+        self.add_item(kind)
+        period = discord.ui.Select(
+            options=[
+                discord.SelectOption(label=label, value=key, default=key == self.period)
+                for key, label in PERIODS.items()
+            ],
+            row=1,
+        )
+        period.callback = self._period
+        self.add_item(period)
+        counts: dict[str, int] = {}
+        for record in self.records:
+            counts[record.opponent_id] = counts.get(record.opponent_id, 0) + 1
+        rivals = sorted(counts, key=lambda rival: -counts[rival])[:24]
+        opponent = discord.ui.Select(
+            placeholder="Contra todos",
+            options=[
+                discord.SelectOption(
+                    label="Contra todos", value="all", default=self.opponent is None
+                )
+            ]
+            + [
+                discord.SelectOption(
+                    label=f"Contra {self.names.get(rival, 'time removido')}"[:100],
+                    description=f"{counts[rival]} jogo(s)",
+                    value=rival,
+                    default=rival == self.opponent,
+                )
+                for rival in rivals
+            ],
+            row=2,
+            disabled=not rivals,
+        )
+        opponent.callback = self._opponent
+        self.add_item(opponent)
+
+    def embed(self) -> discord.Embed:
+        records = filter_records(
+            self.records, kind=self.kind, period=self.period, opponent=self.opponent
+        )
+        stats = compute_stats(records)
+        name = self.team.get("team_name") or "Time"
+        scope = [KINDS[self.kind], PERIODS[self.period]]
+        if self.opponent:
+            scope.append(f"contra {self.names.get(self.opponent, 'time removido')}")
+        embed = discord.Embed(
+            title=f"📊 {name}",
+            description=" · ".join(scope),
+            color=discord.Color.from_str(self.team.get("color") or "#2E8B57"),
+        )
+        if not stats.matches:
+            embed.description += "\n\nNenhum jogo nesse recorte ainda."
+            if self.kind != "championship":
+                embed.set_footer(text="Amistosos passaram a contar a partir desta versão do bot.")
+            return embed
+        icons_form = {"V": "🟩", "E": "⬜", "D": "🟥"}
+        embed.add_field(
+            name="Campanha",
+            value=(
+                f"**{stats.matches}** jogos · **{stats.wins}**V **{stats.draws}**E "
+                f"**{stats.losses}**D\n"
+                f"Aproveitamento **{stats.win_rate:.0%}** de vitórias"
+            ),
+            inline=False,
+        )
+        scored = f"{stats.goals_for / stats.matches:.1f}".replace(".", ",")
+        conceded = f"{stats.goals_against / stats.matches:.1f}".replace(".", ",")
+        embed.add_field(
+            name="Gols",
+            value=(
+                f"⚽ **{stats.goals_for}** pró · **{stats.goals_against}** contra · "
+                f"saldo **{stats.goals_for - stats.goals_against:+d}**\n"
+                f"Média **{scored}** × **{conceded}** por jogo · "
+                f"🧤 **{stats.clean_sheets}** sem sofrer gol"
+            ),
+            inline=False,
+        )
+        moment = []
+        if stats.form:
+            moment.append("Forma " + "".join(icons_form[result] for result in stats.form))
+        outcome, length = stats.streak
+        if length >= 2:
+            moment.append(
+                f"{length} {OUTCOME_WORDS[outcome][1]} seguid{'os' if outcome == 'E' else 'as'}"
+            )
+        if stats.biggest_win:
+            win = stats.biggest_win
+            moment.append(
+                f"Maior vitória **{win.goals_for} × {win.goals_against}** contra "
+                f"{self.names.get(win.opponent_id, 'time removido')}"
+            )
+        embed.add_field(name="Momento", value="\n".join(moment) or "—", inline=False)
+        if stats.top_scorers:
+            embed.add_field(
+                name="Artilheiros",
+                value="\n".join(
+                    f"`{index}.` {name} · **{goals}**"
+                    for index, (name, goals) in enumerate(stats.top_scorers, 1)
+                ),
+                inline=True,
+            )
+        extras = []
+        if stats.titles:
+            extras.append(f"🏆 **{stats.titles}** título(s)")
+        if stats.hat_tricks:
+            extras.append(f"🎩 **{stats.hat_tricks}** hat-trick(s)")
+        won, lost = stats.shootouts
+        if won or lost:
+            extras.append(f"🎯 Disputas de pênaltis: **{won}V** · **{lost}D**")
+        if extras:
+            embed.add_field(name="Feitos", value="\n".join(extras), inline=True)
+        if self.kind != "championship":
+            embed.set_footer(text="Amistosos contam a partir desta versão do bot.")
+        return embed
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.viewer_id:
+            await interaction.response.send_message(
+                "Use `mm!stats` para abrir o seu painel.", ephemeral=True
+            )
+            return False
+        return True
+
+    async def _refresh(self, interaction: discord.Interaction) -> None:
+        self._build()
+        await interaction.response.edit_message(embed=self.embed(), view=self)
+
+    async def _kind(self, interaction: discord.Interaction) -> None:
+        self.kind = interaction.data["values"][0]
+        await self._refresh(interaction)
+
+    async def _period(self, interaction: discord.Interaction) -> None:
+        self.period = interaction.data["values"][0]
+        await self._refresh(interaction)
+
+    async def _opponent(self, interaction: discord.Interaction) -> None:
+        value = interaction.data["values"][0]
+        self.opponent = None if value == "all" else value
+        await self._refresh(interaction)
+
+    async def on_timeout(self) -> None:
+        if self.message:
+            try:
+                await self.message.edit(view=None)
+            except discord.HTTPException:
+                pass
+
+
 class MatchesCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -97,6 +291,19 @@ class MatchesCog(commands.Cog):
     def cog_unload(self) -> None:
         if self.daily_scheduler.is_running():
             self.daily_scheduler.cancel()
+
+    @commands.command(name="stats", aliases=["estatisticas", "estatísticas", "estatistica"])
+    async def team_stats(self, context: commands.Context) -> None:
+        """Estatísticas do time (ou de `@pessoa`), com filtros em menus."""
+        target = context.message.mentions[0] if context.message.mentions else context.author
+        if get_team(target.id, self.database_path) is None:
+            await context.reply(
+                f"{target.display_name} ainda não tem time. Use `mm!time` para criar.",
+                mention_author=False,
+            )
+            return
+        view = StatsView(context.author.id, target.id, self.database_path)
+        view.message = await context.reply(embed=view.embed(), view=view, mention_author=False)
 
     @commands.command(name="amistoso")
     async def friendly(
@@ -164,6 +371,7 @@ class MatchesCog(commands.Cog):
             )
             timeline += penalty_events(kicks, result.home_name, result.away_name)
             penalties = (kicks[-1].home_score, kicks[-1].away_score)
+        record_friendly(context.author.id, opponent.id, result, penalties, self.database_path)
         await context.send(f"🏟️ Local: **{venue_name(home)}**")
         await narrate(
             lambda embed: context.send(embed=embed),

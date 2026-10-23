@@ -90,7 +90,8 @@ class MatchDynamicsTests(unittest.TestCase):
             "contra",
         ):
             self.assertGreater(plays[play], 0, play)
-        self.assertLess(kinds["red"] / len(self.results), 0.4)
+        # Futebol real: cerca de uma expulsão a cada 10 jogos.
+        self.assertLess(kinds["red"] / len(self.results), 0.15)
 
     def test_own_goal_is_credited_to_an_opponent_defender(self):
         home_ids = {player["id"] for player in HOME}

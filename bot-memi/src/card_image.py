@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from io import BytesIO
+from pathlib import Path
 from typing import Any
 
 from PIL import Image, ImageDraw, ImageOps
@@ -50,7 +51,12 @@ def _silhouette(size: tuple[int, int], color: tuple[int, int, int]) -> Image.Ima
     return image
 
 
-def render_player_card(player: dict[str, Any]) -> BytesIO:
+def render_player_card(player: dict[str, Any], picture: Image.Image | None = None) -> BytesIO:
+    """Carta vertical do jogador; `picture` troca a foto (um quadro de GIF, por exemplo)."""
+    return to_card_png(_card_image(player, picture))
+
+
+def _card_image(player: dict[str, Any], picture: Image.Image | None = None) -> Image.Image:
     overall = int(player.get("effective_overall") or player.get("overall") or 0)
     tier = rarity_index(overall) if overall else 0
     color = TIER_COLORS[tier or 0]
@@ -59,7 +65,11 @@ def render_player_card(player: dict[str, Any]) -> BytesIO:
     box_width = PHOTO_BOX[2] - PHOTO_BOX[0]
     box_height = PHOTO_BOX[3] - PHOTO_BOX[1]
     photo = find_image(player.get("photo_path"), "players", player.get("id"))
-    picture = None
+    if picture is not None:
+        picture = ImageOps.fit(
+            picture.convert("RGBA"), (box_width, box_height), centering=(0.5, 0.15)
+        )
+        photo = None
     if photo is not None:
         try:
             with Image.open(photo) as opened:
@@ -121,7 +131,65 @@ def render_player_card(player: dict[str, Any]) -> BytesIO:
     draw.rounded_rectangle((WIDTH // 2 - 120, 784, WIDTH // 2 + 120, 830), 23, fill=color)
     draw.text((WIDTH // 2, 807), label, font=_font(26, True), fill=(15, 15, 20), anchor="mm")
 
+    return image
+
+
+def to_card_png(image: Image.Image) -> BytesIO:
     buffer = BytesIO()
     image.convert("RGB").save(buffer, format="PNG", optimize=True)
     buffer.seek(0)
     return buffer
+
+
+GIF_CARD_SCALE = 0.6  # carta animada menor: cabe folgado no limite de anexo
+GIF_CARD_FRAMES = 48
+
+
+def animated_photo(player: dict[str, Any]) -> Path | None:
+    """Caminho da foto se ela for um GIF animado (aí a carta sai animada)."""
+    photo = find_image(player.get("photo_path"), "players", player.get("id"))
+    if photo is None or photo.suffix.casefold() != ".gif":
+        return None
+    try:
+        with Image.open(photo) as opened:
+            return photo if getattr(opened, "n_frames", 1) > 1 else None
+    except OSError:
+        return None
+
+
+def render_player_card_gif(player: dict[str, Any]) -> BytesIO | None:
+    """Carta animada quadro a quadro, para fotos em GIF; None se a foto é estática."""
+    photo = animated_photo(player)
+    if photo is None:
+        return None
+    size = (round(WIDTH * GIF_CARD_SCALE), round(HEIGHT * GIF_CARD_SCALE))
+    frames, durations = [], []
+    with Image.open(photo) as opened:
+        total = opened.n_frames
+        step = max(1, -(-total // GIF_CARD_FRAMES))  # pula quadros se forem muitos
+        for index in range(0, total, step):
+            opened.seek(index)
+            card = _card_image(player, opened.convert("RGBA"))
+            frames.append(card.convert("RGB").resize(size, Image.LANCZOS))
+            duration = sum(
+                _frame_duration(opened, frame) for frame in range(index, min(total, index + step))
+            )
+            durations.append(max(40, duration))
+    paletted = [frame.quantize(colors=255, method=Image.Quantize.MEDIANCUT) for frame in frames]
+    buffer = BytesIO()
+    paletted[0].save(
+        buffer,
+        format="GIF",
+        save_all=True,
+        append_images=paletted[1:],
+        duration=durations,
+        loop=0,
+        disposal=1,
+    )
+    buffer.seek(0)
+    return buffer
+
+
+def _frame_duration(image: Image.Image, frame: int) -> int:
+    image.seek(frame)
+    return int(image.info.get("duration") or 80)

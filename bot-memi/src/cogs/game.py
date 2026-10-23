@@ -12,7 +12,14 @@ from src import icons
 from src.cosmetics import COSMETIC_KINDS, LABEL_TO_KIND, free_counts, owners_of
 from src.db import DATABASE_PATH, normalize_player_name
 from src.economy import get_account_status
-from src.cogs.common import CardPagerView, card_embed, card_file
+from src.cogs.common import (
+    CardPagerView,
+    PlayerChoiceView,
+    ambiguity_text,
+    card_embed,
+    card_file,
+    player_label,
+)
 from src.game import (
     find_player,
     get_catalog_entries,
@@ -20,7 +27,9 @@ from src.game import (
     list_owned_players,
     register_user,
     search_catalog,
+    top_player_cards,
 )
+from src.player_images import ImageError, add_image, delete_image, list_images, set_main
 from src.roll_images import find_image, image_file
 from src.teams import get_lineup
 
@@ -60,13 +69,15 @@ ROSTER_SORTS = {
 
 
 def roster_line(index: int, player: dict) -> str:
-    """`  1. ⭐ 88 — Nome (PE›PD)`: estrela e vaga para os titulares."""
+    """`  1. ⭐ 88 — Nome (PE›PD) 🔒📦`: titulares, vaga, protegido e veio de pacote."""
     natural = player.get("game_position") or "posição pendente"
     slot = player.get("lineup_position")
     position = natural if not slot or slot == natural else f"{natural}›{slot}"
     mark = "⭐" if slot else "▫️"
+    tags = ("🔒" if player.get("locked") else "") + ("📦" if player.get("pack_origin") else "")
     return (
-        f"`{index:>3}.` {mark} **{player.get('overall') or '—'}** — {player['name']} ({position})"
+        f"`{index:>3}.` {mark} **{player.get('overall') or '—'}** — {player['name']} "
+        f"({position}){' ' + tags if tags else ''}"
     )
 
 
@@ -223,6 +234,9 @@ FUTAE_SECTIONS = (
         "`mm!scout <nome>` — ficha de jogador, técnico, estádio, emblema, uniforme…\n"
         "`mm!top [categoria]` — catálogo por overall ou nome\n"
         "`mm!left` — jogadores e cosméticos ainda livres\n"
+        "`mm!stats [@pessoa]` — vitórias, gols e artilheiros, por campeonato ou amistoso\n"
+        "`mm!topi` — o top dos jogadores em cartas, passando para o lado\n"
+        "`mm!img <jogador>` — galeria de imagens; anexe uma imagem ou GIF para cadastrar\n"
         "`mm!elenco [@pessoa] [titulares|reservas|filtro]` — cartas com ⭐ nos titulares "
         "e menu para ordenar\n"
         "`mm!wish`, `mm!wishlist`/`mm!wl`, `mm!starwish`/`mm!sw` — wishes",
@@ -232,7 +246,8 @@ FUTAE_SECTIONS = (
         "`mm!daily` — de 100 a 300 Memilets (+100 por cosmético equipado)\n"
         "`mm!carteira` — saldo, limites e timers\n"
         "`mm!upgrade` — loja de upgrades (sempre pede confirmação)\n"
-        "`mm!crates` — caixas com rolls, cosméticos e bônus\n"
+        "`mm!crates [1|5|10]` — caixas com rolls guardados, cosméticos e bônus\n"
+        "`mm!pacote` — uma carta de jogador livre do mercado (nunca Base)\n"
         "`mm!construir [1-12]` / `mm!destruir` — Centro de Treinamento (torre)\n"
         "`mm!renda` · `mm!bilheteria` — dinheiro do estádio e do campeonato\n"
         "`mm!missoes` — missões diárias e semanais · `mm!rt` — zera o claim (upgrade)",
@@ -245,11 +260,12 @@ FUTAE_SECTIONS = (
     ),
     (
         "⚽ Time e partidas",
-        "`mm!time` — perfil e imagem do time (`mm!time nome|cor <valor>`)\n"
-        "`mm!escudo` + imagem anexada — escudo próprio do time (`mm!escudo remover`)\n"
+        "`mm!time` — perfil e imagem do time · `mm!personalizar` — nome, cor, escudo e "
+        "cosméticos num painel\n"
         "`mm!escalar` — monta o time clicando em cada posição\n"
-        "`mm!tatica capitao|falta|penalti <nome>` — capitão e cobradores\n"
-        "`mm!vender [nome]` — mostra quanto rende e confirma (sem nome: vários)\n"
+        "`mm!tatica` — painel de formação, estilo, capitão e cobradores\n"
+        "`mm!vender` — painel de venda com filtros, seleção em massa e 🔒 (ou `mm!vender <nome>`)\n"
+        "`mm!proteger <nome>` — 🔒 tira o jogador de todas as vendas\n"
         "`mm!troca @pessoa` — monta a troca nos menus · `mm!dar @pessoa <jogador|valor>`\n"
         "`mm!amistoso @pessoa` — partida narrada; o 1º do dia em casa rende renda\n"
         "`mm!campeonato` — campeonato diário; o campeão leva 500 Memilets\n"
@@ -283,6 +299,119 @@ GENERAL_HELP_PAGES = (
         + "\n\n".join(f"{name}\n{value}" for name, value in FUTAE_SECTIONS)
     ),
 )
+
+
+class ImageGalleryView(discord.ui.View):
+    """`mm!img`: uma carta por imagem; ⭐ deixa a imagem como principal da carta."""
+
+    def __init__(self, player: dict, viewer_id: int, can_edit: bool, database_path, *, start=None):
+        super().__init__(timeout=300)
+        self.player = player
+        self.viewer_id = viewer_id
+        self.can_edit = can_edit
+        self.database_path = database_path
+        self.notice = ""
+        self.message: discord.Message | None = None
+        self.images = list_images(int(player["id"]), database_path)
+        self.index = 0
+        for index, image in enumerate(self.images):
+            if (start is None and image["main"]) or image["id"] == start:
+                self.index = index
+        self._sync()
+
+    def _sync(self) -> None:
+        image = self.current()
+        self.previous.disabled = self.index == 0
+        self.next.disabled = self.index >= len(self.images) - 1
+        self.make_main.disabled = not self.can_edit or image is None or image["main"]
+        self.delete.disabled = not self.can_edit or image is None or image["source"] == "original"
+
+    def current(self) -> dict | None:
+        return self.images[self.index] if self.images else None
+
+    def card(self) -> dict:
+        image = self.current()
+        return {**self.player, "photo_path": image["image_path"]} if image else self.player
+
+    def page(self) -> discord.Embed:
+        image = self.current()
+        if image is None:
+            footer = "Sem imagens ainda · mm!img <nome> com uma imagem anexada adiciona"
+        else:
+            tags = [
+                "⭐ principal" if image["main"] else "",
+                "original" if image["source"] == "original" else "enviada",
+            ]
+            footer = f"Imagem {self.index + 1}/{len(self.images)} · " + " · ".join(
+                t for t in tags if t
+            )
+        embed = card_embed(self.card(), title_prefix="🖼️ ", footer=footer)
+        if self.notice:
+            embed.description += f"\n\n{self.notice}"
+        if not self.can_edit:
+            embed.description += "\n-# Só o dono do jogador ou a moderação muda as imagens."
+        return embed
+
+    async def send(self, send) -> None:
+        self.message = await send(embed=self.page(), file=await card_file(self.card()), view=self)
+
+    async def _show(self, interaction: discord.Interaction) -> None:
+        self._sync()
+        await interaction.response.defer()
+        await interaction.edit_original_response(
+            embed=self.page(), attachments=[await card_file(self.card())], view=self
+        )
+        self.notice = ""
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.viewer_id:
+            await interaction.response.send_message(
+                "Use `mm!img <nome>` para abrir a sua galeria.", ephemeral=True
+            )
+            return False
+        return True
+
+    @discord.ui.button(label="◀", style=discord.ButtonStyle.secondary)
+    async def previous(self, interaction: discord.Interaction, button) -> None:
+        self.index -= 1
+        await self._show(interaction)
+
+    @discord.ui.button(label="▶", style=discord.ButtonStyle.secondary)
+    async def next(self, interaction: discord.Interaction, button) -> None:
+        self.index += 1
+        await self._show(interaction)
+
+    @discord.ui.button(label="Usar como principal", emoji="⭐", style=discord.ButtonStyle.success)
+    async def make_main(self, interaction: discord.Interaction, button) -> None:
+        image = self.current()
+        set_main(int(self.player["id"]), int(image["id"]), self.database_path)
+        self.images = list_images(int(self.player["id"]), self.database_path)
+        self.notice = "⭐ Agora esta é a imagem da carta."
+        await self._show(interaction)
+
+    @discord.ui.button(label="Apagar", emoji="🗑️", style=discord.ButtonStyle.danger)
+    async def delete(self, interaction: discord.Interaction, button) -> None:
+        image = self.current()
+        delete_image(int(self.player["id"]), int(image["id"]), self.database_path)
+        self.images = list_images(int(self.player["id"]), self.database_path)
+        self.index = min(self.index, max(0, len(self.images) - 1))
+        self.notice = "🗑️ Imagem apagada."
+        await self._show(interaction)
+
+    async def on_timeout(self) -> None:
+        if self.message:
+            try:
+                await self.message.edit(view=None)
+            except discord.HTTPException:
+                pass
+
+
+def top_line(index: int, player: dict) -> str:
+    owner = f" · 🔒 {player['owner_name']}" if player.get("owner_name") else ""
+    name = player.get("display_name") or player["name"]
+    return (
+        f"`{index:>3}.` **{player['overall']}** — {name} ({player['game_position'] or '—'}){owner}"
+    )
 
 
 class GameCog(commands.Cog):
@@ -404,6 +533,105 @@ class GameCog(commands.Cog):
                 lines.append(f"`{number:>3}.` {entry['name']}")
         view = PagedView(f"TOP {category.upper()} ({_thousands(total)})", lines)
         view.message = await context.reply(embed=view.embed(), view=view, mention_author=False)
+
+    @commands.command(name="topi", aliases=["topcartas"])
+    async def top_cards(self, context: commands.Context) -> None:
+        """O top dos jogadores em cartas: ◀ ▶ passa, Lista mostra o ranking."""
+        players = top_player_cards(self.database_path, limit=100)
+        if not players:
+            await context.reply("Ainda não há jogadores na roleta.", mention_author=False)
+            return
+        view = CardPagerView(players, title="TOP jogadores", line_format=top_line)
+        await view.send(lambda **kwargs: context.reply(mention_author=False, **kwargs))
+
+    @commands.command(name="img", aliases=["imagem", "imagens"])
+    async def player_images(self, context: commands.Context, *, query: str | None = None) -> None:
+        """Galeria de imagens do jogador; com uma imagem anexada, cadastra uma nova."""
+        name = (query or "").strip().strip('"').strip("“”").strip()
+        if not name:
+            await context.reply(
+                "Use `mm!img <jogador>` para ver as imagens, ou anexe uma imagem na mesma "
+                "mensagem para cadastrar uma nova.",
+                mention_author=False,
+            )
+            return
+        uploads = [
+            attachment
+            for attachment in context.message.attachments
+            if (attachment.content_type or "").startswith("image/")
+        ]
+        moderator = bool(
+            getattr(getattr(context.author, "guild_permissions", None), "manage_guild", False)
+        )
+
+        async def open_gallery(send, player: dict) -> None:
+            can_edit = moderator or str(player.get("owner_id") or "") == str(context.author.id)
+            start = None
+            notice = ""
+            if uploads:
+                if not can_edit:
+                    await send(
+                        content=(
+                            f"Só o dono de **{player_label(player)}** (ou a moderação) pode "
+                            "adicionar imagens a ele."
+                        ),
+                        embed=None,
+                        view=None,
+                    )
+                    return
+                try:
+                    data = await uploads[0].read()
+                    added = add_image(
+                        int(player["id"]), data, context.author.id, self.database_path
+                    )
+                except (ImageError, discord.HTTPException) as error:
+                    message = (
+                        str(error)
+                        if isinstance(error, ImageError)
+                        else "Não consegui baixar a imagem."
+                    )
+                    await send(content=message, embed=None, view=None)
+                    return
+                start = added["id"]
+                notice = "✅ Imagem cadastrada. Toque em ⭐ para usar como principal."
+            view = ImageGalleryView(
+                player, context.author.id, can_edit, self.database_path, start=start
+            )
+            view.notice = notice
+            view.message = await send(
+                content=None, embed=view.page(), file=await card_file(view.card()), view=view
+            )
+            view.notice = ""
+
+        player, candidates = find_player(name, self.database_path)
+        if player is not None:
+            await open_gallery(
+                lambda **kwargs: context.reply(mention_author=False, **kwargs), player
+            )
+            return
+        if not candidates:
+            await context.reply(f"Não achei **{name[:60]}**.", mention_author=False)
+            return
+
+        async def chosen(interaction: discord.Interaction, picked: dict) -> None:
+            await interaction.response.defer()
+            await open_gallery(
+                lambda **kwargs: interaction.edit_original_response(
+                    **{
+                        ("attachments" if key == "file" else key): (
+                            [value] if key == "file" else value
+                        )
+                        for key, value in kwargs.items()
+                    }
+                ),
+                picked,
+            )
+
+        await context.reply(
+            ambiguity_text(name, candidates),
+            view=PlayerChoiceView(context.author.id, candidates, chosen),
+            mention_author=False,
+        )
 
     @commands.command(name="elenco", aliases=["mm", "squad"])
     async def roster(

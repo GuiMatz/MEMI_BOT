@@ -25,7 +25,7 @@ from src.accents import LIVE, NEUTRAL, team_color
 # cerca de 5 edições a cada 5 segundos por canal, então não use menos que 1.
 DEFAULT_DELAY = float(os.getenv("MEMI_NARRATION_DELAY", "1.6"))
 VISIBLE_EVENTS = 8
-SLOW_EVENTS = {"goal", "halftime", "penalties", "fulltime", "red"}
+SLOW_EVENTS = {"goal", "halftime", "penalties", "fulltime", "red", "feat"}
 # Como o gol saiu (`MatchEvent.play`).
 SET_PIECES = {
     "penalti": " · de pênalti",
@@ -112,6 +112,8 @@ def _line(event: dict[str, Any], dots: dict[str, str]) -> str | None:
         text = f"{dot} 🟥 **{player} expulso** · time com um a menos"
     elif kind == "offside" and player:
         text = f"{dot} 🚩 Gol anulado · {player} impedido"
+    elif kind == "feat":
+        text = f"{dot} {event['text']}"
     elif kind == "pressure":
         text = f"{dot} {event['text']}"
     elif kind == "save" and player:
@@ -220,7 +222,17 @@ def _best_from_stats(stats, events, dots) -> str:
 
 
 # Lances que "pintam" a linha lateral com a cor de quem agiu.
-ACTION_EVENTS = {"goal", "save", "miracle", "post", "red", "offside", "pressure", "penalty"}
+ACTION_EVENTS = {
+    "goal",
+    "save",
+    "miracle",
+    "post",
+    "red",
+    "offside",
+    "pressure",
+    "penalty",
+    "feat",
+}
 
 
 def match_accent(
@@ -294,6 +306,10 @@ def match_embed(
             embed.add_field(name=f"{dots[side]} {name}", value=value[:1024], inline=True)
         stats = next((event.get("stats") for event in regular if event["kind"] == "fulltime"), None)
         if stats:
+            if stats.get("highlights"):
+                embed.add_field(
+                    name="🏅 Destaques", value="\n".join(stats["highlights"])[:1024], inline=False
+                )
             embed.add_field(name="📊 Estatísticas", value=_stats_text(stats), inline=False)
         best = _best_from_stats(stats, regular, dots) if stats else _best_player(regular)
         if best:

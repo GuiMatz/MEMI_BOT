@@ -33,19 +33,78 @@ from src.visual import (
 
 WIDTH, HEIGHT = 1200, 630
 GOLD = (240, 200, 70)
-MAX_SCORERS = 4
 
 
-def _goals_by_side(goals: Iterable[Any], side: str) -> list[str]:
-    lines = []
+# Feitos de um jogador só na partida (selo dourado ao lado do nome).
+FEATS = {3: "HAT-TRICK", 4: "POKER"}
+MANITA = "MANITA"
+SCORERS_BOTTOM = 592  # a lista de gols não passa daqui
+
+
+def feat_label(goals: int) -> str | None:
+    """HAT-TRICK (3), POKER (4) ou MANITA (5+); None abaixo de 3 gols."""
+    if goals >= 5:
+        return MANITA
+    return FEATS.get(goals)
+
+
+def _goals_by_side(goals: Iterable[Any], side: str) -> list[dict[str, Any]]:
+    """Gols agrupados por jogador, na ordem do primeiro gol: nome, minutos e quantidade."""
+    scorers: dict[str, dict[str, Any]] = {}
     for goal in goals:
         data = goal if isinstance(goal, dict) else goal.__dict__
         if data.get("side") != side:
             continue
         minute = f"{data['minute']}'" + (f"+{data['stoppage']}" if data.get("stoppage") else "")
-        own_goal = " (contra)" if data.get("play") == "contra" else ""
-        lines.append((minute, str(data.get("scorer_name") or "—") + own_goal))
-    return lines
+        own_goal = data.get("play") == "contra"
+        name = str(data.get("scorer_name") or "—") + (" (contra)" if own_goal else "")
+        entry = scorers.setdefault(name, {"name": name, "minutes": [], "own_goal": own_goal})
+        entry["minutes"].append(minute)
+    for entry in scorers.values():
+        entry["count"] = len(entry["minutes"])
+    return list(scorers.values())
+
+
+def _draw_scorer(draw, center_x: float, y: float, entry: dict[str, Any]) -> float:
+    """Uma linha por jogador; com 2+ gols, os minutos vão embaixo. Devolve a altura usada."""
+    face = font(30, True)
+    if entry["count"] == 1:
+        label = fit(draw, f"{entry['minutes'][0]}  {entry['name']}", face, 400)
+        width = draw.textlength(label, font=face)
+        left = center_x - (width + 36) / 2
+        _ball(draw, left + 11, y, 11)
+        draw.text((left + 32, y), label, font=face, fill="white", anchor="lm")
+        return 40
+    feat = None if entry["own_goal"] else feat_label(entry["count"])
+    tag = feat or f"×{entry['count']}"
+    tag_face = font(18 if feat else 24, True)
+    tag_width = draw.textlength(tag, font=tag_face) + (22 if feat else 0)
+    name = fit(draw, entry["name"], face, 400 - tag_width - 12)
+    width = draw.textlength(name, font=face) + 32 + 12 + tag_width
+    left = center_x - width / 2
+    _ball(draw, left + 11, y, 11)
+    draw.text((left + 32, y), name, font=face, fill="white", anchor="lm")
+    tag_left = left + 32 + draw.textlength(name, font=face) + 12
+    if feat:
+        draw.rounded_rectangle((tag_left, y - 14, tag_left + tag_width, y + 14), 14, fill=GOLD)
+        draw.text(
+            (tag_left + tag_width / 2, y + 1), feat, font=tag_face, fill=(20, 20, 24), anchor="mm"
+        )
+    else:
+        draw.text((tag_left, y), tag, font=tag_face, fill=GOLD, anchor="lm")
+    minutes = fit(draw, " · ".join(entry["minutes"]), font(20), 400)
+    draw.text((center_x, y + 28), minutes, font=font(20), fill=MUTED, anchor="mm")
+    return 66
+
+
+def _draw_scorers(draw, center_x: float, entries: list[dict[str, Any]], y: float = 458) -> None:
+    for index, entry in enumerate(entries):
+        height = 40 if entry["count"] == 1 else 66
+        if index and y + height > SCORERS_BOTTOM:
+            rest = sum(item["count"] for item in entries[index:])
+            text_center(draw, (center_x, y), f"+{rest} gols", 24, False, MUTED)
+            return
+        y += _draw_scorer(draw, center_x, y, entry)
 
 
 def _ball(draw: ImageDraw.ImageDraw, x: float, y: float, radius: float) -> None:
@@ -131,18 +190,7 @@ def render_score_card(
 
     goal_list = list(goals)
     for side, center_x in (("home", 230), ("away", 970)):
-        rows = _goals_by_side(goal_list, side)
-        shown = rows[:MAX_SCORERS]
-        y = 458
-        for minute, scorer in shown:
-            label = fit(draw, f"{minute}  {scorer}", font(30, True), 400)
-            width = draw.textlength(label, font=font(30, True))
-            left = center_x - (width + 36) / 2
-            _ball(draw, left + 11, y, 11)
-            draw.text((left + 32, y), label, font=font(30, True), fill="white", anchor="lm")
-            y += 40
-        if len(rows) > MAX_SCORERS:
-            text_center(draw, (center_x, y), f"+{len(rows) - MAX_SCORERS} gols", 24, False, MUTED)
+        _draw_scorers(draw, center_x, _goals_by_side(goal_list, side))
 
     draw.rectangle((0, HEIGHT - 10, WIDTH // 2, HEIGHT), fill=home_color)
     draw.rectangle((WIDTH // 2, HEIGHT - 10, WIDTH, HEIGHT), fill=away_color)
@@ -152,31 +200,15 @@ def render_score_card(
 
 # --- Versão animada ---------------------------------------------------------------------
 #
-# Mesmo layout do cartão, montado em camadas: o fundo é desenhado uma vez e cada quadro
-# só recompõe o que se mexe (escudos entrando, placar estourando, artilheiros subindo).
-# Amistoso termina com um brilho discreto passando pelo centro; campeonato tem poeira
-# dourada caindo no fim e o selo de campeão no vencedor.
+# Mesmo layout do cartão, montado em camadas. O primeiro quadro já traz o placar
+# completo (escudos, gols, artilheiros e o selo de campeão): no Discord, quem não carrega
+# o GIF vê só esse quadro. A animação vem por cima: um brilho discreto passando pelo
+# centro no amistoso e poeira dourada caindo no campeonato.
 
 GIF_SCALE = 0.8  # 960 × 504: cabe folgado no limite de anexo do Discord
 FRAME_MS = 45
 HOLD_MS = 4000
-INTRO_FRAMES = 12  # escudos e nomes
-SCORE_FRAMES = (8, 18)  # placar: começa e termina
-SCORER_STEP = 3  # quadros entre um artilheiro e o próximo
-OUTRO_FRAMES = 16  # brilho / selo de campeão
-
-
-def _ease(value: float) -> float:
-    value = min(1.0, max(0.0, value))
-    return 1 - (1 - value) ** 3
-
-
-def _faded(layer: Image.Image, alpha: float) -> Image.Image:
-    if alpha >= 1:
-        return layer
-    faded = layer.copy()
-    faded.putalpha(layer.getchannel("A").point(lambda value: int(value * max(0.0, alpha))))
-    return faded
+EFFECT_FRAMES = 22  # brilho/poeira por cima do placar já pronto
 
 
 def _layer() -> Image.Image:
@@ -225,33 +257,15 @@ def _team_layer(team: dict[str, Any], center_x: int) -> Image.Image:
 
 
 def _scorer_layers(goals: list[Any]) -> list[tuple[Image.Image, int]]:
-    """Uma camada por artilheiro, na ordem em que aparecem (alternando os lados)."""
+    """Os artilheiros de cada lado numa camada (gols do mesmo jogador agrupados)."""
     rows: list[tuple[Image.Image, int]] = []
-    for side, center_x in (("home", 230), ("away", 970)):
+    for order, (side, center_x) in enumerate((("home", 230), ("away", 970))):
         entries = _goals_by_side(goals, side)
-        y = 458
-        for index, (minute, scorer) in enumerate(entries[:MAX_SCORERS]):
-            layer = _layer()
-            draw = ImageDraw.Draw(layer)
-            label = fit(draw, f"{minute}  {scorer}", font(30, True), 400)
-            width = draw.textlength(label, font=font(30, True))
-            left = center_x - (width + 36) / 2
-            _ball(draw, left + 11, y, 11)
-            draw.text((left + 32, y), label, font=font(30, True), fill="white", anchor="lm")
-            rows.append((layer, index * 2 + (0 if side == "home" else 1)))
-            y += 40
-        if len(entries) > MAX_SCORERS:
-            layer = _layer()
-            text_center(
-                ImageDraw.Draw(layer),
-                (center_x, y),
-                f"+{len(entries) - MAX_SCORERS} gols",
-                24,
-                False,
-                MUTED,
-            )
-            rows.append((layer, MAX_SCORERS * 2 + (0 if side == "home" else 1)))
-    rows.sort(key=lambda row: row[1])
+        if not entries:
+            continue
+        layer = _layer()
+        _draw_scorers(ImageDraw.Draw(layer), center_x, entries)
+        rows.append((layer, order))
     return rows
 
 
@@ -340,43 +354,29 @@ def render_score_gif(
         champion = _layer()
         pill(ImageDraw.Draw(champion), (230 if home_won else 970, 140), "CAMPEÃO", 24, GOLD)
 
-    scorers_start = SCORE_FRAMES[1]
-    scorers_end = scorers_start + SCORER_STEP * len(scorers) + 4
-    total = scorers_end + OUTRO_FRAMES
+    # O placar inteiro já no primeiro quadro (quem não carrega o GIF vê ele); a animação
+    # só passa por cima: brilho no amistoso, poeira dourada no campeonato.
+    content = _layer()
+    for layer, _ in teams:
+        content.alpha_composite(layer)
+    content.alpha_composite(dash)
+    for text, center, fill in digits:
+        content.alpha_composite(_digit_layer(text, center, 1.0, fill))
+    content.alpha_composite(status)
+    for layer, _ in scorers:
+        content.alpha_composite(layer)
+    if champion is not None:
+        content.alpha_composite(champion)
+    total = EFFECT_FRAMES
+    dust_seed = f"{home.get('team_name')}{away.get('team_name')}"
     frames: list[Image.Image] = []
     for frame in range(total):
         image = background.copy()
-        if championship and frame >= scorers_end:
-            dust_seed = f"{home.get('team_name')}{away.get('team_name')}"
-            image.alpha_composite(_dust(frame - scorers_end, dust_seed))
-        intro = _ease(frame / INTRO_FRAMES)
-        for layer, direction in teams:
-            shifted = _layer()
-            shifted.alpha_composite(_faded(layer, intro), (round(direction * 140 * (1 - intro)), 0))
-            image.alpha_composite(shifted)
-        image.alpha_composite(_faded(dash, _ease((frame - 6) / 6)))
-        start, end = SCORE_FRAMES
-        for index, (text, center, fill) in enumerate(digits):
-            progress = (frame - start - index * 3) / (end - start - 3)
-            if progress <= 0:
-                continue
-            eased = _ease(progress)
-            scale = 1 + 0.6 * (1 - eased)
-            image.alpha_composite(_faded(_digit_layer(text, center, scale, fill), eased))
-        image.alpha_composite(_faded(status, _ease((frame - end) / 6)))
-        for index, (layer, _) in enumerate(scorers):
-            progress = _ease((frame - scorers_start - index * SCORER_STEP) / 5)
-            if progress <= 0:
-                continue
-            moved = _layer()
-            moved.alpha_composite(_faded(layer, progress), (0, round(14 * (1 - progress))))
-            image.alpha_composite(moved)
-        outro = (frame - scorers_end) / OUTRO_FRAMES
-        if 0 <= outro <= 1:
-            if not championship:
-                image.alpha_composite(_sweep(outro))
-        if champion is not None:
-            image.alpha_composite(_faded(champion, _ease((frame - scorers_end) / 8)))
+        if championship:
+            image.alpha_composite(_dust(frame, dust_seed))
+        image.alpha_composite(content)
+        if not championship:
+            image.alpha_composite(_sweep(frame / (total - 1)))
         frames.append(
             image.resize(
                 (round(WIDTH * GIF_SCALE), round(HEIGHT * GIF_SCALE)), Image.LANCZOS

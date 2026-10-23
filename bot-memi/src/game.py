@@ -179,7 +179,8 @@ def list_owned_players(
             SELECT p.id, COALESCE(NULLIF(p.display_name, ''), p.name) AS name,
                    p.club_name, p.game_position, p.photo_path, p.overall_source,
                    {effective_overall} AS overall,
-                   COALESCE(b.balls, 0) AS balls, o.acquired_at
+                   COALESCE(b.balls, 0) AS balls, o.acquired_at,
+                   o.locked, o.pack_origin, o.pack_locked_until
             FROM player_ownership AS o
             JOIN players AS p ON p.id = o.player_id
             LEFT JOIN player_balls AS b ON b.player_id = p.id
@@ -854,6 +855,28 @@ def resolve_player(
         return partial[0], []
     partial.sort(key=lambda player: -(player.get("overall") or 0))
     return None, partial
+
+
+def top_player_cards(database_path=DATABASE_PATH, limit: int = 100) -> list[dict[str, Any]]:
+    """Os melhores jogadores da roleta com os dados da carta (para o `mm!topi`)."""
+    with connect(database_path) as connection:
+        rows = connection.execute(
+            f"""
+            SELECT p.id, p.name, p.display_name, p.club_name, p.nationality,
+                   p.game_position, {GAME_OVERALL_SQL} AS overall, p.overall_source,
+                   p.photo_path, COALESCE(b.balls, 0) AS balls,
+                   o.discord_user_id AS owner_id, owner.display_name AS owner_name
+            FROM players AS p
+            LEFT JOIN player_balls AS b ON b.player_id = p.id
+            LEFT JOIN player_ownership AS o ON o.player_id = p.id
+            LEFT JOIN game_users AS owner ON owner.discord_user_id = o.discord_user_id
+            WHERE {POOL_SQL}
+            ORDER BY overall DESC, COALESCE(NULLIF(p.display_name, ''), p.name) COLLATE NOCASE, p.id
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    return [dict(row) for row in rows]
 
 
 def find_player(

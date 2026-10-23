@@ -15,8 +15,8 @@ from src.transactions import (
     dismiss_player,
     give_players,
     market_values,
-    player_market_value,
     sale_quote,
+    sale_value,
     sell_players,
     settle_trade,
     trade_details,
@@ -69,7 +69,7 @@ class SaleTests(DatabaseCase):
     def test_dismissal_refunds_market_value_and_releases_player(self):
         player_id = self.add_owned_player(100, "Liberado", overall=99)
         refund = dismiss_player(100, player_id, self.database_path)
-        self.assertEqual(refund, round(100_000_000 * 0.0005))
+        self.assertEqual(refund, sale_value(99))
         self.assertEqual(self.memilets(100), refund)
         self.assertIsNone(self.owner(player_id))
 
@@ -112,11 +112,31 @@ class SaleTests(DatabaseCase):
         with self.assertRaises(TransactionError):
             sale_quote(100, [], self.database_path)
 
-    def test_market_value_fallback_matches_documented_curve(self):
-        self.assertEqual(player_market_value(1, None), 5_000)
-        self.assertEqual(player_market_value(99, None), 100_000_000)
+    def test_card_value_follows_the_card_overall(self):
+        self.assertEqual(sale_value(60), 400)
+        values = [sale_value(overall) for overall in range(40, 101)]
+        self.assertEqual(values, sorted(values))  # carta melhor sempre vale mais
+        self.assertGreater(sale_value(90), 10_000)
         player_id = self.add_owned_player(100, "Valor", overall=99)
-        self.assertEqual(market_values([player_id], self.database_path), {player_id: 50_000})
+        self.assertEqual(
+            market_values([player_id], self.database_path), {player_id: sale_value(99)}
+        )
+
+    def test_legend_without_market_value_is_worth_more_than_a_rich_89(self):
+        with connect(self.database_path) as connection:
+            legend = connection.execute(
+                "INSERT INTO players (name, game_position, overall, overall_source, "
+                "activity_status, phase2_candidate) VALUES ('Eusébio', 'CA', 97, 'Lenda', "
+                "'active', 0)"
+            ).lastrowid
+            star = connection.execute(
+                "INSERT INTO players (name, game_position, overall, market_value_eur, "
+                "activity_status, phase2_candidate) VALUES ('Craque', 'CA', 89, 180000000, "
+                "'active', 0)"
+            ).lastrowid
+        values = market_values([legend, star], self.database_path)
+        self.assertEqual(values[legend], sale_value(97))
+        self.assertGreater(values[legend], values[star] * 2)
 
 
 class GiftTests(DatabaseCase):
@@ -250,23 +270,15 @@ class TradeInterfaceTests(DatabaseCase, unittest.IsolatedAsyncioTestCase):
         self.assertIn("Haaland", embed.fields[1].value)
         self.assertIn("Não identifiquei", cog._prefill(builder, "Ninguém por Haaland"))
 
-    async def test_sale_picker_lists_values_and_quotes_selection(self):
-        from src.cogs.trades import SalePickerView
+    async def test_sale_panel_lists_values_and_quotes_selection(self):
+        from src.cogs.trades import SalePanelView
 
-        players = [
-            {
-                "id": self.add_owned_player(100, f"Reserva {n}", 60 + n),
-                "name": f"Reserva {n}",
-                "overall": 60 + n,
-                "game_position": "CA",
-                "club_name": None,
-            }
-            for n in range(3)
-        ]
-        view = SalePickerView(100, players, self.database_path)
-        select = view.children[0]
+        ids = [self.add_owned_player(100, f"Reserva {n}", 60 + n) for n in range(3)]
+        view = SalePanelView(100, self.database_path)
+        select = view.children[2]  # raridade, posição e então os jogadores
         self.assertIn("vende por", select.options[0].description)
-        view.selected = {players[0]["id"], players[1]["id"]}
+        view.selected = {ids[0], ids[1]}
+        view._build()
         embed = view.embed()
         self.assertIn("Vender 2 jogadores", embed.title)
         self.assertIn("→", embed.fields[1].value)

@@ -38,6 +38,7 @@ from src.perks import BASE_DAILY_COOLDOWN, MIN_DAILY_COOLDOWN
 from src.rolls import claim_roll_offer, roll_player
 from src.teams import FORMATIONS, TeamError, ensure_team, get_team, scale_player, set_team_field
 from src.tower import TowerError, build_floor, destroy_preview, destroy_tower, tower_status
+from src.transactions import sell_players
 
 NOW = datetime(2026, 10, 22, 12, 10, tzinfo=timezone.utc)
 
@@ -225,7 +226,7 @@ class CrateTests(Case):
         self.assertEqual([prize.rarity for prize in result.prizes], ["basico", "epico", "epico"])
         self.assertEqual(result.memilets, 0)
 
-    def test_instant_rolls_only_last_for_the_current_cycle(self):
+    def test_crate_rolls_are_saved_and_do_not_expire(self):
         self.add_player("Atacante")
         self.give(CRATE_PRICE)
         with (
@@ -236,11 +237,9 @@ class CrateTests(Case):
             result = open_crate(100, "Pessoa", self.database_path, now=NOW, rng=random.Random(5))
         rolls = result.prizes[0].amount
         status = get_account_status(100, "Pessoa", self.database_path, now=NOW)
-        self.assertEqual(status.roll_capacity, 10 + rolls)
-        later = get_account_status(
-            100, "Pessoa", self.database_path, now=NOW + timedelta(minutes=30)
-        )
-        self.assertEqual(later.roll_capacity, 10)
+        self.assertEqual((status.roll_capacity, status.roll_tokens), (10, rolls))
+        later = get_account_status(100, "Pessoa", self.database_path, now=NOW + timedelta(days=3))
+        self.assertEqual(later.roll_tokens, rolls)
 
     def test_floor_four_and_legendary_discount_lower_the_price(self):
         self.give(10_000)
@@ -290,6 +289,44 @@ class TowerTests(Case):
         with self.assertRaises(TowerError):
             build_floor(100, "Pessoa", 12, self.database_path)
         self.assertEqual(self.wallet(), 10_000)
+
+    def test_floor_twelve_needs_all_eleven_starters(self):
+        players = self.full_team()
+        with connect(self.database_path) as connection:
+            connection.execute("DELETE FROM team_lineups WHERE player_id = ?", (players[-1],))
+        self.give(10_000)
+        with self.assertRaises(TowerError) as error:
+            build_floor(100, "Pessoa", 12, self.database_path)
+        self.assertIn("10/11", str(error.exception))
+
+    def test_destroying_does_not_reroll_the_floor_twelve_ball(self):
+        self.full_team()
+        self.give(10_000)
+        first = build_floor(100, "Pessoa", 12, self.database_path, rng=random.Random(1))
+        for seed in range(2, 22):
+            destroy_tower(100, self.database_path)
+            again = build_floor(100, "Pessoa", 12, self.database_path, rng=random.Random(seed))
+            self.assertEqual(again.ball_player["id"], first.ball_player["id"])
+        with connect(self.database_path) as connection:
+            balls = connection.execute("SELECT player_id, balls FROM player_balls").fetchall()
+        self.assertEqual([tuple(row) for row in balls], [(first.ball_player["id"], 1)])
+        self.assertEqual(self.wallet(), 10_000 - 1_000)
+
+    def test_new_draw_only_if_the_drawn_player_left(self):
+        self.full_team()
+        self.give(10_000)
+        first = build_floor(100, "Pessoa", 12, self.database_path, rng=random.Random(1))
+        destroy_tower(100, self.database_path)
+        with connect(self.database_path) as connection:
+            position = connection.execute(
+                "SELECT game_position FROM players WHERE id = ?", (first.ball_player["id"],)
+            ).fetchone()[0]
+        sell_players(100, [first.ball_player["id"]], self.database_path)
+        reserve = self.add_player("Reserva", position, 80)
+        claim_player(reserve, 100, self.database_path)
+        scale_player(100, reserve, self.database_path)
+        again = build_floor(100, "Pessoa", 12, self.database_path, rng=random.Random(3))
+        self.assertNotEqual(again.ball_player["id"], first.ball_player["id"])
 
 
 class RollPerkTests(Case):

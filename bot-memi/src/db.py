@@ -175,7 +175,12 @@ CREATE TABLE IF NOT EXISTS player_ownership (
     player_id INTEGER PRIMARY KEY REFERENCES players(id) ON DELETE CASCADE,
     discord_user_id TEXT NOT NULL REFERENCES game_users(discord_user_id)
         ON DELETE CASCADE,
-    acquired_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    acquired_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- 1 = protegido pelo dono (não aparece em nenhuma venda).
+    locked INTEGER NOT NULL DEFAULT 0 CHECK (locked IN (0, 1)),
+    -- Veio de pacote: vende por menos e fica um tempo sem sair do elenco.
+    pack_origin INTEGER NOT NULL DEFAULT 0 CHECK (pack_origin IN (0, 1)),
+    pack_locked_until TEXT
 );
 
 CREATE TABLE IF NOT EXISTS player_balls (
@@ -327,6 +332,34 @@ CREATE TABLE IF NOT EXISTS trade_items (
 
 CREATE INDEX IF NOT EXISTS idx_trades_pending ON trades(recipient_id, status, expires_at);
 
+-- Amistosos jogados (para o mm!stats); o campeonato usa championship_fixtures.
+CREATE TABLE IF NOT EXISTS friendly_matches (
+    id INTEGER PRIMARY KEY,
+    played_at TEXT NOT NULL,
+    home_user_id TEXT NOT NULL REFERENCES game_users(discord_user_id) ON DELETE CASCADE,
+    away_user_id TEXT NOT NULL REFERENCES game_users(discord_user_id) ON DELETE CASCADE,
+    home_goals INTEGER NOT NULL,
+    away_goals INTEGER NOT NULL,
+    home_penalties INTEGER,
+    away_penalties INTEGER,
+    details_json TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_friendly_matches_home ON friendly_matches(home_user_id);
+CREATE INDEX IF NOT EXISTS idx_friendly_matches_away ON friendly_matches(away_user_id);
+
+-- Galeria do mm!img: a principal é players.photo_path; a original fica como 'original'.
+CREATE TABLE IF NOT EXISTS player_images (
+    id INTEGER PRIMARY KEY,
+    player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+    image_path TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'custom' CHECK (source IN ('original', 'custom')),
+    added_by TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_player_images_player ON player_images(player_id);
+
 CREATE TABLE IF NOT EXISTS championships (
     id INTEGER PRIMARY KEY,
     guild_id TEXT NOT NULL,
@@ -423,7 +456,9 @@ CREATE TABLE IF NOT EXISTS tower_ball_grants (
     discord_user_id TEXT NOT NULL REFERENCES game_users(discord_user_id)
         ON DELETE CASCADE,
     player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
-    granted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    granted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- 0 = a torre foi destruída e a bola saiu; ao reconstruir, ela volta para este jogador.
+    active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1))
 );
 
 CREATE TABLE IF NOT EXISTS mission_progress (
@@ -557,6 +592,27 @@ def initialize_database(database_path: str | Path = DATABASE_PATH) -> None:
                 )
 
         _migrate_roll_cycle_limit(connection)
+        ownership_columns = {
+            row["name"] for row in connection.execute("PRAGMA table_info(player_ownership)")
+        }
+        ownership_migrations = {
+            "locked": "INTEGER NOT NULL DEFAULT 0 CHECK (locked IN (0, 1))",
+            "pack_origin": "INTEGER NOT NULL DEFAULT 0 CHECK (pack_origin IN (0, 1))",
+            "pack_locked_until": "TEXT",
+        }
+        for column, definition in ownership_migrations.items():
+            if column not in ownership_columns:
+                connection.execute(
+                    f"ALTER TABLE player_ownership ADD COLUMN {_identifier(column)} {definition}"
+                )
+        grant_columns = {
+            row["name"] for row in connection.execute("PRAGMA table_info(tower_ball_grants)")
+        }
+        if "active" not in grant_columns:
+            connection.execute(
+                "ALTER TABLE tower_ball_grants ADD COLUMN active INTEGER NOT NULL DEFAULT 1 "
+                "CHECK (active IN (0, 1))"
+            )
         team_columns = {row["name"] for row in connection.execute("PRAGMA table_info(game_teams)")}
         for column in (
             "coach_name",

@@ -338,11 +338,17 @@ class TeamLayout(discord.ui.LayoutView):
             label="Editar escalação", emoji="✏️", style=discord.ButtonStyle.primary
         )
         edit.callback = self._edit
+        customize = discord.ui.Button(
+            label="Personalizar", emoji="🎨", style=discord.ButtonStyle.secondary
+        )
+        customize.callback = self._customize
+        tactics = discord.ui.Button(label="Tática", emoji="📋", style=discord.ButtonStyle.secondary)
+        tactics.callback = self._tactics
         container = discord.ui.Container(
             discord.ui.TextDisplay(f"## {team['team_name']}"),
             discord.ui.MediaGallery(discord.MediaGalleryItem("attachment://escalacao.png")),
             discord.ui.TextDisplay(team_summary(team, lineup, database_path)),
-            discord.ui.ActionRow(card, edit),
+            discord.ui.ActionRow(card, edit, tactics, customize),
             accent_colour=discord.Color.from_str(team["color"]),
         )
         self.add_item(container)
@@ -367,6 +373,272 @@ class TeamLayout(discord.ui.LayoutView):
         builder.message = await interaction.followup.send(
             embed=builder.embed(team, lineup), file=file, view=builder, wait=True
         )
+
+    async def _tactics(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != self.owner.id:
+            await interaction.response.send_message(
+                "Use `mm!tatica` para a tática do seu time.", ephemeral=True
+            )
+            return
+        panel = TacticsView(self.owner, self.database_path)
+        await interaction.response.defer()
+        panel.message = await interaction.followup.send(
+            embed=panel.embed(), file=await panel.file(), view=panel, wait=True
+        )
+
+    async def _customize(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != self.owner.id:
+            await interaction.response.send_message(
+                "Use `mm!personalizar` para personalizar o seu time.", ephemeral=True
+            )
+            return
+        await interaction.response.defer()
+        await open_customize(self.owner, self.database_path, interaction.followup.send)
+
+
+async def open_customize(owner: discord.abc.User, database_path, send) -> None:
+    """Abre o painel de personalização (`src.cogs.customize`) com a prévia do clube."""
+    from src.cogs.customize import CustomizeView
+
+    panel = CustomizeView(owner, database_path)
+    panel.message = await send(embed=panel.embed(), file=await panel.file(), view=panel, wait=True)
+
+
+STYLE_HINTS = {
+    "balanced": "Sem bônus nem riscos",
+    "attack": "Cria mais chances, mas se expõe atrás",
+    "counter": "Cria menos, converte melhor e cede menos",
+}
+ROLE_COLUMNS = {
+    "capitao": "captain_player_id",
+    "falta": "free_kick_player_id",
+    "penalti": "penalty_player_id",
+}
+ROLE_HINTS = {
+    "capitao": "Dá um bônus de controle do meio-campo",
+    "falta": "Bate as faltas perigosas",
+    "penalti": "Bate os pênaltis do jogo e abre a disputa",
+}
+
+
+class TacticsView(discord.ui.View):
+    """`mm!tatica` em menus: formação, estilo, capitão e cobradores, com a imagem do time."""
+
+    def __init__(self, owner: discord.abc.User, database_path):
+        super().__init__(timeout=600)
+        self.owner = owner
+        self.database_path = database_path
+        self.role = "capitao"
+        self.pending_formation: str | None = None
+        self.notice = ""
+        self.message: discord.Message | None = None
+        self._build()
+
+    def _state(self) -> tuple[dict, list[dict]]:
+        return get_team(self.owner.id, self.database_path), get_lineup(
+            self.owner.id, self.database_path
+        )
+
+    def _build(self) -> None:
+        self.clear_items()
+        team, lineup = self._state()
+        formation = discord.ui.Select(
+            placeholder=f"Formação: {team['formation']}",
+            options=[
+                discord.SelectOption(
+                    label=name,
+                    value=name,
+                    description=" ".join(FORMATIONS[name][1:])[:100],
+                    default=name == team["formation"],
+                )
+                for name in FORMATIONS
+            ],
+            row=0,
+        )
+        formation.callback = self._formation
+        self.add_item(formation)
+
+        style = discord.ui.Select(
+            placeholder=f"Estilo: {STYLE_LABELS[team['style']]}",
+            options=[
+                discord.SelectOption(
+                    label=STYLE_LABELS[key].capitalize(),
+                    value=key,
+                    description=STYLE_HINTS[key],
+                    default=key == team["style"],
+                )
+                for key in STYLE_LABELS
+            ],
+            row=1,
+        )
+        style.callback = self._style
+        self.add_item(style)
+
+        names = {int(player["id"]): player["name"] for player in lineup}
+        role = discord.ui.Select(
+            placeholder="Função",
+            options=[
+                discord.SelectOption(
+                    label=ROLE_LABELS[key],
+                    value=key,
+                    description=(
+                        f"{names.get(team[ROLE_COLUMNS[key]] or 0, 'não definido')} · "
+                        f"{ROLE_HINTS[key]}"
+                    )[:100],
+                    emoji={"capitao": "©️", "falta": "🎯", "penalti": "⚽"}[key],
+                    default=key == self.role,
+                )
+                for key in ROLE_COLUMNS
+            ],
+            row=2,
+        )
+        role.callback = self._choose_role
+        self.add_item(role)
+
+        current = team[ROLE_COLUMNS[self.role]]
+        if lineup:
+            players = discord.ui.Select(
+                placeholder=f"Quem será o {ROLE_LABELS[self.role].lower()}?",
+                options=[
+                    discord.SelectOption(
+                        label=f"{player.get('slot_overall') or player['effective_overall']} · "
+                        f"{player['name']}"[:100],
+                        value=str(player["id"]),
+                        description=player["position"],
+                        default=int(player["id"]) == (current or 0),
+                    )
+                    for player in lineup
+                ],
+                row=3,
+            )
+            players.callback = self._choose_player
+        else:
+            players = discord.ui.Select(
+                placeholder="Escale o time primeiro (Editar escalação)",
+                options=[discord.SelectOption(label="—", value="none")],
+                disabled=True,
+                row=3,
+            )
+        self.add_item(players)
+
+        if self.pending_formation:
+            force = discord.ui.Button(
+                label=f"Trocar para {self.pending_formation} e reescalar",
+                emoji="🔁",
+                style=discord.ButtonStyle.danger,
+                row=4,
+            )
+            force.callback = self._force_formation
+            self.add_item(force)
+        edit = discord.ui.Button(label="Editar escalação", emoji="✏️", row=4)
+        edit.callback = self._edit
+        self.add_item(edit)
+        done = discord.ui.Button(
+            label="Concluir", emoji="✅", style=discord.ButtonStyle.success, row=4
+        )
+        done.callback = self._done
+        self.add_item(done)
+
+    def embed(self) -> discord.Embed:
+        team, lineup = self._state()
+        names = {int(player["id"]): player["name"] for player in lineup}
+        embed = discord.Embed(
+            title=f"Tática · {team['team_name']}",
+            description=self.notice or None,
+            color=discord.Color.from_str(team["color"]),
+        )
+        embed.add_field(name="Formação", value=team["formation"])
+        embed.add_field(name="Estilo", value=STYLE_LABELS[team["style"]])
+        embed.add_field(name="Titulares", value=f"{len(lineup)}/11")
+        for key, column in ROLE_COLUMNS.items():
+            embed.add_field(
+                name=ROLE_LABELS[key], value=names.get(team[column] or 0, "não definido")
+            )
+        embed.set_image(url="attachment://escalacao.png")
+        embed.set_footer(text="Escolha nos menus · a imagem mostra o time na formação atual")
+        return embed
+
+    async def file(self) -> discord.File:
+        team, lineup = self._state()
+        return await lineup_file(team, lineup)
+
+    async def refresh(self, interaction: discord.Interaction) -> None:
+        self._build()
+        await interaction.response.defer()
+        await interaction.edit_original_response(
+            embed=self.embed(), attachments=[await self.file()], view=self
+        )
+        self.notice = ""
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner.id:
+            await interaction.response.send_message(
+                "Essa tática não é sua. Use `mm!tatica` para a do seu time.", ephemeral=True
+            )
+            return False
+        return True
+
+    async def _formation(self, interaction: discord.Interaction) -> None:
+        name = interaction.data["values"][0]
+        self.pending_formation = None
+        try:
+            set_formation(self.owner.id, name, self.database_path)
+            self.notice = f"✅ Formação: **{name}**."
+        except TeamError:
+            self.pending_formation = name
+            self.notice = (
+                f"⚠️ A escalação atual não cabe no **{name}**. Use o botão abaixo para trocar "
+                "e reescalar automaticamente com quem mais rende em cada vaga."
+            )
+        await self.refresh(interaction)
+
+    async def _force_formation(self, interaction: discord.Interaction) -> None:
+        name = self.pending_formation
+        self.pending_formation = None
+        set_formation(self.owner.id, name, self.database_path, drop_incompatible=True)
+        auto_fill_lineup(self.owner.id, self.database_path)
+        self.notice = f"✅ Formação **{name}** com a escalação refeita."
+        await self.refresh(interaction)
+
+    async def _style(self, interaction: discord.Interaction) -> None:
+        key = interaction.data["values"][0]
+        set_team_style(self.owner.id, key, self.database_path)
+        self.notice = f"✅ Estilo: **{STYLE_LABELS[key]}** ({STYLE_HINTS[key].lower()})."
+        await self.refresh(interaction)
+
+    async def _choose_role(self, interaction: discord.Interaction) -> None:
+        self.role = interaction.data["values"][0]
+        await self.refresh(interaction)
+
+    async def _choose_player(self, interaction: discord.Interaction) -> None:
+        player_id = int(interaction.data["values"][0])
+        set_team_role(self.owner.id, self.role, player_id, self.database_path)
+        name = next((p["name"] for p in self._state()[1] if int(p["id"]) == player_id), "jogador")
+        self.notice = f"✅ {ROLE_LABELS[self.role]}: **{name}**."
+        await self.refresh(interaction)
+
+    async def _edit(self, interaction: discord.Interaction) -> None:
+        builder = LineupBuilderView(self.owner, self.database_path)
+        team, lineup = builder._state()
+        await interaction.response.defer()
+        builder.message = await interaction.followup.send(
+            embed=builder.embed(team, lineup),
+            file=await lineup_file(team, lineup),
+            view=builder,
+            wait=True,
+        )
+
+    async def _done(self, interaction: discord.Interaction) -> None:
+        self.stop()
+        self.notice = ""
+        await interaction.response.edit_message(embed=self.embed(), view=None)
+
+    async def on_timeout(self) -> None:
+        if self.message:
+            try:
+                await self.message.edit(view=None)
+            except discord.HTTPException:
+                pass
 
 
 class TeamCog(commands.Cog):
@@ -467,6 +739,16 @@ class TeamCog(commands.Cog):
             file=await lineup_file(team, lineup),
             mention_author=False,
         )
+
+    @commands.command(name="personalizar", aliases=["customizar", "visual", "editartime"])
+    async def customize(self, context: commands.Context) -> None:
+        """Painel com nome, cor, escudo e cosméticos do time, com prévia ao vivo."""
+        ensure_team(context.author.id, context.author.display_name, self.database_path)
+
+        async def send(wait: bool = False, **kwargs):
+            return await context.reply(mention_author=False, **kwargs)
+
+        await open_customize(context.author, self.database_path, send)
 
     @commands.command(name="escalar", aliases=["escalacao", "lineup"])
     async def scale(
@@ -571,27 +853,12 @@ class TeamCog(commands.Cog):
             except TeamError as error:
                 await context.reply(str(error), mention_author=False)
                 return
-        team = get_team(context.author.id, self.database_path)
-        lineup = get_lineup(context.author.id, self.database_path)
-        names = {int(player["id"]): player["name"] for player in lineup}
-        embed = discord.Embed(
-            title=f"Tática · {team['team_name']}",
-            description=notice or None,
-            color=discord.Color.from_str(team["color"]),
+        panel = TacticsView(context.author, self.database_path)
+        panel.notice = notice
+        panel.message = await context.reply(
+            embed=panel.embed(), file=await panel.file(), view=panel, mention_author=False
         )
-        embed.add_field(name="Formação", value=team["formation"])
-        embed.add_field(name="Estilo", value=STYLE_LABELS[team["style"]])
-        embed.add_field(name="Titulares", value=f"{len(lineup)}/11")
-        for column, label in (
-            ("captain_player_id", "Capitão"),
-            ("free_kick_player_id", "Cobrador de falta"),
-            ("penalty_player_id", "Cobrador de pênalti"),
-        ):
-            embed.add_field(name=label, value=names.get(team[column] or 0, "não definido"))
-        embed.set_footer(
-            text="mm!tatica formacao 4-3-3 · estilo ataque · capitao <nome> · falta <nome> · penalti <nome>"
-        )
-        await context.reply(embed=embed, mention_author=False)
+        panel.notice = ""
 
 
 # Funções táticas aceitas (sem acento) e a coluna correspondente em set_team_role.

@@ -9,7 +9,7 @@ from typing import Any
 import discord
 
 from src.accents import rarity_color
-from src.card_image import render_player_card
+from src.card_image import animated_photo, render_player_card, render_player_card_gif
 from src.ratings import rarity_label
 
 
@@ -17,7 +17,16 @@ def player_label(player: dict[str, Any]) -> str:
     return str(player.get("display_name") or player.get("name") or "—")
 
 
+def card_filename(player: dict[str, Any]) -> str:
+    """`carta.gif` quando a foto principal é um GIF animado; senão `carta.png`."""
+    return "carta.gif" if animated_photo(player) else "carta.png"
+
+
 async def card_file(player: dict[str, Any]) -> discord.File:
+    if card_filename(player) == "carta.gif":
+        animated = await asyncio.to_thread(render_player_card_gif, player)
+        if animated is not None:
+            return discord.File(animated, filename="carta.gif")
     image = await asyncio.to_thread(render_player_card, player)
     return discord.File(image, filename="carta.png")
 
@@ -42,6 +51,10 @@ def card_embed(
         lines.insert(1, "✅ Titular" + (f" como {slot}" if natural and slot != natural else ""))
     if player.get("balls"):
         lines.append(f"⚽ {player['balls']}/10 bolas")
+    if player.get("locked"):
+        lines.append("🔒 Protegido (não aparece em vendas)")
+    if player.get("pack_origin"):
+        lines.append("📦 Veio de pacote: vende por 25% do valor")
     if "owner_name" in player:
         lines.append(f"🔒 Contratado por **{owner}**" if owner else "🟢 Livre para contratar")
     embed = discord.Embed(
@@ -49,7 +62,7 @@ def card_embed(
         description="\n".join(lines),
         color=color or rarity_color(overall),
     )
-    embed.set_image(url="attachment://carta.png")
+    embed.set_image(url=f"attachment://{card_filename(player)}")
     if footer:
         embed.set_footer(text=footer)
     return embed
