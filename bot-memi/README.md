@@ -286,6 +286,11 @@ O FUT.AE é um módulo do MeMi BOT, não um bot separado. O menu geral continua 
 - `mm!pacote` dá uma carta livre do mercado (nunca Base); carta de pacote vende por 25%
   e fica 7 dias sem poder ser vendida, doada ou trocada.
 - `mm!topi` mostra o top dos jogadores em cartas (◀ ▶ e lista).
+- `mm!semfoto [meus]` mostra os jogadores sem foto, do maior overall para o menor, um
+  por vez: **📷 Enviar foto** salva a imagem (já vira a foto da carta) e passa para o
+  próximo. A primeira foto de um jogador sem foto é livre para todos; trocar ou apagar
+  continua só com o dono ou a moderação. As cartas do `mm!elenco` e do `mm!topi` têm o
+  botão **🖼️ Fotos**, e a galeria do `mm!img` tem **📷 Adicionar**.
 - `mm!stats [@pessoa]` mostra jogos, V/E/D, aproveitamento, gols, maior vitória, forma,
   artilheiros e títulos, com filtros por tipo (campeonato/amistoso), período e rival.
   Amistosos passam a ser guardados (`friendly_matches`) a partir desta versão.

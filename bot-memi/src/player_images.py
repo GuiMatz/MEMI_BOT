@@ -13,6 +13,7 @@ Quem pode adicionar, trocar a principal e apagar: o dono do jogador ou a modera�
 
 from __future__ import annotations
 
+import os
 from io import BytesIO
 from pathlib import Path
 from typing import Any
@@ -233,3 +234,57 @@ def delete_image(
                 (original["image_path"] if original else None, player_id),
             )
     (root / row["image_path"]).unlink(missing_ok=True)
+
+
+def _photo_files(root: Path) -> set[int]:
+    """Ids que têm arquivo baixado em `players/<id>.*` (uma leitura da pasta)."""
+    folder = root / "players"
+    if not folder.is_dir():
+        return set()
+    return {
+        int(entry.name.split(".", 1)[0])
+        for entry in os.scandir(folder)
+        if entry.is_file() and entry.name.split(".", 1)[0].isdigit()
+    }
+
+
+def missing_photos(
+    database_path: str | Path = DATABASE_PATH,
+    *,
+    owner_id: int | str | None = None,
+    root: Path = PHOTO_ROOT,
+) -> tuple[list[int], int]:
+    """Jogadores do mercado sem foto, do maior overall para o menor, e o total do mercado.
+
+    Com `owner_id`, só os do elenco dessa pessoa.
+    """
+    from src.pool_cache import snapshot  # o índice do mercado importa o banco
+
+    files = _photo_files(root)
+    with connect(database_path) as connection:
+        pool = snapshot(connection, database_path)
+        paths = {
+            int(row["id"]): row["photo_path"]
+            for row in connection.execute(
+                "SELECT id, photo_path FROM players WHERE photo_path IS NOT NULL"
+            )
+        }
+        owned = None
+        if owner_id is not None:
+            owned = {
+                int(row["player_id"])
+                for row in connection.execute(
+                    "SELECT player_id FROM player_ownership WHERE discord_user_id = ?",
+                    (str(owner_id),),
+                )
+            }
+
+    def has_photo(player_id: int) -> bool:
+        if player_id in files:
+            return True
+        path = paths.get(player_id)
+        return bool(path) and _original_file(path, player_id, root) is not None
+
+    candidates = pool.ranking if owned is None else [i for i in pool.ranking if i in owned]
+    missing = [player_id for player_id in candidates if not has_photo(player_id)]
+    return missing, len(candidates)

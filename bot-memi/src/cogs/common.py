@@ -87,6 +87,7 @@ class CardPagerView(discord.ui.View):
         list_lines=None,
         line_format: Callable[[int, dict[str, Any]], str] | None = None,
         sorts: dict[str, SortOption] | None = None,
+        on_photos: Callable[[discord.Interaction, dict[str, Any]], Awaitable[None]] | None = None,
     ):
         super().__init__(timeout=300)
         self.players = players
@@ -97,6 +98,14 @@ class CardPagerView(discord.ui.View):
         self.sorts = sorts or {}
         self.sort_key = next(iter(self.sorts), None)
         self.message: discord.Message | None = None
+        if on_photos is not None:
+            photos = discord.ui.Button(label="Fotos", emoji="🖼️", row=0)
+
+            async def open_photos(interaction: discord.Interaction) -> None:
+                await on_photos(interaction, self.players[self.index])
+
+            photos.callback = open_photos
+            self.add_item(photos)
         if self.sort_key:
             self._apply_sort()
             self.sort_menu = discord.ui.Select(placeholder="Ordenar por…", row=1)
