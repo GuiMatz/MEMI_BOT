@@ -3697,6 +3697,7 @@ AJUDA_JOGO = [
             ("mm!tu", "mostra rolls restantes, claim (a cada 30 min) e daily com horário"),
             ("mm!ajuda <comando>", "explica um comando com exemplos: mm!ajuda crates"),
             ("..comando", "atalho para todos os comandos: ..roll, ..obter, ..amistoso, ..tu"),
+            ("/wish /scout /vender…", "versão com barra, que sugere o nome do jogador ao digitar"),
             ("mm!scout <nome>", "ficha de jogador, técnico, estádio, emblema, uniforme ou mascote"),
             ("mm!top [categoria]", "catálogo: jogadores, cartola, técnicos, emblemas, mascotes…"),
             ("mm!left", "jogadores e cosméticos (emblemas, uniformes…) ainda livres"),
@@ -3959,6 +3960,14 @@ class MeMiBot(commands.Bot):
         return ctx
 
     async def on_ready(self):
+        # Registra os /comandos do FUT.AE (/wish, /scout, /vender…) uma vez por execução.
+        if not getattr(self, "_barra_sincronizada", False):
+            self._barra_sincronizada = True
+            try:
+                registrados = await self.tree.sync()
+                logging.info("Comandos de barra registrados: %s", len(registrados))
+            except discord.HTTPException:
+                logging.exception("Não consegui registrar os comandos de barra.")
         await self.change_presence(activity=discord.Game(name=f"{PREFIX}help"))
         logging.info("%s v%s online como %s", BOT_NAME, versoes_bot.VERSAO_ATUAL, self.user)
 

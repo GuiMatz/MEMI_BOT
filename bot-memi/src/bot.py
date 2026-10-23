@@ -41,6 +41,14 @@ class MemiBot(commands.Bot):
         self.database_path = Path(database_path)
 
     async def on_ready(self) -> None:
+        # Registra os /comandos (/wish, /scout…) no Discord uma vez por execução.
+        if not getattr(self, "_slash_synced", False):
+            self._slash_synced = True
+            try:
+                synced = await self.tree.sync()
+                LOGGER.info("Comandos de barra registrados: %s", len(synced))
+            except discord.HTTPException:
+                LOGGER.exception("Não consegui registrar os comandos de barra.")
         LOGGER.info(
             "Bot pronto: %s (%s); message_content=%s; comandos=%s",
             self.user,

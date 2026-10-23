@@ -59,7 +59,13 @@ from src.packs import (
 )
 from src.ratings import RARITY_TIERS, rarity_label
 from src.transactions import PACK_LOCK, PACK_SALE_FACTOR
-from src.cogs.common import ConfirmView, PlayerChoiceView, ambiguity_text, intro_embed
+from src.cogs.common import (
+    ConfirmView,
+    PlayerChoiceView,
+    ambiguity_text,
+    intro_embed,
+    player_choices,
+)
 from src.game import find_player, get_wallet, register_user
 from src.missions import board, claim_rewards
 from src.inventory import INVENTORY_ITEMS, get_inventory
@@ -1260,13 +1266,15 @@ class EconomyCog(commands.Cog):
             mention_author=False,
         )
 
-    @commands.command(name="wish")
+    @commands.hybrid_command(name="wish", description="Marca um jogador na sua wish")
+    @discord.app_commands.describe(query="Nome do jogador (sugestões enquanto digita)")
     async def wish(
         self,
         context: commands.Context,
         *,
         query: str | None = None,
     ) -> None:
+        await context.defer()
         if not query:
             await self._show_wishes(context, "normal")
             return
@@ -1298,13 +1306,17 @@ class EconomyCog(commands.Cog):
         embed.set_footer(text="⭐ = Star Wish · mm!wish <nome> adiciona ou remove")
         await context.reply(embed=embed, mention_author=False)
 
-    @commands.command(name="starwish", aliases=["sw"])
+    @commands.hybrid_command(
+        name="starwish", aliases=["sw"], description="Star Wish: mais chance de o jogador vir"
+    )
+    @discord.app_commands.describe(query="Nome do jogador (sugestões enquanto digita)")
     async def star_wish(
         self,
         context: commands.Context,
         *,
         query: str | None = None,
     ) -> None:
+        await context.defer()
         if not query:
             await self._show_wishes(context, "star")
             return
@@ -1372,6 +1384,14 @@ class EconomyCog(commands.Cog):
             color=discord.Color.gold() if wish_type == "star" else discord.Color.blurple(),
         )
         await context.reply(embed=embed, mention_author=False)
+
+    @wish.autocomplete("query")
+    async def _wish_names(self, interaction: discord.Interaction, current: str):
+        return await player_choices(self.database_path, current)
+
+    @star_wish.autocomplete("query")
+    async def _star_wish_names(self, interaction: discord.Interaction, current: str):
+        return await player_choices(self.database_path, current)
 
 
 async def setup(bot: commands.Bot) -> None:

@@ -546,13 +546,36 @@ class InventoryTests(Case, unittest.IsolatedAsyncioTestCase):
         cog = EconomyCog(SimpleNamespace(database_path=self.database_path))
         author = SimpleNamespace(id=100, display_name="Pessoa A")
         edit = AsyncMock()
-        with patch.object(cog_module, "prize_gif", lambda *a, **k: b"GIF89a"):
+        from src import economy
+
+        # Sem prêmios de inventário, para a conta do que sobra ser exata.
+        plain = {"raro": ("daily_1h",), "epico": ("wish_slot",), "lendario": ("permanent_roll",)}
+        with (
+            patch.object(cog_module, "prize_gif", lambda *a, **k: b"GIF89a"),
+            patch.dict(economy.CRATE_ITEMS, plain),
+        ):
             await cog.open_all_inventory_crates(author, AsyncMock(), edit)
         fields = [f for f in edit.call_args.kwargs["embed"].fields if f.name.startswith("Caixa ")]
         self.assertEqual(len(fields), 5)
-        # O pacote fica (e uma caixa pode ter dado outro pacote de prêmio).
-        self.assertGreaterEqual(get_inventory(100, self.database_path).get("pacote", 0), 1)
+        self.assertEqual(get_inventory(100, self.database_path), {"pacote": 1})  # pacote fica
         self.assertNotIn("caixa", get_inventory(100, self.database_path))
+
+
+class PlayerChoicesTests(Case, unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        Case.setUp(self)
+
+    async def test_suggestions_match_typed_name_and_can_be_only_own_players(self):
+        from src.cogs.common import player_choices
+
+        self.add_player("Vinícius Júnior", 88, "PE")
+        self.add_player("Vinícius Souza", 70, "MC", owner=100)
+        self.add_player("Outro", 75)
+        names = [choice.value for choice in await player_choices(self.database_path, "vini")]
+        self.assertEqual(names, ["Vinícius Júnior", "Vinícius Souza"])  # sem acento também acha
+        own = await player_choices(self.database_path, "vini", owner_id=100)
+        self.assertEqual([choice.value for choice in own], ["Vinícius Souza"])
+        self.assertTrue(own[0].name.endswith(" · MC"))  # nome · overall · posição
 
 
 class ShopTests(Case, unittest.IsolatedAsyncioTestCase):

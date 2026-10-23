@@ -95,5 +95,10 @@ class DiscordBotSetupTests(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(command_prefix(bot, SimpleNamespace(content=".roll")), [])
                 for alias in ("obter", "rolls"):
                     self.assertIs(bot.get_command(alias), bot.get_command("roll"))
+                # /wish, /starwish, /scout, /vender e /proteger, com sugestões de nome.
+                self.assertEqual(
+                    {command.name for command in bot.tree.get_commands()},
+                    {"wish", "starwish", "scout", "vender", "proteger"},
+                )
             finally:
                 await bot.close()

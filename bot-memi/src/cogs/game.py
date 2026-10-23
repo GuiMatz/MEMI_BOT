@@ -19,6 +19,7 @@ from src.cogs.common import (
     ambiguity_text,
     card_embed,
     card_file,
+    player_choices,
     player_label,
 )
 from src.game import (
@@ -756,13 +757,17 @@ class GameCog(commands.Cog):
         )
         await context.reply(embed=embed, mention_author=False)
 
-    @commands.command(name="scout", aliases=["im", "info"])
+    @commands.hybrid_command(
+        name="scout", aliases=["im", "info"], description="A carta e os dados de um jogador"
+    )
+    @discord.app_commands.describe(query="Nome do jogador (sugestões enquanto digita)")
     async def player_info(
         self,
         context: commands.Context,
         *,
         query: str,
     ) -> None:
+        await context.defer()
         chosen, candidates = find_player(query, self.database_path, limit=15)
         players = [chosen] if chosen else candidates
         items = [] if chosen else search_catalog(query, self.database_path, limit=10)
@@ -789,6 +794,10 @@ class GameCog(commands.Cog):
         )
         kwargs = {"file": file} if file else {}
         await context.reply(content=content, embed=embed, view=view, mention_author=False, **kwargs)
+
+    @player_info.autocomplete("query")
+    async def _scout_names(self, interaction: discord.Interaction, current: str):
+        return await player_choices(self.database_path, current)
 
     @commands.command(name="top")
     async def top_players(

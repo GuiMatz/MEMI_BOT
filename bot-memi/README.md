@@ -55,7 +55,9 @@ minutos e cada pessoa tem um claim por ciclo (renova junto com os rolls).
 Os claims são atômicos e cada jogador só pode ter um dono.
 
 Todo comando funciona com `mm!` ou com o atalho `..` (`..roll`, `..amistoso`, `..tu`). O
-roll também atende por `..obter` e `..rolls`.
+roll também atende por `..obter` e `..rolls`. `/wish`, `/starwish`, `/scout`, `/vender` e
+`/proteger` também existem como comandos de barra, sugerindo o nome do jogador enquanto se
+digita (no `/vender` e no `/proteger`, só os seus). Eles são registrados quando o bot liga.
 
 Comandos oficiais do **FUT.AE** incluem `mm!futae`, `mm!left`, `mm!top [categoria]`, `mm!scout <nome>`, `mm!daily`, `mm!shop`, `mm!upgrade`, `mm!crates`,
 `mm!wish`, `mm!wishlist`/`mm!wl`, `mm!starwish`/`mm!sw`, `mm!vender`, `mm!proteger`, `mm!troca`, `mm!dar`, `mm!pacote`, `mm!personalizar`, `mm!time`,

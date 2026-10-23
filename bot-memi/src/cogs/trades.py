@@ -24,7 +24,13 @@ import discord
 from discord.ext import commands
 
 from src import icons
-from src.cogs.common import ConfirmView, PlayerChoiceView, ambiguity_text, player_label
+from src.cogs.common import (
+    ConfirmView,
+    PlayerChoiceView,
+    ambiguity_text,
+    player_choices,
+    player_label,
+)
 from src.db import DATABASE_PATH, connect, normalize_player_name
 from src.ratings import RARITY_TIERS, rarity_index
 from src.game import list_owned_players, register_user, resolve_player
@@ -912,8 +918,14 @@ class TradesCog(commands.Cog):
 
     # Venda
 
-    @commands.command(name="vender", aliases=["demitir", "vende", "sell"])
+    @commands.hybrid_command(
+        name="vender",
+        aliases=["demitir", "vende", "sell"],
+        description="Vende um jogador seu (ou um filtro: base, abaixo 70, posicao ZAG)",
+    )
+    @discord.app_commands.describe(query="Seu jogador ou um filtro (sugestões enquanto digita)")
     async def sell(self, context: commands.Context, *, query: str | None = None) -> None:
+        await context.defer()
         register_user(context.author.id, context.author.display_name, self.database_path)
         quick = self._quick_filter(query or "")
         if quick is not None:
@@ -985,8 +997,14 @@ class TradesCog(commands.Cog):
         )
         view.message = await context.reply(embed=embed, view=view, mention_author=False)
 
-    @commands.command(name="proteger", aliases=["cadeado", "lock", "favorito"])
+    @commands.hybrid_command(
+        name="proteger",
+        aliases=["cadeado", "lock", "favorito"],
+        description="Liga/desliga o 🔒: o jogador some das vendas",
+    )
+    @discord.app_commands.describe(query="Seu jogador (sugestões enquanto digita)")
     async def protect(self, context: commands.Context, *, query: str | None = None) -> None:
+        await context.defer()
         register_user(context.author.id, context.author.display_name, self.database_path)
         owned = self._owned(context.author.id)
         if not query:
@@ -1197,6 +1215,14 @@ class TradesCog(commands.Cog):
             await context.reply(str(error), mention_author=False)
             return
         await context.reply(f"{STATUS_TEXT[status]} (#{trade_id}).", mention_author=False)
+
+    @sell.autocomplete("query")
+    async def _sell_names(self, interaction: discord.Interaction, current: str):
+        return await player_choices(self.database_path, current, interaction.user.id)
+
+    @protect.autocomplete("query")
+    async def _protect_names(self, interaction: discord.Interaction, current: str):
+        return await player_choices(self.database_path, current, interaction.user.id)
 
 
 async def setup(bot: commands.Bot) -> None:
