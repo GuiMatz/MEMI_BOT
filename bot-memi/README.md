@@ -293,7 +293,7 @@ O FUT.AE é um módulo do MeMi BOT, não um bot separado. O menu geral continua 
 - `mm!construir` mostra a torre com um menu para escolher o andar a construir e o botão de
   destruir; os dois pedem confirmação, como `mm!construir <1-12>` e `mm!destruir`.
 - `mm!pacote` dá uma carta livre do mercado (nunca Base); carta de pacote vende na hora
-  por 50% e fica 7 dias sem poder ser doada ou trocada.
+  por 50% e fica 1 hora sem poder ser doada ou trocada.
 - `mm!shop` (ou `mm!loja`) mostra tudo o que dá para comprar, com botões: caixas, pacotes,
   upgrades, torre e all-in. A **caixa épica** (`mm!crates epica [1|5|10]`, 4× a caixa) é a
   caixa comum sem a chance de vir só o básico: o item extra sempre vem, nas mesmas

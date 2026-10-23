@@ -170,7 +170,7 @@ class OpenPackTests(Case):
         result = open_pack(100, "Pessoa A", self.database_path, now=now, rng=random.Random(1))
         self.assertEqual(result.player["id"], good)
         self.assertEqual(self.memilets(100), 10)
-        self.assertEqual(result.locked_until, now + timedelta(days=7))
+        self.assertEqual(result.locked_until, now + timedelta(hours=1))
         with connect(self.database_path) as connection:
             row = connection.execute(
                 "SELECT discord_user_id, pack_origin FROM player_ownership WHERE player_id = ?",

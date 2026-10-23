@@ -122,7 +122,7 @@ SHOP_INTRO = (
 )
 EPIC_PACK_INTRO = (
     "O pacote épico traz **uma carta Raro ou melhor**, com chance de Ícone. "
-    "Diferente do pacote comum, a carta vende pelo **valor cheio**. Ela fica {days} dias "
+    "Diferente do pacote comum, a carta vende pelo **valor cheio**. Ela fica {lock} "
     "sem poder ser doada ou trocada."
 )
 ALL_IN_INTRO = (
@@ -136,7 +136,7 @@ ALL_IN_SPIN_SECONDS = 6
 PACK_INTRO = (
     "O pacote traz **uma carta de jogador** livre do mercado, direto para o seu elenco. "
     "Nunca vem Base. A carta de pacote pode ser vendida na hora, por {factor}% do valor, e "
-    "fica {days} dias sem poder ser doada ou trocada."
+    "fica {lock} sem poder ser doada ou trocada."
 )
 RARITY_ITEMS_TEXT = {
     "basico": "1 a 3 rolls guardados (não expiram)",
@@ -156,6 +156,15 @@ def _crate_noun(count: int, epic: bool) -> str:
     if epic:
         return "caixas épicas" if count > 1 else "caixa épica"
     return "crates" if count > 1 else "crate"
+
+
+def _duration(span) -> str:
+    """ "1 hora", "2 horas", "7 dias": o tempo da trava em texto."""
+    hours = int(span.total_seconds() // 3600)
+    if hours % 24 == 0:
+        days = hours // 24
+        return f"{days} dia{'s' if days > 1 else ''}"
+    return f"{hours} hora{'s' if hours > 1 else ''}"
 
 
 def _thousands(value: int) -> str:
@@ -1008,7 +1017,7 @@ class EconomyCog(commands.Cog):
         embed = intro_embed(
             "🃏 Pacote épico" if epic else "🃏 Pacote de jogador",
             (EPIC_PACK_INTRO if epic else PACK_INTRO).format(
-                factor=round(PACK_SALE_FACTOR * 100), days=PACK_LOCK.days
+                factor=round(PACK_SALE_FACTOR * 100), lock=_duration(PACK_LOCK)
             ),
             color=discord.Color.from_rgb(230, 181, 74),
         )

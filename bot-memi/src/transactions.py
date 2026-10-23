@@ -33,7 +33,7 @@ TRADE_LIFETIME = timedelta(minutes=15)
 MAX_TRADE_PLAYERS = 5
 MAX_SALE_PLAYERS = 200
 PACK_SALE_FACTOR = 0.5
-PACK_LOCK = timedelta(days=7)
+PACK_LOCK = timedelta(hours=1)
 # Valor da carta pelo overall de jogo (o da carta, sem bolas): 400 Memilets no 60 e
 # +11,6% por ponto, dobrando a cada ~6 pontos (70 ≈ 1.200, 80 ≈ 3.600, 90 ≈ 10.800,
 # 97 ≈ 23.300). Carta melhor sempre vale mais; o valor de mercado real não conta.
