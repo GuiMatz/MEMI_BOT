@@ -8,6 +8,7 @@ some e a moldura mostra quem contratou.
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import Any
 
@@ -178,7 +179,9 @@ class RollsCog(commands.Cog):
     @commands.command(name="roll")
     async def roll(self, context: commands.Context) -> None:
         try:
-            result = roll_player(
+            # Fora do loop principal: o roll não trava os outros comandos enquanto roda.
+            result = await asyncio.to_thread(
+                roll_player,
                 context.author.id,
                 context.author.display_name,
                 self.database_path,

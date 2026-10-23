@@ -11,12 +11,13 @@ from typing import Any
 
 from src.db import DATABASE_PATH, connect
 from src.missions import record
+from src.pool_cache import snapshot
 from src.perks import (
     BASE_EXCLUSIVE_SECONDS,
     ROLLS_PER_CYCLE,
     load_perks,
 )
-from src.ratings import GAME_OVERALL_SQL, POOL_SQL, RARITY_TIERS, effective_overall
+from src.ratings import GAME_OVERALL_SQL, RARITY_TIERS, effective_overall
 
 CYCLE_LENGTH = timedelta(minutes=30)
 # Os ciclos começam na hora cheia e na meia hora (em Brasília também, já que o fuso é UTC-3).
@@ -166,13 +167,10 @@ def roll_player(
         if use_roll_token and roll_tokens == 0:
             raise RollLimitReached(reset_at, roll_capacity)
 
-        counts = connection.execute(f"""
-            SELECT rarity_index({GAME_OVERALL_SQL}) AS band, COUNT(*) AS player_count
-            FROM players AS p
-            WHERE {POOL_SQL}
-            GROUP BY band
-            """).fetchall()
-        available_counts = {int(row["band"]): int(row["player_count"]) for row in counts}
+        # Faixas do mercado vindas do índice em memória (`src.pool_cache`): sem varrer
+        # a tabela inteira com a função de overall a cada roll.
+        pool = snapshot(connection, database_path)
+        available_counts = {band: len(ids) for band, ids in pool.bands.items() if ids}
         available_bands = sorted(available_counts)
         if not available_bands:
             raise NoEligiblePlayers("Não há jogadores elegíveis no pool.")
@@ -182,21 +180,17 @@ def roll_player(
             weights=[RARITY_BANDS[index][2] for index in available_bands],
             k=1,
         )[0]
-        lower_bound, upper_bound, _ = RARITY_BANDS[selected_band]
-        star_wish_rows = connection.execute(
-            f"""
-            SELECT p.id
-            FROM players AS p
-            JOIN user_wishes AS w
-              ON w.player_id = p.id
-             AND w.discord_user_id = ?
-             AND w.wish_type = 'star'
-            WHERE {POOL_SQL}
-              AND {GAME_OVERALL_SQL} BETWEEN ? AND ?
-            """,
-            (user_id, lower_bound, upper_bound),
-        ).fetchall()
-        star_wish_ids = [int(row["id"]) for row in star_wish_rows]
+        band_ids = pool.bands[selected_band]
+        band_set = set(band_ids)
+        star_wish_ids = [
+            int(row["player_id"])
+            for row in connection.execute(
+                "SELECT player_id FROM user_wishes WHERE discord_user_id = ? "
+                "AND wish_type = 'star' ORDER BY player_id",
+                (user_id,),
+            )
+            if int(row["player_id"]) in band_set
+        ]
         candidate_count = available_counts[selected_band]
         if star_wish_ids and generator.random() < (1.25 * len(star_wish_ids)) / (
             candidate_count + 0.25 * len(star_wish_ids)
@@ -219,23 +213,11 @@ def roll_player(
                 (selected_player_id,),
             ).fetchone()
         else:
-            star_exclusion = (
-                """
-              AND NOT EXISTS (
-                  SELECT 1 FROM user_wishes AS w
-                  WHERE w.discord_user_id = ?
-                    AND w.player_id = p.id
-                    AND w.wish_type = 'star'
-              )
-            """
-                if star_wish_ids
-                else ""
-            )
+            # Mesma escolha de antes: ids da faixa em ordem, sem as Star Wishes, e um
+            # deslocamento sorteado; só que a lista vem do índice em vez de uma varredura.
+            excluded = set(star_wish_ids)
+            candidates = [player_id for player_id in band_ids if player_id not in excluded]
             offset = generator.randrange(candidate_count - len(star_wish_ids))
-            params: tuple[Any, ...] = (lower_bound, upper_bound)
-            if star_wish_ids:
-                params += (user_id,)
-            params += (offset,)
             player_row = connection.execute(
                 f"""
             SELECT p.id, p.name, p.display_name, p.club_name, p.nationality,
@@ -248,13 +230,9 @@ def roll_player(
             LEFT JOIN player_ownership AS o ON o.player_id = p.id
             LEFT JOIN game_users AS owner ON owner.discord_user_id = o.discord_user_id
             LEFT JOIN player_balls AS b ON b.player_id = p.id
-            WHERE {POOL_SQL}
-              AND {GAME_OVERALL_SQL} BETWEEN ? AND ?
-              {star_exclusion}
-            ORDER BY p.id
-            LIMIT 1 OFFSET ?
+            WHERE p.id = ?
             """,
-                params,
+                (candidates[offset],),
             ).fetchone()
         if player_row is None:
             raise NoEligiblePlayers("Não há jogadores elegíveis nessa faixa.")

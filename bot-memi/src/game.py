@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from src.db import DATABASE_PATH, GAME_POSITIONS, ROOT, connect, normalize_player_name
+from src.pool_cache import ordered_rows, snapshot
 from src.ratings import EFFECTIVE_OVERALL_SQL, GAME_OVERALL_SQL, POOL_SQL, RARITY_TIERS
 
 CATALOG_ASSET_DIRECTORIES = {
@@ -223,24 +224,24 @@ def search_players(
                 (int(query.strip()),),
             ).fetchall()
             return [dict(row) for row in rows]
-        rows = connection.execute(
-            f"""
-            SELECT {columns} {joins}
-            WHERE normalize_player_name(p.name) LIKE ?
-               OR normalize_player_name(p.display_name) LIKE ?
-            ORDER BY
-                CASE WHEN normalize_player_name(p.name) = ? THEN 0 ELSE 1 END,
-                overall DESC, p.name, p.id
-            LIMIT ?
-            """,
-            (
-                f"%{normalized_query}%",
-                f"%{normalized_query}%",
-                normalized_query,
-                limit,
-            ),
-        ).fetchall()
-    return [dict(row) for row in rows]
+        # Nomes normalizados vêm do índice em memória (`src.pool_cache`): a busca não
+        # roda a normalização em cada linha da tabela. Mesma ordem de antes: nome
+        # exato primeiro, depois overall, nome e id.
+        pool = snapshot(connection, database_path)
+        found = [
+            player_id
+            for player_id, (name, display, _) in pool.names.items()
+            if normalized_query in name or normalized_query in display
+        ]
+        found.sort(
+            key=lambda player_id: (
+                pool.names[player_id][0] != normalized_query,
+                -pool.overall[player_id],
+                pool.names[player_id][2],
+                player_id,
+            )
+        )
+        return ordered_rows(connection, found[:limit], columns, joins)
 
 
 def list_players_by_team_or_series(
@@ -559,19 +560,19 @@ def get_catalog_entries(
     normalized = normalize_player_name(category)
     if normalized in {"jogador", "jogadores", "player", "players"}:
         with connect(database_path) as connection:
-            total = connection.execute(
-                f"SELECT COUNT(*) AS total FROM players AS p WHERE {POOL_SQL}"
-            ).fetchone()["total"]
-            rows = connection.execute(
-                f"""SELECT p.id, COALESCE(NULLIF(p.display_name, ''), p.name) AS name,
-                          {GAME_OVERALL_SQL} AS overall, p.game_position
-                   FROM players AS p
-                   WHERE {POOL_SQL}
-                   ORDER BY overall DESC, name COLLATE NOCASE, p.id
-                   LIMIT ? OFFSET ?""",
-                (limit, offset),
-            ).fetchall()
-        return [dict(row) for row in rows], int(total)
+            pool = snapshot(connection, database_path)
+            ids = pool.ranking[offset : offset + limit]
+            rows = ordered_rows(
+                connection,
+                ids,
+                "p.id, COALESCE(NULLIF(p.display_name, ''), p.name) AS name, p.game_position",
+                "FROM players AS p",
+            )
+        for row in rows:
+            row["overall"] = pool.overall[int(row["id"])]
+        return [
+            {key: row[key] for key in ("id", "name", "overall", "game_position")} for row in rows
+        ], len(pool.ranking)
 
     if normalized == "cartola":
         with connect(database_path) as connection:
@@ -860,23 +861,23 @@ def resolve_player(
 def top_player_cards(database_path=DATABASE_PATH, limit: int = 100) -> list[dict[str, Any]]:
     """Os melhores jogadores da roleta com os dados da carta (para o `mm!topi`)."""
     with connect(database_path) as connection:
-        rows = connection.execute(
+        pool = snapshot(connection, database_path)
+        return ordered_rows(
+            connection,
+            pool.ranking[:limit],
             f"""
-            SELECT p.id, p.name, p.display_name, p.club_name, p.nationality,
-                   p.game_position, {GAME_OVERALL_SQL} AS overall, p.overall_source,
-                   p.photo_path, COALESCE(b.balls, 0) AS balls,
-                   o.discord_user_id AS owner_id, owner.display_name AS owner_name
+            p.id, p.name, p.display_name, p.club_name, p.nationality,
+            p.game_position, {GAME_OVERALL_SQL} AS overall, p.overall_source,
+            p.photo_path, COALESCE(b.balls, 0) AS balls,
+            o.discord_user_id AS owner_id, owner.display_name AS owner_name
+            """,
+            """
             FROM players AS p
             LEFT JOIN player_balls AS b ON b.player_id = p.id
             LEFT JOIN player_ownership AS o ON o.player_id = p.id
             LEFT JOIN game_users AS owner ON owner.discord_user_id = o.discord_user_id
-            WHERE {POOL_SQL}
-            ORDER BY overall DESC, COALESCE(NULLIF(p.display_name, ''), p.name) COLLATE NOCASE, p.id
-            LIMIT ?
             """,
-            (limit,),
-        ).fetchall()
-    return [dict(row) for row in rows]
+        )
 
 
 def find_player(

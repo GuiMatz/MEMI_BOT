@@ -512,6 +512,8 @@ def connect(
     register_sql_functions(connection)
     connection.execute("PRAGMA busy_timeout = 30000")
     connection.execute("PRAGMA foreign_keys = ON")
+    # Com WAL (ligado em initialize_database), NORMAL é seguro e bem mais rápido.
+    connection.execute("PRAGMA synchronous = NORMAL")
     try:
         with connection:
             yield connection
@@ -522,6 +524,8 @@ def connect(
 def initialize_database(database_path: str | Path = DATABASE_PATH) -> None:
     """Cria o schema sem apagar dados existentes."""
     with connect(database_path) as connection:
+        # WAL: leituras não esperam escritas (os comandos rodam em paralelo em threads).
+        connection.execute("PRAGMA journal_mode = WAL")
         connection.execute("PRAGMA foreign_keys = OFF")
         connection.executescript(SCHEMA)
         source_columns = {
