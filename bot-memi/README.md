@@ -332,6 +332,9 @@ O FUT.AE é um módulo do MeMi BOT, não um bot separado. O menu geral continua 
   Memilets); a outra pessoa aceita ou recusa, e quem propôs pode cancelar.
 - `mm!dar @pessoa <jogador|valor>` doa um jogador ou Memilets, com confirmação.
 - `mm!pay @pessoa <quantia>` (ou `mm!pagar`, `mm!pix`) manda Memilets, com confirmação.
+- No roll, um jogador livre que renderia mais que o seu titular numa vaga (ou que preenche
+  uma vaga vazia) vem com o aviso "⬆️ Melhor que o seu titular de CA (Fulano · 78 → 87)".
+  Contratando, ele já entra no time nessa vaga (quem sai perde capitão, falta e pênalti).
 - `mm!tu` e `mm!carteira` têm atalhos (Rolar, Daily, Missões, Ativar rolls, Inventário); o
   roll tem **Rolar de novo**; o daily mostra as missões e resgata as prontas; os botões de
   compra ficam cinza dizendo quanto falta; `mm!ajuda <comando>` explica cada comando.

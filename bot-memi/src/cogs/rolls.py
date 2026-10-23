@@ -22,6 +22,7 @@ from src.cogs.common import card_file, followup_sender
 from src.db import DATABASE_PATH
 from src.economy import EconomyError, ROLLS_PER_BONUS_CLAIM, activate_rolls, get_account_status
 from src.game import register_user
+from src.teams import equip_if_better, upgrade_slot
 from src.rolls import (
     NoEligiblePlayers,
     RollLimitReached,
@@ -52,10 +53,27 @@ def rolls_line(remaining: int, resets_at) -> str:
     return f"-# 🎲 {remaining} roll{'s' if remaining > 1 else ''} restante{'s' if remaining > 1 else ''}"
 
 
-def roll_details(result: RollOutcome, overall: int) -> str:
+def upgrade_line(upgrade: dict | None) -> str | None:
+    """Aviso de que o jogador rolado é melhor que um titular de quem rolou."""
+    if not upgrade:
+        return None
+    position = upgrade["position"]
+    current = upgrade["replaces"]
+    if current is None:
+        return f"⬆️ **Sua vaga de {position} está vazia**: contratando, ele já entra no time."
+    name = current.get("display_name") or current["name"]
+    return (
+        f"⬆️ **Melhor que o seu titular de {position}** ({name} · {upgrade['old']} → "
+        f"{upgrade['new']}): contratando, ele já entra no time."
+    )
+
+
+def roll_details(result: RollOutcome, overall: int, upgrade: dict | None = None) -> str:
     player = result.player
     club = player["club_name"] or "Passe livre"
     lines = [f"**{overall}** · {rarity_label(overall)} · {player['game_position']} · {club}"]
+    if line := upgrade_line(upgrade):
+        lines.append(line)
     if result.kind == "own_duplicate_ball":
         lines.append(f"Você ganhou 1 bola ({result.balls}/10) e 100 Memilets.")
     elif result.kind == "own_duplicate_double_ball":
@@ -78,6 +96,7 @@ class RollLayout(discord.ui.LayoutView):
         database_path: str | Path,
         roller_id: int | None = None,
         reroll=None,
+        upgrade: dict | None = None,
     ):
         super().__init__(timeout=300)
         self.result = result
@@ -90,6 +109,7 @@ class RollLayout(discord.ui.LayoutView):
             )
             self.reroll_button.callback = self._reroll
             self._reroll_callback = reroll
+        self.upgrade = upgrade
         self.overall = overall
         self.image_name = image_name
         self.database_path = database_path
@@ -118,7 +138,7 @@ class RollLayout(discord.ui.LayoutView):
             items.append(discord.ui.TextDisplay(wish))
         items.append(
             discord.ui.TextDisplay(
-                f"## {self.player_name}\n{roll_details(self.result, self.overall)}"
+                f"## {self.player_name}\n{roll_details(self.result, self.overall, None if self.status else self.upgrade)}"
             )
         )
         items.append(
@@ -142,17 +162,31 @@ class RollLayout(discord.ui.LayoutView):
         register_user(interaction.user.id, interaction.user.display_name, self.database_path)
         outcome = claim_roll_offer(self.result.offer_id, interaction.user.id, self.database_path)
         if outcome.status == "player_claimed":
+            self.status = f"✅ Contratado por {interaction.user.mention}"
+            self._build()
+            self.stop()
+            await interaction.response.edit_message(view=self)
+            # Melhor que um titular de quem contratou: já entra no time.
+            equipped = await asyncio.to_thread(
+                equip_if_better,
+                interaction.user.id,
+                int(self.result.player["id"]),
+                self.database_path,
+            )
+            equipped_text = ""
+            if equipped:
+                out = equipped["replaces"]
+                equipped_text = f"\n⬆️ Entrou no time como **{equipped['position']}**" + (
+                    f" no lugar de {out.get('display_name') or out['name']}." if out else "."
+                )
             bonus = (
                 f" Centro de Treinamento: +{icons.memilets(outcome.reward_amount)} Memilets."
                 if outcome.reward_amount
                 else ""
             )
-            self.status = f"✅ Contratado por {interaction.user.mention}"
-            self._build()
-            self.stop()
-            await interaction.response.edit_message(view=self)
             await interaction.followup.send(
                 f"✅ {interaction.user.mention} contratou **{self.player_name}**.{bonus}"
+                + equipped_text
             )
             return
         if outcome.status == "reward_claimed":
@@ -297,6 +331,11 @@ class RollsCog(commands.Cog):
             raise RuntimeError("Roll livre sem oferta de claim.")
         overall = result.effective_overall or result.player["overall"]
         image = await card_file({**result.player, "effective_overall": overall})
+        upgrade = None
+        if result.kind == "unowned":
+            upgrade = await asyncio.to_thread(
+                upgrade_slot, user.id, result.player["game_position"], overall, self.database_path
+            )
         layout = RollLayout(
             result,
             overall,
@@ -304,6 +343,7 @@ class RollsCog(commands.Cog):
             self.database_path,
             roller_id=user.id,
             reroll=self.roll_from_button,
+            upgrade=upgrade,
         )
         layout.message = await send(
             view=layout,

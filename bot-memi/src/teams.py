@@ -559,6 +559,78 @@ def clear_lineup_slot(
     return cursor.rowcount > 0
 
 
+def upgrade_slot(
+    discord_user_id: int | str,
+    natural: str | None,
+    rating: int,
+    database_path: str | Path = DATABASE_PATH,
+) -> dict[str, Any] | None:
+    """A vaga da escalação que um jogador (`natural`, `rating` com bolas) mais melhora.
+
+    Compara o quanto ele renderia em cada vaga com o titular de lá (vaga vazia conta 0).
+    Devolve slot, posição, quem sai (ou None) e os dois valores; None se não melhora nada
+    ou se o time ainda não foi montado."""
+    with connect(database_path) as connection:
+        team = connection.execute(
+            "SELECT formation FROM team_tactics WHERE discord_user_id = ?",
+            (str(discord_user_id),),
+        ).fetchone()
+    if team is None or not natural or not rating:
+        return None
+    starters = {
+        int(player["slot_order"]): player for player in get_lineup(discord_user_id, database_path)
+    }
+    best = None
+    for slot, position in enumerate(FORMATIONS[team["formation"]], start=1):
+        if not fit(natural, position):
+            continue
+        new = slot_rating(rating, natural, position)
+        current = starters.get(slot)
+        old = int(current["slot_overall"] or 0) if current else 0
+        if new > old and (best is None or new - old > best["new"] - best["old"]):
+            best = {
+                "slot": slot,
+                "position": position,
+                "replaces": current,
+                "old": old,
+                "new": new,
+            }
+    return best
+
+
+def equip_if_better(
+    discord_user_id: int | str, player_id: int, database_path: str | Path = DATABASE_PATH
+) -> dict[str, Any] | None:
+    """Recém-contratado melhor que um titular entra no lugar dele (quem sai perde capitão,
+    falta e pênalti). Devolve a troca feita (como `upgrade_slot`) ou None."""
+    with connect(database_path) as connection:
+        row = connection.execute(
+            f"""
+            SELECT p.game_position, {EFFECTIVE_OVERALL_SQL} AS rating
+            FROM players AS p LEFT JOIN player_balls AS b ON b.player_id = p.id
+            WHERE p.id = ?
+            """,
+            (player_id,),
+        ).fetchone()
+    if row is None:
+        return None
+    upgrade = upgrade_slot(
+        discord_user_id, row["game_position"], int(row["rating"] or 0), database_path
+    )
+    if upgrade is None:
+        return None
+    set_lineup_slot(discord_user_id, upgrade["slot"], player_id, database_path)
+    if upgrade["replaces"]:
+        with connect(database_path) as connection:
+            for column in ("captain_player_id", "free_kick_player_id", "penalty_player_id"):
+                connection.execute(
+                    f"UPDATE team_tactics SET {column} = NULL "
+                    f"WHERE discord_user_id = ? AND {column} = ?",
+                    (str(discord_user_id), upgrade["replaces"]["id"]),
+                )
+    return upgrade
+
+
 def best_assignment(scores: list[list[float | None]]) -> list[tuple[int, int]]:
     """Linha -> coluna com a maior soma de pontos, cada coluna usada uma vez (húngaro).
 

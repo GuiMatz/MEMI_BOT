@@ -58,6 +58,44 @@ class TeamTests(unittest.TestCase):
         self.assertEqual(len(players), 11)
         self.assertEqual(players[0]["slot_order"], 1)
 
+    def new_player(self, name, position, overall):
+        with connect(self.database_path) as connection:
+            return connection.execute(
+                "INSERT INTO players (name, display_name, game_position, overall, "
+                "activity_status, phase2_candidate) VALUES (?, ?, ?, ?, 'active', 0)",
+                (name, name, position, overall),
+            ).lastrowid
+
+    def test_better_rolled_player_is_flagged_and_equipped_when_claimed(self):
+        from src.cogs.rolls import upgrade_line
+        from src.ratings import game_overall
+        from src.teams import equip_if_better, set_team_role, upgrade_slot
+
+        self.add_full_team(100, overall=70)
+        striker = next(p for p in get_lineup(100, self.database_path) if p["position"] == "CA")
+        set_team_role(100, "capitao", striker["id"], self.database_path)
+        star = self.new_player("Craque", "CA", 85)
+        upgrade = upgrade_slot(100, "CA", game_overall(85), self.database_path)
+        self.assertEqual((upgrade["position"], upgrade["replaces"]["id"]), ("CA", striker["id"]))
+        self.assertGreater(upgrade["new"], upgrade["old"])
+        self.assertIn("Melhor que o seu titular de CA", upgrade_line(upgrade))
+        # Pior que todos os titulares: nada de aviso.
+        self.assertIsNone(upgrade_slot(100, "CA", game_overall(50), self.database_path))
+
+        self.assertTrue(claim_player(star, 100, self.database_path))
+        equipped = equip_if_better(100, star, self.database_path)
+        self.assertEqual(equipped["slot"], striker["slot_order"])
+        lineup = {p["slot_order"]: p["id"] for p in get_lineup(100, self.database_path)}
+        self.assertEqual(lineup[striker["slot_order"]], star)
+        with connect(self.database_path) as connection:
+            captain = connection.execute(
+                "SELECT captain_player_id FROM team_tactics WHERE discord_user_id = '100'"
+            ).fetchone()[0]
+        self.assertIsNone(captain)  # quem saiu perde a braçadeira
+        weak = self.new_player("Reserva", "ZAG", 40)
+        self.assertTrue(claim_player(weak, 100, self.database_path))
+        self.assertIsNone(equip_if_better(100, weak, self.database_path))
+
     def test_formation_style_and_team_profile_can_be_changed(self):
         self.add_full_team(100)
         set_formation(100, "4-3-2-1", self.database_path)
