@@ -257,6 +257,7 @@ FUTAE_SECTIONS = (
         "`mm!shop`/`mm!loja` — tudo o que dá para comprar, com botões\n"
         "`mm!upgrade` — upgrades permanentes (sempre pede confirmação)\n"
         "`mm!crates [epica] [1|5|10]` — caixas com rolls guardados, cosméticos e bônus\n"
+        "`mm!ativar [quantidade]` — ativa os rolls guardados (+1 contratação a cada 10)\n"
         "`mm!pacote [epico]` — uma carta de jogador livre do mercado (nunca Base)\n"
         "`mm!allin` — aposta de 30 mil: roleta com 1 em 10 de Ícone ou melhor\n"
         "`mm!construir [1-12]` / `mm!destruir` — Centro de Treinamento (torre)\n"
@@ -970,7 +971,8 @@ class GameCog(commands.Cog):
             name="🎲 Rolls",
             value=(
                 f"{status.rolls_left}/{status.roll_capacity} no ciclo"
-                + (f" + {status.roll_tokens} extras" if status.roll_tokens else "")
+                + (f" + {status.active_rolls} ativos" if status.active_rolls else "")
+                + (f"\n{status.roll_tokens} guardados (`mm!ativar`)" if status.roll_tokens else "")
             ),
             inline=True,
         )
@@ -982,7 +984,12 @@ class GameCog(commands.Cog):
             ),
             inline=True,
         )
-        embed.add_field(name="⏱️ Claim", value=_timestamp(status.claim_available_at), inline=True)
+        embed.add_field(
+            name="⏱️ Claim",
+            value=_timestamp(status.claim_available_at)
+            + (f"\n+{status.bonus_claims} extra(s)" if status.bonus_claims else ""),
+            inline=True,
+        )
         embed.add_field(
             name="🎁 Daily",
             value=f"{_timestamp(status.daily_available_at)}\nmáx. {status.daily_cap}",
@@ -1005,16 +1012,19 @@ class GameCog(commands.Cog):
         status = get_account_status(
             context.author.id, context.author.display_name, self.database_path
         )
-        extras = f" (+{status.roll_tokens} extras)" if status.roll_tokens else ""
+        extras = f" (+{status.active_rolls} ativos)" if status.active_rolls else ""
         if status.instant_rolls:
             extras += f" · {status.instant_rolls} instantâneo(s) da crate"
         lines = [
             f"🎲 **{status.rolls_left}/{status.roll_capacity} rolls**{extras} · "
             f"renovam {_timestamp(status.rolls_reset_at)}",
-            f"⏱️ Claim: {_timestamp(status.claim_available_at)}",
+            f"⏱️ Claim: {_timestamp(status.claim_available_at)}"
+            + (f" · +{status.bonus_claims} extra(s)" if status.bonus_claims else ""),
             f"🎁 Daily: {_timestamp(status.daily_available_at)}",
             f"{icons.memilets()} Saldo: **{_thousands(status.memilets)} Memilets**",
         ]
+        if status.roll_tokens:
+            lines.append(f"📦 {status.roll_tokens} rolls guardados · ative com `mm!ativar`")
         embed = discord.Embed(
             title=f"Timers de {context.author.display_name}",
             description="\n".join(lines),

@@ -152,14 +152,12 @@ def roll_player(
             (user_id, cycle_key),
         ).fetchone()
         rolls_used = int(usage["rolls_used"]) if usage else 0
-        roll_upgrade = connection.execute(
-            """
-            SELECT roll_tokens FROM user_upgrades
-            WHERE discord_user_id = ? AND upgrade_key = 'rolls'
-            """,
-            (user_id,),
-        ).fetchone()
-        roll_tokens = int(roll_upgrade["roll_tokens"]) if roll_upgrade else 0
+        # Rolls guardados só valem depois de ativados (`mm!ativar`): esses são os ativos.
+        roll_tokens = int(
+            connection.execute(
+                "SELECT active_rolls FROM game_users WHERE discord_user_id = ?", (user_id,)
+            ).fetchone()["active_rolls"]
+        )
         perks = load_perks(connection, user_id)
         roll_capacity = perks.roll_capacity + cycle_bonus_rolls(connection, user_id, cycle_key)
         exclusive_seconds = perks.exclusive_seconds
@@ -251,10 +249,7 @@ def roll_player(
         record(connection, user_id, "roll", now=current_time)
         if use_roll_token:
             connection.execute(
-                """
-                UPDATE user_upgrades SET roll_tokens = roll_tokens - 1
-                WHERE discord_user_id = ? AND upgrade_key = 'rolls'
-                """,
+                "UPDATE game_users SET active_rolls = active_rolls - 1 WHERE discord_user_id = ?",
                 (user_id,),
             )
             roll_tokens -= 1
@@ -454,15 +449,19 @@ def claim_roll_offer(
                 return ClaimOutcome("exclusive")
 
         account = connection.execute(
-            "SELECT last_claim_at FROM game_users WHERE discord_user_id = ?",
+            "SELECT last_claim_at, bonus_claims FROM game_users WHERE discord_user_id = ?",
             (user_id,),
         ).fetchone()
         if account is None:
             raise LookupError("A conta de jogo ainda não foi cadastrada.")
         claimer_perks = load_perks(connection, user_id)
         # Um claim por ciclo: o claim renova junto com os rolls (hora cheia e meia hora).
+        # Com o do ciclo já usado, gasta uma contratação extra (dos rolls ativados), se houver.
         cycle_start = _cycle_start(current_time)
-        if account["last_claim_at"] and claimed_at(account["last_claim_at"]) >= cycle_start:
+        use_bonus = bool(
+            account["last_claim_at"] and claimed_at(account["last_claim_at"]) >= cycle_start
+        )
+        if use_bonus and not account["bonus_claims"]:
             return ClaimOutcome("cooldown", retry_at=cycle_start + CYCLE_LENGTH)
 
         owner = connection.execute(
@@ -480,13 +479,20 @@ def claim_roll_offer(
             "INSERT INTO player_ownership (player_id, discord_user_id) VALUES (?, ?)",
             (offer["player_id"], user_id),
         )
-        connection.execute(
-            """
-            UPDATE game_users SET last_claim_at = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE discord_user_id = ?
-            """,
-            (current_time.isoformat(timespec="seconds"), user_id),
-        )
+        if use_bonus:
+            connection.execute(
+                "UPDATE game_users SET bonus_claims = bonus_claims - 1, "
+                "updated_at = CURRENT_TIMESTAMP WHERE discord_user_id = ?",
+                (user_id,),
+            )
+        else:
+            connection.execute(
+                """
+                UPDATE game_users SET last_claim_at = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE discord_user_id = ?
+                """,
+                (current_time.isoformat(timespec="seconds"), user_id),
+            )
         connection.execute(
             """
             UPDATE claim_offers

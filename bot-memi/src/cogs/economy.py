@@ -25,9 +25,11 @@ from src.economy import (
     EPIC_CRATE_EXTRA_CHANCES,
     EPIC_CRATE_MULTIPLIER,
     RARITY_LABELS,
+    ROLLS_PER_BONUS_CLAIM,
     DailyCooldown,
     EconomyError,
     InsufficientFunds,
+    activate_rolls,
     add_wish,
     buy_upgrade,
     claim_daily,
@@ -653,7 +655,7 @@ class EconomyCog(commands.Cog):
         if coins:
             summary.append(f"{icons.memilets(coins)} Memilets no total")
         if rolls:
-            summary.append(f"🎲 **{rolls}** rolls guardados (use quando quiser)")
+            summary.append(f"🎲 **{rolls}** rolls guardados (ative com `mm!ativar`)")
         specials = [
             prize
             for prize in sorted(prizes, key=lambda item: -order.index(item.rarity))
@@ -715,7 +717,8 @@ class EconomyCog(commands.Cog):
             lines.append(f"{icons.memilets(coins)} Memilets")
         if rolls:
             lines.append(
-                f"🎲 **{rolls}** roll{'s' if rolls > 1 else ''} guardado{'s' if rolls > 1 else ''} (use quando quiser)"
+                f"🎲 **{rolls}** roll{'s' if rolls > 1 else ''} guardado{'s' if rolls > 1 else ''} "
+                "(ative com `mm!ativar`)"
             )
         for prize in sorted(prizes, key=lambda item: -order.index(item.rarity)):
             if prize.kind in {"memilets", "instant_rolls"}:
@@ -951,6 +954,42 @@ class EconomyCog(commands.Cog):
             cancel_text="Pacote cancelado.",
         )
         view.message = await context.reply(embed=embed, view=view, mention_author=False)
+
+    @commands.command(name="ativar", aliases=["ativarrolls", "usarrolls"])
+    async def activate(self, context: commands.Context, amount: str | None = None) -> None:
+        """Ativa os rolls guardados das caixas: +1 contratação a cada 10."""
+        wanted = normalize_player_name(amount or "")
+        if wanted and wanted not in {"tudo", "todos", "all"} and not wanted.isdigit():
+            await context.reply(
+                "Use `mm!ativar` (todos) ou `mm!ativar 10` (uma quantidade).",
+                mention_author=False,
+            )
+            return
+        try:
+            result = activate_rolls(
+                context.author.id,
+                context.author.display_name,
+                self.database_path,
+                int(wanted) if wanted.isdigit() else None,
+            )
+        except EconomyError as error:
+            await context.reply(str(error), mention_author=False)
+            return
+        lines = [
+            f"🎲 **{result.activated}** rolls ativados: valem depois dos rolls do ciclo "
+            f"(agora você tem **{result.active_rolls}** ativos)."
+        ]
+        if result.claims_gained:
+            lines.append(
+                f"✅ **+{result.claims_gained}** contratação(ões) extra(s) · total: "
+                f"**{result.bonus_claims}**. Elas valem quando o claim do ciclo já foi usado."
+            )
+        missing = ROLLS_PER_BONUS_CLAIM - result.carry
+        lines.append(
+            f"Faltam **{missing}** rolls ativados para a próxima contratação extra "
+            f"(1 a cada {ROLLS_PER_BONUS_CLAIM})."
+        )
+        await context.reply("\n".join(lines), mention_author=False)
 
     @commands.command(name="rt")
     async def reset_claim_command(self, context: commands.Context) -> None:

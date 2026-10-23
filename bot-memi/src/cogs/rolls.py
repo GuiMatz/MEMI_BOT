@@ -20,6 +20,7 @@ from src.accents import rarity_color
 from src.clock import brasilia_time
 from src.cogs.common import card_file
 from src.db import DATABASE_PATH
+from src.economy import get_account_status
 from src.game import register_user
 from src.rolls import (
     NoEligiblePlayers,
@@ -187,10 +188,18 @@ class RollsCog(commands.Cog):
                 self.database_path,
             )
         except RollLimitReached as error:
+            stored = get_account_status(
+                context.author.id, context.author.display_name, self.database_path
+            ).roll_tokens
             await context.reply(
                 f"Você usou os {error.capacity} rolls deste ciclo. "
                 "Eles renovam às "
-                f"**{brasilia_time(error.reset_at)}**.",
+                f"**{brasilia_time(error.reset_at)}**."
+                + (
+                    f"\n📦 Você tem **{stored}** rolls guardados: ative com `mm!ativar`."
+                    if stored
+                    else ""
+                ),
                 mention_author=False,
             )
             return

@@ -282,7 +282,10 @@ O FUT.AE é um módulo do MeMi BOT, não um bot separado. O menu geral continua 
 - `mm!vender base|comum|…`, `mm!vender abaixo 70` e `mm!vender posicao ZAG` vendem todos
   os reservas do filtro de uma vez (sem titulares nem 🔒), com o total antes.
 - `mm!proteger <nome>` liga/desliga o 🔒: o jogador some de todas as vendas.
-- `mm!crates 5|10` abre várias caixas; os rolls da caixa ficam guardados (não expiram).
+- `mm!crates 5|10` abre várias caixas; os rolls da caixa ficam guardados (não expiram) e
+  só valem depois de `mm!ativar [quantidade]`. Ativados, entram depois dos rolls do ciclo, e
+  cada 10 ativados dão **+1 contratação extra** (usada quando o claim do ciclo já foi). A
+  sobra conta para a próxima.
 - `mm!construir` mostra a torre com um menu para escolher o andar a construir e o botão de
   destruir; os dois pedem confirmação, como `mm!construir <1-12>` e `mm!destruir`.
 - `mm!pacote` dá uma carta livre do mercado (nunca Base); carta de pacote vende na hora

@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 from src.db import connect, initialize_database
-from src.economy import add_wish
+from src.economy import EconomyError, activate_rolls, add_wish
 from src.game import claim_player, get_wallet, register_user
 from src.rolls import (
     RollLimitReached,
@@ -260,37 +260,63 @@ class RollTests(unittest.TestCase):
             roll_player(100, "Pessoa", self.database_path, now=NOW)
         self.assertEqual(error.exception.capacity, 11)
 
-    def test_crate_roll_token_extends_rolls_after_permanent_capacity(self):
+    def store_rolls(self, amount):
+        with connect(self.database_path) as connection:
+            connection.execute(
+                "INSERT INTO user_upgrades (discord_user_id, upgrade_key, roll_tokens) "
+                "VALUES ('100', 'rolls', ?)",
+                (amount,),
+            )
+
+    def test_stored_crate_rolls_only_count_after_activation(self):
         self.add_player()
         register_user(100, "Pessoa", self.database_path)
-        with connect(self.database_path) as connection:
-            connection.execute("""
-                INSERT INTO user_upgrades
-                    (discord_user_id, upgrade_key, roll_tokens)
-                VALUES ('100', 'rolls', 1)
-                """)
+        self.store_rolls(1)
         for index in range(10):
-            roll_player(
-                100,
-                "Pessoa",
-                self.database_path,
-                now=NOW,
-                rng=random.Random(index),
-            )
-        final_roll = roll_player(
-            100,
-            "Pessoa",
-            self.database_path,
-            now=NOW,
-            rng=random.Random(12),
-        )
+            roll_player(100, "Pessoa", self.database_path, now=NOW, rng=random.Random(index))
+        with self.assertRaises(RollLimitReached):  # guardado ainda não vale
+            roll_player(100, "Pessoa", self.database_path, now=NOW, rng=random.Random(11))
+        result = activate_rolls(100, "Pessoa", self.database_path)
+        self.assertEqual((result.activated, result.claims_gained, result.carry), (1, 0, 1))
+        final_roll = roll_player(100, "Pessoa", self.database_path, now=NOW, rng=random.Random(12))
         self.assertEqual(final_roll.rolls_remaining, 0)
+        with self.assertRaises(RollLimitReached):
+            roll_player(100, "Pessoa", self.database_path, now=NOW, rng=random.Random(13))
+        with self.assertRaises(EconomyError):  # nada mais guardado
+            activate_rolls(100, "Pessoa", self.database_path)
+
+    def test_every_ten_activated_rolls_give_one_extra_claim(self):
+        register_user(100, "Pessoa", self.database_path)
+        self.store_rolls(25)
+        first = activate_rolls(100, "Pessoa", self.database_path, 15)
+        self.assertEqual((first.claims_gained, first.carry, first.bonus_claims), (1, 5, 1))
+        second = activate_rolls(100, "Pessoa", self.database_path)  # os 10 que sobraram
+        self.assertEqual((second.activated, second.claims_gained, second.carry), (10, 1, 5))
+        self.assertEqual((second.bonus_claims, second.active_rolls), (2, 25))
+        with self.assertRaises(EconomyError):
+            activate_rolls(100, "Pessoa", self.database_path, 1)
+
+    def test_extra_claim_is_used_only_after_the_cycle_claim(self):
+        for name in ("Um", "Dois", "Tres"):
+            self.add_player(name=name)
+        register_user(100, "Pessoa", self.database_path)
+        self.store_rolls(10)
+        activate_rolls(100, "Pessoa", self.database_path)
+        statuses = []
+        for index in range(3):
+            rolled = roll_player(
+                100, "Pessoa", self.database_path, now=NOW, rng=random.Random(index)
+            )
+            outcome = claim_roll_offer(rolled.offer_id, 100, self.database_path, now=NOW)
+            statuses.append(outcome.status)
+        # 1º: o claim do ciclo; 2º: a contratação extra; 3º: acabou, espera o ciclo.
+        self.assertEqual(statuses[:2], ["player_claimed", "player_claimed"])
+        self.assertNotEqual(statuses[2], "player_claimed")
         with connect(self.database_path) as connection:
             self.assertEqual(
-                connection.execute("""
-                    SELECT roll_tokens FROM user_upgrades
-                    WHERE discord_user_id = '100' AND upgrade_key = 'rolls'
-                    """).fetchone()["roll_tokens"],
+                connection.execute(
+                    "SELECT bonus_claims FROM game_users WHERE discord_user_id = '100'"
+                ).fetchone()["bonus_claims"],
                 0,
             )
 

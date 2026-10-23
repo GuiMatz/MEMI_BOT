@@ -55,6 +55,8 @@ CRATE_MEMILETS = {
 # Garantia: a cada 30 caixas sem Raro (ou melhor), a seguinte traz pelo menos um Raro.
 CRATE_PITY_LIMIT = 30
 CRATE_BATCHES = (1, 5, 10)
+# A cada 10 rolls guardados ativados (`mm!ativar`), 1 contratação extra.
+ROLLS_PER_BONUS_CLAIM = 10
 CRATE_ITEM_CHANCE = 0.5
 CRATE_DOUBLE_CHANCE = 0.05
 CRATE_INSTANT_ROLLS = (1, 3)
@@ -526,8 +528,65 @@ def open_crate(
         return CrateResult(price, tuple(prizes), doubled, pity, guaranteed)
 
 
+@dataclass(frozen=True)
+class Activation:
+    activated: int
+    claims_gained: int
+    active_rolls: int
+    bonus_claims: int
+    carry: int  # rolls ativados que ainda não completaram 10
+
+
+def activate_rolls(
+    discord_user_id: int | str,
+    display_name: str,
+    database_path: str | Path = DATABASE_PATH,
+    amount: int | None = None,
+) -> Activation:
+    """`mm!ativar`: os rolls guardados passam a valer (depois dos rolls do ciclo) e cada
+    `ROLLS_PER_BONUS_CLAIM` ativados dão 1 contratação extra. A sobra conta para a próxima."""
+    user_id = str(discord_user_id)
+    register_user(user_id, display_name, database_path)
+    with connect(database_path) as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        row = connection.execute(
+            "SELECT roll_tokens FROM user_upgrades "
+            "WHERE discord_user_id = ? AND upgrade_key = 'rolls'",
+            (user_id,),
+        ).fetchone()
+        stored = int(row["roll_tokens"]) if row else 0
+        if not stored:
+            raise EconomyError("Você não tem rolls guardados. Eles vêm das caixas (`mm!crates`).")
+        if amount is not None and not 1 <= amount <= stored:
+            raise EconomyError(f"Você tem {stored} rolls guardados; ative de 1 a {stored}.")
+        activated = stored if amount is None else amount
+        account = connection.execute(
+            "SELECT active_rolls, bonus_claims, activation_carry FROM game_users "
+            "WHERE discord_user_id = ?",
+            (user_id,),
+        ).fetchone()
+        claims, carry = divmod(int(account["activation_carry"]) + activated, ROLLS_PER_BONUS_CLAIM)
+        connection.execute(
+            "UPDATE user_upgrades SET roll_tokens = roll_tokens - ? "
+            "WHERE discord_user_id = ? AND upgrade_key = 'rolls'",
+            (activated, user_id),
+        )
+        connection.execute(
+            "UPDATE game_users SET active_rolls = active_rolls + ?, "
+            "bonus_claims = bonus_claims + ?, activation_carry = ? WHERE discord_user_id = ?",
+            (activated, claims, carry, user_id),
+        )
+    return Activation(
+        activated,
+        claims,
+        int(account["active_rolls"]) + activated,
+        int(account["bonus_claims"]) + claims,
+        carry,
+    )
+
+
 def _give_instant_rolls(connection, user_id: str, amount: int) -> None:
-    """Rolls da crate vão para o estoque de rolls extras: não expiram, usa quando quiser."""
+    """Rolls da crate ficam guardados: não expiram e só valem depois de `mm!ativar`."""
     connection.execute(
         """
         INSERT INTO user_upgrades (discord_user_id, upgrade_key, roll_tokens)
@@ -579,7 +638,7 @@ def describe_prize(prize: CratePrize) -> str:
         return f"{prize.amount:,} Memilets".replace(",", ".")
     if prize.kind == "instant_rolls":
         plural = "s" if prize.amount > 1 else ""
-        return f"{prize.amount} roll{plural} guardado{plural} (use quando quiser)"
+        return f"{prize.amount} roll{plural} guardado{plural} (ative com mm!ativar)"
     if prize.kind.startswith("cosmetic:"):
         kind = prize.kind.split(":", 1)[1]
         label, emoji, *_ = COSMETIC_KINDS[kind]
@@ -617,6 +676,8 @@ class AccountStatus:
     crate_price: int = CRATE_BASE_PRICE
     wish_protection: int = 0
     instant_rolls: int = 0
+    active_rolls: int = 0  # rolls guardados já ativados
+    bonus_claims: int = 0  # contratações extras dos rolls ativados
 
 
 def get_account_status(
@@ -638,7 +699,8 @@ def get_account_status(
         perks = load_perks(connection, user_id)
         instant = cycle_bonus_rolls(connection, user_id, cycle_key)
         row = connection.execute(
-            "SELECT last_claim_at, last_daily_at FROM game_users WHERE discord_user_id = ?",
+            "SELECT last_claim_at, last_daily_at, active_rolls, bonus_claims FROM game_users "
+            "WHERE discord_user_id = ?",
             (user_id,),
         ).fetchone()
         usage = connection.execute(
@@ -701,4 +763,6 @@ def get_account_status(
         crate_price=perks.crate_price,
         wish_protection=perks.wish_protection_seconds,
         instant_rolls=instant,
+        active_rolls=int(row["active_rolls"]),
+        bonus_claims=int(row["bonus_claims"]),
     )

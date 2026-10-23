@@ -579,6 +579,11 @@ def initialize_database(database_path: str | Path = DATABASE_PATH) -> None:
             "box_office": "INTEGER NOT NULL DEFAULT 0",
             "box_office_total": "INTEGER NOT NULL DEFAULT 0",
             "last_rt_at": "TEXT",
+            # Rolls guardados ativados (`mm!ativar`), contratações extras ganhas com eles e
+            # a sobra (< 10) que conta para a próxima contratação.
+            "active_rolls": "INTEGER NOT NULL DEFAULT 0",
+            "bonus_claims": "INTEGER NOT NULL DEFAULT 0",
+            "activation_carry": "INTEGER NOT NULL DEFAULT 0",
         }
         for column, definition in game_user_migrations.items():
             if column not in game_user_columns:
