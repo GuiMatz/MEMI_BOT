@@ -19,6 +19,8 @@ from typing import Any
 
 import discord
 
+from src.accents import LIVE, NEUTRAL, team_color
+
 # Segundos entre lances; gols e intervalo esperam o dobro. O Discord aceita
 # cerca de 5 edições a cada 5 segundos por canal, então não use menos que 1.
 DEFAULT_DELAY = float(os.getenv("MEMI_NARRATION_DELAY", "1.6"))
@@ -217,6 +219,40 @@ def _best_from_stats(stats, events, dots) -> str:
     return f"{dots[side]} {name} · {', '.join(parts)}"
 
 
+# Lances que "pintam" a linha lateral com a cor de quem agiu.
+ACTION_EVENTS = {"goal", "save", "miracle", "post", "red", "offside", "pressure", "penalty"}
+
+
+def match_accent(
+    events: Sequence[dict[str, Any]],
+    home_color: str | None,
+    away_color: str | None,
+    *,
+    finished: bool = False,
+) -> discord.Color:
+    """A linha lateral acompanha o jogo: quem agiu por último; no fim, o vencedor."""
+    colors = {"home": team_color(home_color, LIVE), "away": team_color(away_color, LIVE)}
+    if not events:
+        return LIVE
+    if finished:
+        shootout = [event for event in events if event["kind"] == "penalty"]
+        last = shootout[-1] if shootout else events[-1]
+        home, away = last.get("home_goals", 0), last.get("away_goals", 0)
+        if home == away:
+            return NEUTRAL
+        return colors["home" if home > away else "away"]
+    last = events[-1]
+    if last["kind"] == "halftime":
+        return NEUTRAL
+    acted = next(
+        (event for event in reversed(events) if event["kind"] in ACTION_EVENTS),
+        None,
+    )
+    if acted is None or acted.get("side") not in colors:
+        return LIVE
+    return colors[acted["side"]]
+
+
 def match_embed(
     home_name: str,
     away_name: str,
@@ -238,7 +274,7 @@ def match_embed(
         embed = discord.Embed(
             title=f"🏟️ {title}",
             description=f"{board}\n{status}",
-            color=color or discord.Color.green(),
+            color=color or match_accent(events, home_color, away_color, finished=True),
         )
         goals = [event for event in regular if event["kind"] == "goal"]
         cards = Counter(event.get("side") for event in regular if event["kind"] == "card")
@@ -269,7 +305,7 @@ def match_embed(
     embed = discord.Embed(
         title=f"🏟️ {title}",
         description=f"{board}\n{status}\n\n" + "\n".join(lines[-VISIBLE_EVENTS:]),
-        color=color or discord.Color.red(),
+        color=color or match_accent(events, home_color, away_color),
     )
     return embed
 

@@ -8,6 +8,7 @@ from typing import Any
 
 import discord
 
+from src.accents import rarity_color
 from src.card_image import render_player_card
 from src.ratings import rarity_label
 
@@ -46,7 +47,7 @@ def card_embed(
     embed = discord.Embed(
         title=f"{title_prefix}{player_label(player)}",
         description="\n".join(lines),
-        color=color or (discord.Color.gold() if (overall or 0) >= 90 else discord.Color.blurple()),
+        color=color or rarity_color(overall),
     )
     embed.set_image(url="attachment://carta.png")
     if footer:
