@@ -28,6 +28,7 @@ COSMETIC_DAILY_BONUS = DAILY_MAX_STEP
 CRATE_BASE_PRICE = 500
 CRATE_MIN_PRICE = 250
 FREE_CLAIM_STEP = 0.04  # +4% por nível do Contrato Relâmpago
+ROLL_BANK_STEP = 3  # rolls de ontem que viram ativos hoje, por nível do Banco de Rolls
 BOX_OFFICE_BASE_CAP = 1_000
 INCOME_BASE = 100
 
@@ -118,6 +119,15 @@ UPGRADES: dict[str, UpgradeSpec] = {
         2_500,
         "#FACC15",
         "⚡",
+    ),
+    "roll_bank": UpgradeSpec(
+        "Banco de Rolls",
+        "+3 rolls que sobraram ontem viram rolls ativos hoje",
+        5,
+        3_000,
+        2_000,
+        "#6366F1",
+        "🏦",
     ),
 }
 
@@ -235,6 +245,11 @@ class Perks:
     @property
     def income_bonus(self) -> int:
         return 50 * self.upgrades["match_income"] + 50 * self.floor(6)
+
+    @property
+    def roll_bank_cap(self) -> int:
+        """Quantos rolls que sobraram ontem viram ativos hoje (Banco de Rolls)."""
+        return ROLL_BANK_STEP * self.upgrades["roll_bank"]
 
     @property
     def free_claim_chance(self) -> float:

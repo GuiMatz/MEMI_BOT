@@ -612,6 +612,8 @@ def initialize_database(database_path: str | Path = DATABASE_PATH) -> None:
             "epic_pity": "INTEGER NOT NULL DEFAULT 0",
             # Caixas seguidas sem Lendário: a garantia de Lendário.
             "legendary_pity": "INTEGER NOT NULL DEFAULT 0",
+            # Último dia (Brasília) em que o Banco de Rolls já foi creditado.
+            "roll_bank_day": "TEXT",
         }
         for column, definition in game_user_migrations.items():
             if column not in game_user_columns:

@@ -320,6 +320,36 @@ class RollTests(unittest.TestCase):
                 0,
             )
 
+    def test_banco_de_rolls_turns_yesterdays_leftovers_into_active_rolls(self):
+        from src.perks import ROLL_BANK_STEP
+
+        self.add_player()
+        register_user(100, "Pessoa", self.database_path)
+        with connect(self.database_path) as connection:
+            connection.execute(
+                "INSERT INTO user_upgrades (discord_user_id, upgrade_key, level) "
+                "VALUES ('100', 'roll_bank', 2)"
+            )
+        day_one = datetime(2026, 10, 20, 15, tzinfo=timezone.utc)  # 12h em Brasília
+        first = roll_player(100, "Pessoa", self.database_path, now=day_one, rng=random.Random(1))
+        self.assertEqual(first.banked, 0)  # o primeiro dia só começa a contar
+        day_two = day_one + timedelta(days=1)
+        second = roll_player(100, "Pessoa", self.database_path, now=day_two, rng=random.Random(2))
+        self.assertEqual(second.banked, 2 * ROLL_BANK_STEP)
+        third = roll_player(
+            100,
+            "Pessoa",
+            self.database_path,
+            now=day_two + timedelta(minutes=1),
+            rng=random.Random(3),
+        )
+        self.assertEqual(third.banked, 0)  # só uma vez por dia
+        with connect(self.database_path) as connection:
+            active = connection.execute(
+                "SELECT active_rolls FROM game_users WHERE discord_user_id = '100'"
+            ).fetchone()["active_rolls"]
+        self.assertEqual(active, 2 * ROLL_BANK_STEP)
+
     def test_contrato_relampago_can_keep_the_cycle_claim(self):
         from src.perks import FREE_CLAIM_STEP, UPGRADES
 

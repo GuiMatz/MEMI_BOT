@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+from src.clock import BRASILIA
 from src.db import DATABASE_PATH, connect
 from src.missions import record
 from src.pool_cache import snapshot
@@ -59,6 +60,7 @@ class RollOutcome:
     exclusive_seconds: int = BASE_EXCLUSIVE_SECONDS
     wished_by: tuple[str, ...] = ()
     protection_seconds: int = 0
+    banked: int = 0  # Banco de Rolls: rolls de ontem que viraram ativos agora
 
 
 @dataclass(frozen=True)
@@ -153,6 +155,7 @@ def roll_player(
             (user_id, cycle_key),
         ).fetchone()
         rolls_used = int(usage["rolls_used"]) if usage else 0
+        banked = _credit_roll_bank(connection, user_id, current_time)
         # Rolls guardados só valem depois de ativados (`mm!ativar`): esses são os ativos.
         roll_tokens = int(
             connection.execute(
@@ -328,7 +331,49 @@ def roll_player(
             exclusive_seconds=exclusive_seconds,
             wished_by=wished_by,
             protection_seconds=protection_seconds,
+            banked=banked,
         )
+
+
+def _credit_roll_bank(connection: sqlite3.Connection, user_id: str, now: datetime) -> int:
+    """Banco de Rolls: no primeiro roll do dia, rolls que sobraram ontem viram ativos.
+
+    Conta os rolls do ciclo não usados nos ciclos de ontem (horário de Brasília) e credita
+    até o limite do upgrade. Quem comprou agora começa a contar a partir de hoje."""
+    cap = load_perks(connection, user_id).roll_bank_cap
+    local = now.astimezone(BRASILIA)
+    today = local.date().isoformat()
+    row = connection.execute(
+        "SELECT roll_bank_day FROM game_users WHERE discord_user_id = ?", (user_id,)
+    ).fetchone()
+    last = row["roll_bank_day"] if row else None
+    if last == today:
+        return 0
+    connection.execute(
+        "UPDATE game_users SET roll_bank_day = ? WHERE discord_user_id = ?", (today, user_id)
+    )
+    if not cap or last is None:
+        return 0
+    start = (local - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    end = start + timedelta(days=1)
+    used = connection.execute(
+        "SELECT COALESCE(SUM(rolls_used), 0) FROM roll_cycles WHERE discord_user_id = ? "
+        "AND cycle_started_at >= ? AND cycle_started_at < ?",
+        (
+            user_id,
+            start.astimezone(timezone.utc).isoformat(timespec="seconds"),
+            end.astimezone(timezone.utc).isoformat(timespec="seconds"),
+        ),
+    ).fetchone()[0]
+    cycles = int(timedelta(days=1) / CYCLE_LENGTH)
+    unused = max(0, load_perks(connection, user_id).roll_capacity * cycles - int(used))
+    banked = min(cap, unused)
+    if banked:
+        connection.execute(
+            "UPDATE game_users SET active_rolls = active_rolls + ? WHERE discord_user_id = ?",
+            (banked, user_id),
+        )
+    return banked
 
 
 def claimed_at(value: str) -> datetime:
