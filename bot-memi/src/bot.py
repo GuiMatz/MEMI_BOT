@@ -76,6 +76,7 @@ class MemiBot(commands.Bot):
         await self.load_extension("src.cogs.matches")
         await self.load_extension("src.cogs.club")
         await self.load_extension("src.cogs.admin")
+        await self.load_extension("src.cogs.casino")
         from src.encyclopedia import prepare_game_data
 
         report = prepare_game_data(self.database_path)

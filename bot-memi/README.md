@@ -357,6 +357,16 @@ O FUT.AE é um módulo do MeMi BOT, não um bot separado. O menu geral continua 
   `mm!penaltis @pessoa 1000`. O outro aceita, cada um entra com o valor (ou ninguém, se
   faltar saldo) e quem vence leva o pote. Amistoso apostado não gera renda; se a partida
   não acontecer, as apostas voltam.
+- `mm!cassino [valor]` (`apostar`, `bet`, `casino`) abre o cassino: um painel com a
+  aposta (½, ×2 ou valor digitado, de 100 a 100.000) e quatro jogos **justos** (retorno
+  médio de exatamente 100%, a casa não fica com nada), cada um com animação em GIF:
+  - **Cara ou coroa**: acertou, 2x.
+  - **Caça-níquel**: três rolos (cereja, limão, sino, estrela, diamante, sete); três iguais
+    pagam de 4x a 250x e dois iguais pagam ~1,24x (o valor que fecha a conta em 100%).
+  - **Roleta**: 36 números sem o zero; cor ou par/ímpar 2x, dúzia 3x, número 36x.
+  - **Minas**: grade 4×4 com 1, 3, 5 ou 8 bombas; cada casa segura multiplica o prêmio
+    pela chance exata de ter passado e dá para sacar a qualquer hora. Se o jogo ficar
+    aberto, ele saca sozinho o que já foi ganho.
 - `mm!desafio` (`pve`, `lendas`) abre os desafios contra times lendários, montados na hora
   com as lendas da enciclopédia (12 clubes brasileiros, seleções lendárias e a Seleção
   Mundial), cada um na formação em que rende mais:

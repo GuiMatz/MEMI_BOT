@@ -3744,6 +3744,7 @@ AJUDA_JOGO = [
             ("mm!troca @pessoa", "monta uma troca de jogadores e Memilets"),
             ("mm!dar @pessoa <jogador|valor>", "doa um jogador ou Memilets"),
             ("mm!pay @pessoa <quantia>", "manda Memilets para outra pessoa"),
+            ("mm!cassino [valor]", "cara ou coroa, caça-níquel, roleta e minas (jogos justos)"),
         ],
     ),
     (
@@ -3926,6 +3927,7 @@ class MeMiBot(commands.Bot):
         for cog in COGS:
             await self.add_cog(cog(self))
         from src.cogs.admin import AdminCog
+        from src.cogs.casino import CasinoCog
         from src.cogs.club import ClubCog
         from src.cogs.economy import EconomyCog
         from src.cogs.game import GameCog
@@ -3946,6 +3948,7 @@ class MeMiBot(commands.Bot):
             MatchesCog,
             ClubCog,
             AdminCog,
+            CasinoCog,
         ):
             await self.add_cog(cog(self))
         try:

@@ -161,6 +161,13 @@ COMMAND_HELP: dict[str, tuple[str, str, tuple[str, ...]]] = {
         "você escolher.",
         ("mm!desafio", "..pve"),
     ),
+    "cassino": (
+        "mm!cassino [valor]",
+        "Cassino com jogos justos (retorno médio de 100%): cara ou coroa (2x), caça-níquel "
+        "(três iguais até 250x), roleta (cor/par 2x, dúzia 3x, número 36x) e minas (cada casa "
+        "segura aumenta o prêmio; saque quando quiser). Aposta de 100 a 100.000.",
+        ("mm!cassino", "mm!bet 5000", "..apostar 10k"),
+    ),
     "penaltis": (
         "mm!penaltis @pessoa [aposta]",
         "Disputa de pênaltis: quem bate escolhe o canto e quem defende escolhe onde pular, "
