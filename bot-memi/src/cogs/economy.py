@@ -14,7 +14,7 @@ from src.db import DATABASE_PATH, normalize_player_name
 from src.accents import rarity_color
 from src.card_image import render_player_card
 from src.cosmetics import COSMETIC_KINDS, list_owned
-from src.crate_animation import PrizeTile, batch_opening_gif, card_reveal_gif, prize_gif
+from src.crate_animation import PrizeTile, card_reveal_gif, prize_gif
 from src.economy import (
     CRATE_BATCHES,
     CRATE_DOUBLE_CHANCE,
@@ -447,12 +447,14 @@ class EconomyCog(commands.Cog):
         prizes = [prize for result in results for prize in result.prizes]
         best = max((result.best_rarity for result in results), key=list(RARITY_LABELS).index)
         if count > 1:
-            # Lote: o GIF só mostra o pacote abrindo e a melhor raridade; os prêmios de
-            # cada caixa vêm em lista no texto.
+            # Lote: o GIF mostra quantas caixas de cada raridade e os prêmios somados;
+            # o que saiu em cada caixa vem em lista no texto.
             counts: dict[str, int] = {}
             for result in results:
                 counts[result.best_rarity] = counts.get(result.best_rarity, 0) + 1
-            reveal = await asyncio.to_thread(batch_opening_gif, counts)
+            reveal = await asyncio.to_thread(
+                prize_gif, best, self.prize_tiles(author.id, prizes), counts=counts
+            )
             embed = self.crate_batch_embed(author, results)
         else:
             reveal = await asyncio.to_thread(prize_gif, best, self.prize_tiles(author.id, prizes))

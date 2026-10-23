@@ -196,20 +196,19 @@ class CrateBatchTests(Case):
         author = SimpleNamespace(id=100, display_name="Pessoa A")
         seen = {}
 
-        def fake_gif(counts):
-            seen["counts"] = dict(counts)
+        def fake_gif(rarity, tiles, counts=None, headline=None):
+            seen.update(rarity=rarity, tiles=tiles, counts=dict(counts or {}))
             return b"GIF89a"
 
         edit = AsyncMock()
-        with (
-            patch.object(cog_module, "batch_opening_gif", fake_gif),
-            patch.object(
-                cog_module, "prize_gif", side_effect=AssertionError("lote não usa cartões")
-            ),
-        ):
+        with patch.object(cog_module, "prize_gif", fake_gif):
             asyncio.run(cog.open_with_animation(author, AsyncMock(), edit, count=10))
         embed = edit.call_args.kwargs["embed"]
         self.assertEqual(sum(seen["counts"].values()), 10)
+        # Os cartões do GIF somam exatamente o que o texto diz no topo.
+        coins = next((t.title for t in seen["tiles"] if t.icon == "coin"), None)
+        if coins:
+            self.assertIn(coins, embed.description)
         caixas = [field for field in embed.fields if field.name.startswith("Caixa ")]
         self.assertEqual(len(caixas), 10)
         for rarity, amount in seen["counts"].items():

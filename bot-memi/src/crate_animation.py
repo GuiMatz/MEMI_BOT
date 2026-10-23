@@ -320,8 +320,18 @@ def _finish_reveal(frames: list[Image.Image], shimmer_ms: int = 70) -> bytes:
     return _gif([frame.convert("RGB") for frame in frames], durations, loop=False)
 
 
-def prize_gif(rarity: str, tiles: list[PrizeTile], *, headline: str | None = None) -> bytes:
-    """O pacote abre, os cartões dos prêmios surgem um a um e o GIF para com tudo à vista."""
+def prize_gif(
+    rarity: str,
+    tiles: list[PrizeTile],
+    *,
+    headline: str | None = None,
+    counts: dict[str, int] | None = None,
+) -> bytes:
+    """O pacote abre, os cartões dos prêmios surgem um a um e o GIF para com tudo à vista.
+
+    Com `counts` (abertura em lote), o topo diz quantas caixas foram abertas e quantas
+    saíram de cada raridade ("6 básicas · 2 incomuns · 1 rara"), acima dos cartões.
+    """
     color = RARITY_COLORS[rarity]
     power = RARITY_POWER[rarity]
     width, height = PRIZE_SIZE
@@ -335,9 +345,15 @@ def prize_gif(rarity: str, tiles: list[PrizeTile], *, headline: str | None = Non
     top = 128
     content = Image.new("RGBA", PRIZE_SIZE, (0, 0, 0, 0))
     draw = ImageDraw.Draw(content)
-    _tracked(draw, (width / 2, 44), RARITY_TITLES[rarity], 34, (255, 255, 255, 255), 7)
-    draw.line((width / 2 - 46, 72, width / 2 + 46, 72), fill=(*color, 255), width=3)
-    if headline:
+    if counts:
+        total = sum(counts.values())
+        _tracked(draw, (width / 2, 40), f"{total} CAIXAS ABERTAS", 26, (255, 255, 255, 255), 5)
+        draw.line((width / 2 - 46, 66, width / 2 + 46, 66), fill=(*color, 255), width=3)
+        _rarity_pills(draw, counts, center_x=width / 2, y=96)
+    else:
+        _tracked(draw, (width / 2, 44), RARITY_TITLES[rarity], 34, (255, 255, 255, 255), 7)
+        draw.line((width / 2 - 46, 72, width / 2 + 46, 72), fill=(*color, 255), width=3)
+    if headline and not counts:
         draw.text((width / 2, 98), headline, font=font(17, True), fill=(176, 184, 198), anchor="mm")
     x = x0
     for card in cards:
@@ -480,101 +496,20 @@ def card_reveal_gif(card: Image.Image, color, headline: str) -> bytes:
     return _finish_reveal(frames)
 
 
-def batch_opening_gif(counts: dict[str, int]) -> bytes:
-    """Abertura de várias caixas: o pacote abre com a luz da melhor raridade e para no
-    resumo do lote (quantas caixas de cada raridade); os prêmios vêm em lista no texto."""
-    order = list(RARITY_COLORS)
-    present = [rarity for rarity in order if counts.get(rarity)]
-    rarity = present[-1]  # a melhor do lote dá a cor da luz
-    color = RARITY_COLORS[rarity]
-    power = RARITY_POWER[rarity]
-    width, height = PRIZE_SIZE
-    base = Image.new("RGBA", PRIZE_SIZE, (*BACKGROUND, 255))
-    base.alpha_composite(glow(PRIZE_SIZE, (width / 2, height * 0.62), 300, (40, 52, 76), 120))
-    content = Image.new("RGBA", PRIZE_SIZE, (0, 0, 0, 0))
-    draw = ImageDraw.Draw(content)
-    _tracked(
-        draw, (width / 2, 58), f"{sum(counts.values())} CAIXAS ABERTAS", 26, (255, 255, 255, 255), 5
-    )
-    draw.line((width / 2 - 60, 88, width / 2 + 60, 88), fill=(*color, 255), width=3)
-    # Uma ficha por raridade: quantidade grande e o nome na cor da raridade.
-    chip_width, chip_height, gap = 108, 128, 14
-    row = len(present) * chip_width + (len(present) - 1) * gap
-    x = (width - row) / 2
-    top = 124
-    for item in present:
-        tone = RARITY_COLORS[item]
-        draw.rounded_rectangle(
-            (x, top, x + chip_width, top + chip_height), 16, fill=(20, 25, 35, 235)
-        )
-        draw.rounded_rectangle(
-            (x, top, x + chip_width, top + chip_height), 16, outline=(*tone, 255), width=3
-        )
-        draw.text(
-            (x + chip_width / 2, top + 54),
-            str(counts[item]),
-            font=font(52, True),
-            fill="white",
-            anchor="mm",
-        )
-        label = RARITY_SINGULARS[item] if counts[item] == 1 else RARITY_PLURALS[item]
-        draw.text(
-            (x + chip_width / 2, top + 104),
-            label,
-            font=font(14, True),
-            fill=(*tone, 255),
-            anchor="mm",
-        )
-        x += chip_width + gap
-    draw.text(
-        (width / 2, height - 34),
-        "prêmios de cada caixa na lista abaixo",
-        font=font(15),
-        fill=(176, 184, 198),
-        anchor="mm",
-    )
-    generator = random.Random(power + 3)
-    particles = [
-        (
-            generator.uniform(0, width),
-            generator.uniform(0, height),
-            generator.uniform(1.2, 3.0),
-            generator.uniform(0.6, 1.6),
-        )
-        for _ in range(12 + power * 8)
-    ]
-
-    def lit(t: float, alpha: float) -> Image.Image:
-        pulse = 0.5 + 0.5 * math.sin(t * 2 * math.pi)
-        image = base.copy()
-        image.alpha_composite(
-            glow(
-                PRIZE_SIZE,
-                (width / 2, height / 2),
-                220 + 40 * pulse,
-                color,
-                int((50 + 25 * power + 30 * pulse) * alpha),
-            )
-        )
-        dots = Image.new("RGBA", PRIZE_SIZE, (0, 0, 0, 0))
-        dot_draw = ImageDraw.Draw(dots)
-        for px, py, radius, speed in particles:
-            y = (py - t * height * speed * 0.5) % height
-            dot_draw.ellipse(
-                (px - radius, y - radius, px + radius, y + radius),
-                fill=(*mix(color, (255, 255, 255), 0.5), int(150 * alpha)),
-            )
-        image.alpha_composite(dots)
-        return image
-
-    frames = _opening(base, color, power, 220, height - 40)
-    for index in range(REVEAL_FRAMES):
-        t = _ease_out_cubic(index / (REVEAL_FRAMES - 1))
-        image = lit(0, t)
-        image.alpha_composite(_faded_layer(content, t))
-        frames.append(image)
-    for index in range(SHIMMER_FRAMES):
-        image = lit(index / SHIMMER_FRAMES, 1.0)
-        image.alpha_composite(content)
-        frames.append(image)
-    return _finish_reveal(frames)
+def _rarity_pills(draw, counts: dict[str, int], *, center_x: float, y: float) -> None:
+    """Fichas "6 BÁSICAS · 2 INCOMUNS · 1 RARA" centradas, cada uma na cor da raridade."""
+    face = font(15, True)
+    pills = []
+    for rarity in RARITY_COLORS:
+        amount = counts.get(rarity, 0)
+        if amount:
+            label = RARITY_SINGULARS[rarity] if amount == 1 else RARITY_PLURALS[rarity]
+            text = f"{amount} {label}"
+            pills.append((text, RARITY_COLORS[rarity], draw.textlength(text, font=face) + 26))
+    gap = 8
+    x = center_x - (sum(width for *_, width in pills) + gap * (len(pills) - 1)) / 2
+    for text, color, width in pills:
+        draw.rounded_rectangle((x, y - 14, x + width, y + 14), 14, fill=(20, 25, 35, 235))
+        draw.rounded_rectangle((x, y - 14, x + width, y + 14), 14, outline=(*color, 255), width=2)
+        draw.text((x + width / 2, y + 1), text, font=face, fill=(*color, 255), anchor="mm")
+        x += width + gap
