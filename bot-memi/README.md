@@ -345,7 +345,9 @@ O FUT.AE é um módulo do MeMi BOT, não um bot separado. O menu geral continua 
   "Selecionar todos" (mesmo mais de 25), incluir titulares, proteger com 🔒 e ver os
   protegidos, com a cotação ao vivo. `mm!proteger` sem nome abre nos protegidos.
 - `mm!amistoso` simula partidas de 90 minutos com força por setores, xG, gols,
-  artilheiros e estilos táticos.
+  artilheiros e estilos táticos. `mm!amistoso @pessoa idaevolta` joga ida (na casa de quem
+  desafiou) e volta (na casa do outro): vale o placar somado e o empate no agregado vai para
+  os pênaltis no fim da volta. A renda, se escolhida, é só a do jogo de ida.
 - `mm!campeonato` permite inscrição, início, configuração de canal e agendamento,
   com liga, classificação e final.
 - `mm!admin testeamistoso` e `mm!admin testecampeonato <quantidade>` executam testes

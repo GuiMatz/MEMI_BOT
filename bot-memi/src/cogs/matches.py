@@ -49,6 +49,10 @@ async def score_file(home, away, home_goals, away_goals, goals, **options) -> di
     return discord.File(image, filename="placar.gif")
 
 
+# `mm!amistoso @pessoa idaevolta`: um jogo na casa de cada time, vale o placar somado.
+TWO_LEG_WORDS = {"idaevolta", "ida", "iv", "2", "volta"}
+
+
 class IncomeChoiceView(discord.ui.View):
     """O mandante decide se o amistoso vale a renda do dia."""
 
@@ -310,10 +314,20 @@ class MatchesCog(commands.Cog):
         self,
         context: commands.Context,
         opponent: discord.Member,
+        mode: str | None = None,
     ) -> None:
+        """`mm!amistoso @pessoa` (jogo único) ou `mm!amistoso @pessoa idaevolta`."""
         if opponent.bot or opponent.id == context.author.id:
             await context.reply(
                 "Escolha outra pessoa com um time configurado.",
+                mention_author=False,
+            )
+            return
+        two_legs = normalize_player_name(mode or "").replace(" ", "") in TWO_LEG_WORDS
+        if mode and not two_legs:
+            await context.reply(
+                "Use `mm!amistoso @pessoa` (jogo único) ou `mm!amistoso @pessoa idaevolta` "
+                "(um jogo na casa de cada time).",
                 mention_author=False,
             )
             return
@@ -325,7 +339,10 @@ class MatchesCog(commands.Cog):
             return
 
         async def play(with_income: bool) -> None:
-            await self._play_friendly(context, opponent, with_income)
+            if two_legs:
+                await self._play_two_legs(context, opponent, with_income)
+            else:
+                await self._play_friendly(context, opponent, with_income)
 
         if not income_status(context.author.id, self.database_path).ready:
             await play(False)
@@ -333,21 +350,25 @@ class MatchesCog(commands.Cog):
         view = IncomeChoiceView(context.author.id, play)
         view.message = await context.reply(
             "🏟️ Esse amistoso vai gerar renda para o clube, tem certeza?\n"
-            "Depois dele, a próxima renda só sai em **24 h** (amistosos sem renda continuam "
+            + ("No ida e volta, a renda é só do jogo de ida (na sua casa). " if two_legs else "")
+            + "Depois dele, a próxima renda só sai em **24 h** (amistosos sem renda continuam "
             "liberados). Regras em `mm!renda`.",
             view=view,
             mention_author=False,
         )
 
-    async def _play_friendly(
-        self, context: commands.Context, opponent: discord.Member, with_income: bool
-    ) -> None:
+    async def _leg(
+        self, context: commands.Context, home_id: int, away_id: int, title: str, shootout
+    ):
+        """Um jogo narrado, com o placar no fim. `shootout(result)` diz se vai para os pênaltis.
+
+        Devolve (resultado, pênaltis ou None), ou None se algum time ficou inválido."""
         try:
-            home, home_players = get_valid_lineup(context.author.id, self.database_path)
-            away, away_players = get_valid_lineup(opponent.id, self.database_path)
+            home, home_players = get_valid_lineup(home_id, self.database_path)
+            away, away_players = get_valid_lineup(away_id, self.database_path)
         except TeamError as error:
             await context.send(str(error))
-            return
+            return None
         result = simulate_match(
             home["team_name"],
             home_players,
@@ -359,10 +380,9 @@ class MatchesCog(commands.Cog):
             away_tactics=away,
             home_advantage=True,
         )
-        # Empate no amistoso também vai para os pênaltis.
         timeline = list(result.events)
         penalties = None
-        if result.home_goals == result.away_goals:
+        if shootout(result):
             kicks = penalty_shootout_kicks(
                 home_players,
                 away_players,
@@ -371,14 +391,14 @@ class MatchesCog(commands.Cog):
             )
             timeline += penalty_events(kicks, result.home_name, result.away_name)
             penalties = (kicks[-1].home_score, kicks[-1].away_score)
-        record_friendly(context.author.id, opponent.id, result, penalties, self.database_path)
-        await context.send(f"🏟️ Local: **{venue_name(home)}**")
+        record_friendly(home_id, away_id, result, penalties, self.database_path)
+        await context.send(f"🏟️ {title} · Local: **{venue_name(home)}**")
         await narrate(
             lambda embed: context.send(embed=embed),
             result.home_name,
             result.away_name,
             timeline,
-            title="Amistoso",
+            title=title,
             penalties=penalties,
             home_color=home.get("color"),
             away_color=away.get("color"),
@@ -390,21 +410,80 @@ class MatchesCog(commands.Cog):
                 result.home_goals,
                 result.away_goals,
                 result.goals,
-                title="Amistoso",
+                title=title,
                 venue=venue_name(home),
                 penalties=penalties,
             )
         )
-        for user_id in (context.author.id, opponent.id):
+        for user_id in (home_id, away_id):
             record_event(user_id, "friendly", self.database_path)
+        return result, penalties
+
+    async def _play_friendly(
+        self, context: commands.Context, opponent: discord.Member, with_income: bool
+    ) -> None:
+        # Empate no amistoso também vai para os pênaltis.
+        played = await self._leg(
+            context,
+            context.author.id,
+            opponent.id,
+            "Amistoso",
+            lambda result: result.home_goals == result.away_goals,
+        )
+        if played is None:
+            return
+        result, penalties = played
         # Empate não existe mais no amistoso: quem ganha nos pênaltis também vence.
         home_won = result.home_goals > result.away_goals or (
             penalties is not None and penalties[0] > penalties[1]
         )
         winner = context.author.id if home_won else opponent.id
         record_event(winner, "friendly_win", self.database_path)
-        if not with_income:
+        if with_income:
+            await self._collect_income(context, result)
+
+    async def _play_two_legs(
+        self, context: commands.Context, opponent: discord.Member, with_income: bool
+    ) -> None:
+        """Ida na casa de quem desafiou, volta na casa do outro; vale o placar somado.
+        Empate no agregado: pênaltis no fim da volta. A renda (se escolhida) é só a da ida."""
+        first = await self._leg(
+            context, context.author.id, opponent.id, "Amistoso · Ida", lambda result: False
+        )
+        if first is None:
             return
+        ida, _ = first
+        if with_income:
+            await self._collect_income(context, ida)
+
+        def tied_on_aggregate(volta) -> bool:
+            return ida.home_goals + volta.away_goals == ida.away_goals + volta.home_goals
+
+        second = await self._leg(
+            context, opponent.id, context.author.id, "Amistoso · Volta", tied_on_aggregate
+        )
+        if second is None:
+            return
+        volta, penalties = second
+        challenger = ida.home_goals + volta.away_goals
+        rival = ida.away_goals + volta.home_goals
+        if challenger != rival:
+            challenger_won = challenger > rival
+        else:
+            challenger_won = penalties is not None and penalties[1] > penalties[0]
+        winner = context.author if challenger_won else opponent
+        record_event(winner.id, "friendly_win", self.database_path)
+        decided = (
+            f" (pênaltis {max(penalties)} a {min(penalties)})"
+            if challenger == rival and penalties
+            else ""
+        )
+        await context.send(
+            f"🏆 **Agregado:** {ida.home_name} {challenger} × {rival} {ida.away_name}{decided}. "
+            f"**{winner.display_name}** venceu o ida e volta!"
+        )
+
+    async def _collect_income(self, context: commands.Context, result) -> None:
         try:
             income = collect_income(
                 context.author.id, result.home_goals, result.away_goals, self.database_path

@@ -140,9 +140,11 @@ COMMAND_HELP: dict[str, tuple[str, str, tuple[str, ...]]] = {
         ("mm!time",),
     ),
     "amistoso": (
-        "mm!amistoso @pessoa",
-        "Um amistoso contra outro time; o primeiro do dia em casa gera renda.",
-        ("mm!amistoso @Ana",),
+        "mm!amistoso @pessoa [idaevolta]",
+        "Um amistoso contra outro time; o primeiro do dia em casa gera renda. Com "
+        "`idaevolta`, são dois jogos: ida na sua casa e volta na do outro; vale o placar "
+        "somado (empate no agregado vai para os pênaltis no fim da volta).",
+        ("mm!amistoso @Ana", "mm!amistoso @Ana idaevolta", "..amistoso @Ana ida"),
     ),
 }
 
