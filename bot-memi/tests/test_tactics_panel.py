@@ -20,7 +20,7 @@ def click(**data):
     )
 
 
-class TacticsPanelTests(unittest.IsolatedAsyncioTestCase):
+class TeamCase(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.tempdir = tempfile.TemporaryDirectory()
         self.database_path = Path(self.tempdir.name) / "tactics.sqlite"
@@ -46,6 +46,8 @@ class TacticsPanelTests(unittest.IsolatedAsyncioTestCase):
 
         return TacticsView(self.owner, self.database_path)
 
+
+class TacticsPanelTests(TeamCase):
     async def test_panel_has_menus_for_everything(self):
         view = self.panel()
         selects = [item for item in view.children if isinstance(item, discord.ui.Select)]
@@ -79,6 +81,49 @@ class TacticsPanelTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(get_team(100, self.database_path)["formation"], "5-4-1")
         self.assertEqual(len(get_lineup(100, self.database_path)), 11)
         self.assertIsNone(view.pending_formation)
+
+
+class TeamMenuTests(TeamCase):
+    async def test_team_message_has_one_menu_with_every_action(self):
+        from src.cogs.team import TEAM_ACTIONS, TeamLayout
+
+        layout = TeamLayout(
+            self.owner,
+            get_team(100, self.database_path),
+            get_lineup(100, self.database_path),
+            self.database_path,
+        )
+        container = layout.children[0]
+        rows = [item for item in container.children if isinstance(item, discord.ui.ActionRow)]
+        self.assertEqual(len(rows), 1)
+        (menu,) = rows[0].children
+        self.assertIsInstance(menu, discord.ui.Select)
+        self.assertEqual([option.value for option in menu.options], [a[0] for a in TEAM_ACTIONS])
+
+    async def test_menu_opens_tactics_and_reports_failures(self):
+        from src.cogs.team import TeamLayout
+
+        layout = TeamLayout(
+            self.owner,
+            get_team(100, self.database_path),
+            get_lineup(100, self.database_path),
+            self.database_path,
+        )
+        interaction = click(values=["tactics"])
+        interaction.user = SimpleNamespace(id=100)
+        await layout._manage(interaction)
+        sent = interaction.followup.send.call_args.kwargs
+        self.assertIn("Tática", sent["embed"].title)
+        roles = [item for item in sent["view"].children if isinstance(item, discord.ui.Select)][2]
+        self.assertNotIn("©", "".join(str(option.emoji) for option in roles.options))
+
+        broken = click(values=["tactics"])
+        broken.user = SimpleNamespace(id=100)
+        broken.followup.send = AsyncMock(side_effect=[RuntimeError("falhou"), None])
+        broken.response.is_done = lambda: True
+        with self.assertLogs("memi.team", level="ERROR"):
+            await layout._manage(broken)
+        self.assertEqual(broken.followup.send.call_args.kwargs, {"ephemeral": True})
 
 
 if __name__ == "__main__":

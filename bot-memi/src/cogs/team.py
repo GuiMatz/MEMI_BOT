@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 
 import discord
 from discord.ext import commands
@@ -33,6 +34,8 @@ from src.teams import (
     set_team_role,
     set_team_style,
 )
+
+LOGGER = logging.getLogger("memi.team")
 
 TEAM_FIELDS = {
     "nome": "team_name",
@@ -323,6 +326,15 @@ def team_summary(team: dict, lineup: list[dict], database_path) -> str:
     return " · ".join(parts)
 
 
+# Menu único do `mm!time`: (valor, rótulo, emoji, descrição).
+TEAM_ACTIONS = (
+    ("lineup", "Editar escalação", "✏️", "Escolher os titulares vaga por vaga"),
+    ("tactics", "Tática", "📋", "Formação, estilo, capitão e cobradores"),
+    ("customize", "Personalizar", "🎨", "Nome, cor, escudo, uniforme e mais"),
+    ("card", "Cartão do clube", "🛡️", "Resumo do clube com cosméticos e números"),
+)
+
+
 class TeamLayout(discord.ui.LayoutView):
     """`mm!time` em Components V2: a escalação ocupa a largura toda da mensagem."""
 
@@ -330,28 +342,41 @@ class TeamLayout(discord.ui.LayoutView):
         super().__init__(timeout=300)
         self.owner = owner
         self.database_path = database_path
-        card = discord.ui.Button(
-            label="Cartão do clube", emoji="🛡️", style=discord.ButtonStyle.secondary
+        manage = discord.ui.Select(
+            placeholder="⚙️ Gerenciar time",
+            options=[
+                discord.SelectOption(label=label, value=value, emoji=emoji, description=description)
+                for value, label, emoji, description in TEAM_ACTIONS
+            ],
         )
-        card.callback = self._show_card
-        edit = discord.ui.Button(
-            label="Editar escalação", emoji="✏️", style=discord.ButtonStyle.primary
-        )
-        edit.callback = self._edit
-        customize = discord.ui.Button(
-            label="Personalizar", emoji="🎨", style=discord.ButtonStyle.secondary
-        )
-        customize.callback = self._customize
-        tactics = discord.ui.Button(label="Tática", emoji="📋", style=discord.ButtonStyle.secondary)
-        tactics.callback = self._tactics
+        manage.callback = self._manage
         container = discord.ui.Container(
             discord.ui.TextDisplay(f"## {team['team_name']}"),
             discord.ui.MediaGallery(discord.MediaGalleryItem("attachment://escalacao.png")),
             discord.ui.TextDisplay(team_summary(team, lineup, database_path)),
-            discord.ui.ActionRow(card, edit, tactics, customize),
+            discord.ui.ActionRow(manage),
             accent_colour=discord.Color.from_str(team["color"]),
         )
         self.add_item(container)
+
+    async def _manage(self, interaction: discord.Interaction) -> None:
+        """Abre o painel escolhido; se algo falhar, avisa quem clicou em vez de calar."""
+        actions = {
+            "lineup": self._edit,
+            "tactics": self._tactics,
+            "customize": self._customize,
+            "card": self._show_card,
+        }
+        choice = interaction.data["values"][0]
+        try:
+            await actions[choice](interaction)
+        except Exception:  # noqa: BLE001 - o erro vai para o log e a pessoa é avisada
+            LOGGER.exception("Falha ao abrir %s do mm!time", choice)
+            message = "Não consegui abrir isso agora. Tente de novo em instantes."
+            if interaction.response.is_done():
+                await interaction.followup.send(message, ephemeral=True)
+            else:
+                await interaction.response.send_message(message, ephemeral=True)
 
     async def _show_card(self, interaction: discord.Interaction) -> None:
         team = get_team(self.owner.id, self.database_path)
@@ -485,7 +510,7 @@ class TacticsView(discord.ui.View):
                         f"{names.get(team[ROLE_COLUMNS[key]] or 0, 'não definido')} · "
                         f"{ROLE_HINTS[key]}"
                     )[:100],
-                    emoji={"capitao": "©️", "falta": "🎯", "penalti": "⚽"}[key],
+                    emoji={"capitao": "👑", "falta": "🎯", "penalti": "⚽"}[key],
                     default=key == self.role,
                 )
                 for key in ROLE_COLUMNS
