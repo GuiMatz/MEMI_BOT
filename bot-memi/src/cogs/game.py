@@ -262,7 +262,7 @@ FUTAE_SECTIONS = (
         "`mm!ativar <quantidade>` — ativa os rolls guardados (+1 contratação a cada 10)\n"
         "`mm!inventario` — caixas e pacotes ganhos nas caixas, para abrir de graça\n"
         "`mm!pacote [epico]` — uma carta de jogador livre do mercado (nunca Base)\n"
-        "`mm!allin` — aposta de 30 mil: roleta com 1 em 10 de Ícone ou melhor\n"
+        "`mm!allin` — aposta de 75 mil: roleta com 1 em 10 de Ícone ou melhor\n"
         "`mm!construir [1-12]` / `mm!destruir` — Centro de Treinamento (torre)\n"
         "`mm!renda` · `mm!bilheteria` — dinheiro do estádio e do campeonato\n"
         "`mm!missoes` — missões diárias e semanais · `mm!rt` — zera o claim (upgrade)",
@@ -283,7 +283,7 @@ FUTAE_SECTIONS = (
         "`mm!proteger <nome>` — 🔒 tira o jogador de todas as vendas\n"
         "`mm!troca @pessoa` — monta a troca nos menus · `mm!dar @pessoa <jogador|valor>`\n"
         "`mm!pay @pessoa <quantia>` — manda Memilets para outra pessoa\n"
-        "`mm!cassino [valor]` — cara ou coroa, caça-níquel, roleta e minas (jogos justos)\n"
+        "`mm!cassino [valor]` — cara ou coroa, caça-níquel, roleta e minas\n"
         "`mm!amistoso @pessoa [idaevolta] [aposta N]` — partida narrada, ida e volta, apostada\n"
         "`mm!penaltis @pessoa [aposta]` — disputa de pênaltis escolhendo o canto\n"
         "`mm!desafio` — partidas contra times lendários: escada, chefões e desafio livre\n"

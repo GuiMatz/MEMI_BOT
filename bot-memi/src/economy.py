@@ -37,8 +37,8 @@ CRATE_RARITIES = ("basico", "incomum", "raro", "epico", "lendario")
 CRATE_EXTRA_CHANCES = {"lendario": 0.006, "epico": 0.018, "raro": 0.055, "incomum": 0.16}
 # Caixa épica: a caixa comum sem a chance de vir só o Básico. O item extra sempre vem, nas
 # mesmas proporções da comum (Incomum ~67%, Raro ~23%, Épico ~7,5%, Lendário ~2,5%).
-# Custa 4 caixas: 4 comuns dão em média ~1 item extra.
-EPIC_CRATE_MULTIPLIER = 4
+# Custa 8 caixas: é o atalho caro para garantir o item extra.
+EPIC_CRATE_MULTIPLIER = 8
 EPIC_CRATE_EXTRA_CHANCES = {
     rarity: chance / sum(CRATE_EXTRA_CHANCES.values())
     for rarity, chance in CRATE_EXTRA_CHANCES.items()
