@@ -46,7 +46,8 @@ SHOT_VERBS = {
     "contra_ataque": "puxa o contra-ataque",
 }
 SCORER_MARKS = {"penalti": " (pên.)", "contra": " (contra)"}
-# Lances que não aparecem no ao vivo (só contam no resumo).
+# Lances menores (amarelo, chute para fora): aparecem na lista, mas não ganham uma edição
+# só deles; entram junto com o próximo lance (economiza edições da mensagem).
 QUIET_EVENTS = {"card", "miss"}
 # Bolinha do Discord por faixa de matiz (graus), para cores saturadas.
 HUE_DOTS = ((15, "🔴"), (40, "🟠"), (70, "🟡"), (170, "🟢"), (250, "🔵"), (330, "🟣"), (360, "🔴"))
@@ -81,10 +82,8 @@ def as_dicts(events: Sequence[Any]) -> list[dict[str, Any]]:
 
 
 def _line(event: dict[str, Any], dots: dict[str, str]) -> str | None:
-    """Linha curta de um lance; None para os que ficam fora do ao vivo."""
+    """Linha curta de um lance."""
     kind = event["kind"]
-    if kind in QUIET_EVENTS:
-        return None
     dot = dots.get(event.get("side") or "", "▫️")
     player = event.get("player")
     score = f"{event['home_goals']} × {event['away_goals']}"
@@ -127,6 +126,10 @@ def _line(event: dict[str, Any], dots: dict[str, str]) -> str | None:
         )
     elif kind == "post" and player:
         text = f"{dot} 🥅 {player} acerta a trave"
+    elif kind == "miss" and player:
+        text = f"{dot} 😩 {player} manda para fora"
+    elif kind == "card" and player:
+        text = f"{dot} 🟨 {player} leva amarelo"
     elif kind == "penalty" and player:
         mark = "✅" if event.get("scored", True) else "❌"
         verb = "converte" if event.get("scored", True) else "perde"
