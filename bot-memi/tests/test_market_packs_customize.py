@@ -314,6 +314,18 @@ class CrateBatchTests(Case):
             open_crates(100, "Pessoa A", 7, self.database_path)
         self.assertLessEqual(get_crate_pity(100, self.database_path), CRATE_PITY_LIMIT)
 
+    def test_memilets_crate_never_pays_for_itself(self):
+        from src.economy import CRATE_EXTRA_CHANCES, CRATE_MEMILETS
+
+        def average(rarity):
+            low, high = CRATE_MEMILETS[rarity]
+            return (low + high) / 2
+
+        expected = average("basico") + sum(
+            chance * average(rarity) for rarity, chance in CRATE_EXTRA_CHANCES.items()
+        )
+        self.assertLess(expected, CRATE_PRICE * 0.4)  # o valor da caixa está nos itens
+
     def test_raro_every_15_and_epico_every_50_without_luck(self):
         from src.economy import EPIC_PITY_LIMIT, get_epic_pity, open_crate
 
