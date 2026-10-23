@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import math
 from pathlib import Path
+from typing import Any
 
 from src.db import DATABASE_PATH, connect, initialize_database
 
@@ -99,3 +100,72 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+def raw_for_game_overall(target: int) -> int:
+    """Nota bruta que vira `target` na escala do jogo (abaixo de 90 a escala puxa para cima)."""
+    from src.ratings import game_overall
+
+    for raw in range(1, 100):
+        if game_overall(raw) >= target:
+            return raw
+    return 99
+
+
+def apply_current_stars(database_path: str | Path = DATABASE_PATH) -> dict[str, Any]:
+    """Aplica as notas dos craques atuais (`src/seeds/craques_atuais.py`).
+
+    Cada jogador é achado pelo nome (ou apelido); entre homônimos vale o de maior valor
+    de mercado, que é o craque. Lendas (Messi, CR7…) ficam de fora: continuam 99 como
+    lendas vivas. A nota vai para `overall_adjustments` (ajuste manual), então
+    reimportações e recálculos não a desfazem.
+    """
+    from src.db import normalize_player_name
+    from src.seeds.craques_atuais import CURRENT_STARS, STRETCH
+
+    applied, missing, legends = 0, [], []
+    with connect(database_path) as connection:
+        rows = connection.execute(
+            "SELECT id, name, display_name, overall_source, market_value_eur, overall "
+            "FROM players"
+        ).fetchall()
+        by_name: dict[str, list] = {}
+        for row in rows:
+            for value in (row["name"], row["display_name"]):
+                if value:
+                    by_name.setdefault(normalize_player_name(value), []).append(row)
+        for ea_rating, names in CURRENT_STARS:
+            found = {
+                int(row["id"]): row
+                for name in names
+                for row in by_name.get(normalize_player_name(name), [])
+            }
+            if not found:
+                missing.append(names[0])
+                continue
+            best = max(
+                found.values(),
+                key=lambda row: (row["market_value_eur"] or 0, row["overall"] or 0),
+            )
+            source = (best["overall_source"] or "").casefold()
+            if source in {"lenda", "lenda de clube", "cartola"}:
+                legends.append(names[0])
+                continue
+            raw = raw_for_game_overall(min(99, ea_rating + STRETCH))
+            connection.execute(
+                """
+                INSERT INTO overall_adjustments (player_id, overall, reason)
+                VALUES (?, ?, 'craques atuais (EA FC 27)')
+                ON CONFLICT(player_id) DO UPDATE SET
+                    overall = excluded.overall, reason = excluded.reason,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (best["id"], raw),
+            )
+            connection.execute(
+                "UPDATE players SET overall = ?, overall_source = 'manual', "
+                "overall_edition = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (raw, best["id"]),
+            )
+            applied += 1
+    return {"applied": applied, "missing": missing, "living_legends": legends}
