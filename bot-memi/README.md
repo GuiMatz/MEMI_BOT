@@ -54,6 +54,9 @@ reivindicados pelo botão: quem rolou tem 5 segundos de exclusividade (aumentáv
 minutos e cada pessoa tem um claim por ciclo (renova junto com os rolls).
 Os claims são atômicos e cada jogador só pode ter um dono.
 
+Todo comando funciona com `mm!` ou com o atalho `..` (`..roll`, `..amistoso`, `..tu`). O
+roll também atende por `..obter` e `..rolls`.
+
 Comandos oficiais do **FUT.AE** incluem `mm!futae`, `mm!left`, `mm!top [categoria]`, `mm!scout <nome>`, `mm!daily`, `mm!shop`, `mm!upgrade`, `mm!crates`,
 `mm!wish`, `mm!wishlist`/`mm!wl`, `mm!starwish`/`mm!sw`, `mm!vender`, `mm!proteger`, `mm!troca`, `mm!dar`, `mm!pacote`, `mm!personalizar`, `mm!time`,
 `mm!escalar`, `mm!tatica`, `mm!amistoso` e `mm!campeonato`. A economia diária
@@ -326,7 +329,7 @@ O FUT.AE é um módulo do MeMi BOT, não um bot separado. O menu geral continua 
 - `mm!troca @pessoa` abre um montador com os dois elencos (até 5 jogadores por lado e
   Memilets); a outra pessoa aceita ou recusa, e quem propôs pode cancelar.
 - `mm!dar @pessoa <jogador|valor>` doa um jogador ou Memilets, com confirmação.
-- `mm!play @pessoa <quantia>` (ou `mm!pay`, `mm!pagar`) manda Memilets, com confirmação.
+- `mm!pay @pessoa <quantia>` (ou `mm!pagar`, `mm!pix`) manda Memilets, com confirmação.
 - `mm!tu` e `mm!carteira` têm atalhos (Rolar, Daily, Missões, Ativar rolls, Inventário); o
   roll tem **Rolar de novo**; o daily mostra as missões e resgata as prontas; os botões de
   compra ficam cinza dizendo quanto falta; `mm!ajuda <comando>` explica cada comando.

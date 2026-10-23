@@ -36,7 +36,7 @@ class DiscordBotSetupTests(unittest.IsolatedAsyncioTestCase):
                         "vender",
                         "proteger",
                         "dar",
-                        "play",
+                        "pay",
                         "troca",
                         "pacote",
                         "shop",
@@ -81,5 +81,19 @@ class DiscordBotSetupTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIsNone(command_help_embed(bot, "naoexiste"))
                 for name in COMMAND_HELP:  # todo detalhe aponta para um comando de verdade
                     self.assertIsNotNone(bot.get_command(name), name)
+                # ..roll, ..obter e ..rolls valem como mm!roll.
+                from types import SimpleNamespace
+                from unittest.mock import patch
+
+                from src.bot import command_prefix
+
+                with patch(
+                    "src.bot.commands.when_mentioned", side_effect=lambda *_: []
+                ):  # sem login
+                    for text, prefix in (("..roll", ".."), ("MM!roll", "MM!"), ("mm!tu", "mm!")):
+                        self.assertIn(prefix, command_prefix(bot, SimpleNamespace(content=text)))
+                    self.assertEqual(command_prefix(bot, SimpleNamespace(content=".roll")), [])
+                for alias in ("obter", "rolls"):
+                    self.assertIs(bot.get_command(alias), bot.get_command("roll"))
             finally:
                 await bot.close()

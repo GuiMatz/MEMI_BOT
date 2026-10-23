@@ -14,14 +14,16 @@ from src.db import DATABASE_PATH, ROOT, initialize_database, normalize_player_na
 
 LOGGER = logging.getLogger("memi")
 PREFIX = "mm!"
+SHORT_PREFIX = ".."  # atalho: ..roll, ..amistoso = mm!roll, mm!amistoso
 
 
 def command_prefix(bot: commands.Bot, message: discord.Message) -> list[str]:
-    """Aceita o prefixo em qualquer combinação de maiúsculas (MM!, Mm!, mM!...)."""
+    """Aceita `mm!` (em qualquer combinação de maiúsculas: MM!, Mm!…) e o atalho `..`."""
     prefixes = commands.when_mentioned(bot, message)
-    start = (message.content or "")[: len(PREFIX)]
-    if start.casefold() == PREFIX:
-        prefixes.append(start)
+    for accepted in (PREFIX, SHORT_PREFIX):
+        start = (message.content or "")[: len(accepted)]
+        if start.casefold() == accepted:
+            prefixes.append(start)
     return prefixes
 
 

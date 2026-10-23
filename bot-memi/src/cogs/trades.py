@@ -1047,14 +1047,14 @@ class TradesCog(commands.Cog):
 
         await self._resolve(context, text, self._owned(context.author.id), chosen)
 
-    @commands.command(name="play", aliases=["pay", "pagar", "pix"])
+    @commands.command(name="pay", aliases=["pagar", "pix"])
     async def pay(self, context: commands.Context, *, arguments: str = "") -> None:
-        """`mm!play @pessoa <quantia>`: manda Memilets para outra pessoa (com confirmação)."""
+        """`mm!pay @pessoa <quantia>`: manda Memilets para outra pessoa (com confirmação)."""
         target = next((member for member in context.message.mentions if not member.bot), None)
         amount = re.sub(r"[.\s]", "", re.sub(r"<@!?\d+>", " ", arguments))
         if target is None or target.id == context.author.id or not amount.isdigit():
             await context.reply(
-                "Use `mm!play @pessoa <quantia>` para mandar Memilets: `mm!play @Ana 5000`.",
+                "Use `mm!pay @pessoa <quantia>` para mandar Memilets: `mm!pay @Ana 5000`.",
                 mention_author=False,
             )
             return

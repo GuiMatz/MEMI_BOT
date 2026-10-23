@@ -109,10 +109,10 @@ COMMAND_HELP: dict[str, tuple[str, str, tuple[str, ...]]] = {
         "Doa um jogador ou Memilets, com confirmação. A outra pessoa não precisa aceitar.",
         ("mm!dar @Ana Fulano", "mm!dar @Ana 5000"),
     ),
-    "play": (
-        "mm!play @pessoa <quantia>",
+    "pay": (
+        "mm!pay @pessoa <quantia>",
         "Manda Memilets para outra pessoa, com confirmação.",
-        ("mm!play @Ana 5000", "mm!pay @Ana 1.000"),
+        ("mm!pay @Ana 5000", "mm!pagar @Ana 1.000"),
     ),
     "troca": (
         "mm!troca @pessoa",

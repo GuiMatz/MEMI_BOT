@@ -241,7 +241,7 @@ class RollsCog(commands.Cog):
         self.bot = bot
         self.database_path = getattr(bot, "database_path", DATABASE_PATH)
 
-    @commands.command(name="roll")
+    @commands.command(name="roll", aliases=["obter", "rolls"])
     async def roll(self, context: commands.Context) -> None:
         await self.send_roll(
             context.author, lambda **kwargs: context.reply(mention_author=False, **kwargs)

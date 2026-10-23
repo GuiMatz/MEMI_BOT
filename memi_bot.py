@@ -73,6 +73,7 @@ _ARQ_TOKEN = Path(__file__).with_name("token.txt")
 TOKEN = _ARQ_TOKEN.read_text(encoding="utf-8").strip() if _ARQ_TOKEN.exists() else ""
 
 PREFIX = "mm!"
+PREFIX_CURTO = ".."  # atalho: ..roll, ..amistoso funcionam igual a mm!roll, mm!amistoso
 
 # O bot acompanha todos os chats acessíveis; o config.json só guarda os IDs do dono,
 # do canal de avisos e do servidor.
@@ -3695,6 +3696,7 @@ AJUDA_JOGO = [
             ("mm!roll", "rola um jogador; 10 rolls a cada 30 min (hora cheia e meia hora)"),
             ("mm!tu", "mostra rolls restantes, claim (a cada 30 min) e daily com horário"),
             ("mm!ajuda <comando>", "explica um comando com exemplos: mm!ajuda crates"),
+            ("..comando", "atalho para todos os comandos: ..roll, ..obter, ..amistoso, ..tu"),
             ("mm!scout <nome>", "ficha de jogador, técnico, estádio, emblema, uniforme ou mascote"),
             ("mm!top [categoria]", "catálogo: jogadores, cartola, técnicos, emblemas, mascotes…"),
             ("mm!left", "jogadores e cosméticos (emblemas, uniformes…) ainda livres"),
@@ -3740,7 +3742,7 @@ AJUDA_JOGO = [
             ("mm!proteger <nome>", "🔒 tira o jogador de todas as vendas"),
             ("mm!troca @pessoa", "monta uma troca de jogadores e Memilets"),
             ("mm!dar @pessoa <jogador|valor>", "doa um jogador ou Memilets"),
-            ("mm!play @pessoa <quantia>", "manda Memilets para outra pessoa"),
+            ("mm!pay @pessoa <quantia>", "manda Memilets para outra pessoa"),
         ],
     ),
     (
@@ -3998,11 +4000,12 @@ def criar_intents(membros):
 
 
 def prefixo(bot, message):
-    """Aceita o prefixo em qualquer combinação de maiúsculas/minúsculas (MM!, Mm!, mm!...)."""
+    """Aceita `mm!` (em qualquer combinação de maiúsculas: MM!, Mm!…) e o atalho `..`."""
     prefixos = commands.when_mentioned(bot, message)
-    inicio = (message.content or "")[: len(PREFIX)]
-    if inicio.lower() == PREFIX.lower():
-        prefixos.append(inicio)  # devolve exatamente o que a pessoa digitou
+    for aceito in (PREFIX, PREFIX_CURTO):
+        inicio = (message.content or "")[: len(aceito)]
+        if inicio.lower() == aceito.lower():
+            prefixos.append(inicio)  # devolve exatamente o que a pessoa digitou
     return prefixos
 
 
