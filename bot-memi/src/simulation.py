@@ -351,6 +351,13 @@ POST_LINES = (
     "🥅 NA TRAVE! {shooter} quase marca para o {team}!",
     "🥅 Bola no travessão! {shooter} acertou a madeira!",
 )
+# Lance extra quando o mesmo jogador chega a 3, 4 ou 5+ gols na partida.
+FEAT_LINES = {
+    3: "🎩 **HAT-TRICK!** {player} marca o terceiro e leva a bola para casa!",
+    4: "🔥 **POKER!** {player} faz o quarto gol! Que noite!",
+    5: "🖐️ **MANITA!** {player} chega a {goals} gols! Atuação histórica!",
+}
+ROUT_MARGIN = 4  # goleada: 4 ou mais gols de diferença
 PRESSURE_LINES = (
     "🔥 O {team} se lança ao ataque e encurrala o adversário!",
     "🔥 Pressão total do {team}! A torcida empurra o time.",
@@ -587,6 +594,9 @@ def simulate_match(
     events: list[MatchEvent] = []
     booked: set[tuple[str, int]] = set()
     sent_off = {"home": 0, "away": 0}
+    tally: dict[tuple[str, int], int] = {}  # gols de cada jogador (sem gol contra)
+    was_behind = {"home": False, "away": False}
+    highlights: list[str] = []
     pressure_until = {"home": -1, "away": -1}
     last_pressure = {"home": -PRESSURE_COOLDOWN, "away": -PRESSURE_COOLDOWN}
 
@@ -618,6 +628,34 @@ def simulate_match(
             generator.choice(PRESSURE_LINES).format(team=names[side]),
             side,
         )
+
+    def celebrate(side, other, shooter, play, minute, stoppage, level_before) -> None:
+        """Feitos que merecem um lance próprio: hat-trick, virada e empate no fim."""
+        team = names[side]
+        if play != "contra":
+            key = (side, int(shooter["id"]))
+            tally[key] = tally.get(key, 0) + 1
+            count = tally[key]
+            if count >= 3:
+                name = _name(shooter)
+                text = FEAT_LINES.get(count, FEAT_LINES[5]).format(
+                    player=name, team=team, goals=count
+                )
+                add(minute, stoppage, "feat", text, side, name, None, "hattrick")
+                label = {3: "🎩 Hat-trick", 4: "🔥 Poker"}.get(count, f"🖐️ {count} gols")
+                highlights[:] = [h for h in highlights if not h.endswith(f"de {name} ({team})")]
+                highlights.append(f"{label} de {name} ({team})")
+        if score[other] < score[side]:
+            was_behind[other] = True  # quem sofreu ficou atrás no placar
+        if was_behind[side] and score[side] == score[other] + 1 and level_before:
+            was_behind[side] = False
+            text = f"🔄 **VIRADA!** O {team} estava perdendo e agora está na frente!"
+            add(minute, stoppage, "feat", text, side, None, None, "virada")
+            highlights.append(f"🔄 Virada do {team}")
+        elif score[side] == score[other] and minute >= 85:
+            text = f"⏱️ **EMPATE NO FIM!** O {team} busca o empate quando ninguém esperava!"
+            add(minute, stoppage, "feat", text, side, None, None, "empate_fim")
+            highlights.append(f"⏱️ Empate do {team} no fim")
 
     def send_off(side: str, player: dict[str, Any], minute: int, stoppage: int, text: str):
         on_pitch[side] = [other for other in on_pitch[side] if other is not player]
@@ -705,6 +743,7 @@ def simulate_match(
                     if play not in {"penalti", "falta"} and generator.random() < OWN_GOAL_CHANCE:
                         play = "contra"
                         shooter = _pick(on_pitch[other], DEFENSE_WEIGHT, profiles[other], generator)
+                    level_before = score[side] == score[other]
                     score[side] += 1
                     goals.append(
                         Goal(minute, side, int(shooter["id"]), _name(shooter), stoppage, play)
@@ -730,6 +769,7 @@ def simulate_match(
                         _name(assistant) if assistant is not None else None,
                         play,
                     )
+                    celebrate(side, other, shooter, play, minute, stoppage, level_before)
                     # Quem sofre o gol tenta reagir na hora.
                     if score[other] <= score[side] and generator.random() < 0.4:
                         start_pressure(other, step, minute, stoppage)
@@ -801,6 +841,11 @@ def simulate_match(
                 )
     ratings = _player_ratings(lineups, profiles, events, score, generator)
     stats = _match_stats(events, _possession(profiles, home_style, away_style, generator), ratings)
+    margin = score["home"] - score["away"]
+    if abs(margin) >= ROUT_MARGIN:
+        winner = home_name if margin > 0 else away_name
+        highlights.append(f"🧱 Goleada do {winner}")
+    stats["highlights"] = highlights
     events.append(
         MatchEvent(
             90,

@@ -33,19 +33,78 @@ from src.visual import (
 
 WIDTH, HEIGHT = 1200, 630
 GOLD = (240, 200, 70)
-MAX_SCORERS = 4
 
 
-def _goals_by_side(goals: Iterable[Any], side: str) -> list[str]:
-    lines = []
+# Feitos de um jogador só na partida (selo dourado ao lado do nome).
+FEATS = {3: "HAT-TRICK", 4: "POKER"}
+MANITA = "MANITA"
+SCORERS_BOTTOM = 592  # a lista de gols não passa daqui
+
+
+def feat_label(goals: int) -> str | None:
+    """HAT-TRICK (3), POKER (4) ou MANITA (5+); None abaixo de 3 gols."""
+    if goals >= 5:
+        return MANITA
+    return FEATS.get(goals)
+
+
+def _goals_by_side(goals: Iterable[Any], side: str) -> list[dict[str, Any]]:
+    """Gols agrupados por jogador, na ordem do primeiro gol: nome, minutos e quantidade."""
+    scorers: dict[str, dict[str, Any]] = {}
     for goal in goals:
         data = goal if isinstance(goal, dict) else goal.__dict__
         if data.get("side") != side:
             continue
         minute = f"{data['minute']}'" + (f"+{data['stoppage']}" if data.get("stoppage") else "")
-        own_goal = " (contra)" if data.get("play") == "contra" else ""
-        lines.append((minute, str(data.get("scorer_name") or "—") + own_goal))
-    return lines
+        own_goal = data.get("play") == "contra"
+        name = str(data.get("scorer_name") or "—") + (" (contra)" if own_goal else "")
+        entry = scorers.setdefault(name, {"name": name, "minutes": [], "own_goal": own_goal})
+        entry["minutes"].append(minute)
+    for entry in scorers.values():
+        entry["count"] = len(entry["minutes"])
+    return list(scorers.values())
+
+
+def _draw_scorer(draw, center_x: float, y: float, entry: dict[str, Any]) -> float:
+    """Uma linha por jogador; com 2+ gols, os minutos vão embaixo. Devolve a altura usada."""
+    face = font(30, True)
+    if entry["count"] == 1:
+        label = fit(draw, f"{entry['minutes'][0]}  {entry['name']}", face, 400)
+        width = draw.textlength(label, font=face)
+        left = center_x - (width + 36) / 2
+        _ball(draw, left + 11, y, 11)
+        draw.text((left + 32, y), label, font=face, fill="white", anchor="lm")
+        return 40
+    feat = None if entry["own_goal"] else feat_label(entry["count"])
+    tag = feat or f"×{entry['count']}"
+    tag_face = font(18 if feat else 24, True)
+    tag_width = draw.textlength(tag, font=tag_face) + (22 if feat else 0)
+    name = fit(draw, entry["name"], face, 400 - tag_width - 12)
+    width = draw.textlength(name, font=face) + 32 + 12 + tag_width
+    left = center_x - width / 2
+    _ball(draw, left + 11, y, 11)
+    draw.text((left + 32, y), name, font=face, fill="white", anchor="lm")
+    tag_left = left + 32 + draw.textlength(name, font=face) + 12
+    if feat:
+        draw.rounded_rectangle((tag_left, y - 14, tag_left + tag_width, y + 14), 14, fill=GOLD)
+        draw.text(
+            (tag_left + tag_width / 2, y + 1), feat, font=tag_face, fill=(20, 20, 24), anchor="mm"
+        )
+    else:
+        draw.text((tag_left, y), tag, font=tag_face, fill=GOLD, anchor="lm")
+    minutes = fit(draw, " · ".join(entry["minutes"]), font(20), 400)
+    draw.text((center_x, y + 28), minutes, font=font(20), fill=MUTED, anchor="mm")
+    return 66
+
+
+def _draw_scorers(draw, center_x: float, entries: list[dict[str, Any]], y: float = 458) -> None:
+    for index, entry in enumerate(entries):
+        height = 40 if entry["count"] == 1 else 66
+        if index and y + height > SCORERS_BOTTOM:
+            rest = sum(item["count"] for item in entries[index:])
+            text_center(draw, (center_x, y), f"+{rest} gols", 24, False, MUTED)
+            return
+        y += _draw_scorer(draw, center_x, y, entry)
 
 
 def _ball(draw: ImageDraw.ImageDraw, x: float, y: float, radius: float) -> None:
@@ -131,18 +190,7 @@ def render_score_card(
 
     goal_list = list(goals)
     for side, center_x in (("home", 230), ("away", 970)):
-        rows = _goals_by_side(goal_list, side)
-        shown = rows[:MAX_SCORERS]
-        y = 458
-        for minute, scorer in shown:
-            label = fit(draw, f"{minute}  {scorer}", font(30, True), 400)
-            width = draw.textlength(label, font=font(30, True))
-            left = center_x - (width + 36) / 2
-            _ball(draw, left + 11, y, 11)
-            draw.text((left + 32, y), label, font=font(30, True), fill="white", anchor="lm")
-            y += 40
-        if len(rows) > MAX_SCORERS:
-            text_center(draw, (center_x, y), f"+{len(rows) - MAX_SCORERS} gols", 24, False, MUTED)
+        _draw_scorers(draw, center_x, _goals_by_side(goal_list, side))
 
     draw.rectangle((0, HEIGHT - 10, WIDTH // 2, HEIGHT), fill=home_color)
     draw.rectangle((WIDTH // 2, HEIGHT - 10, WIDTH, HEIGHT), fill=away_color)
@@ -209,33 +257,15 @@ def _team_layer(team: dict[str, Any], center_x: int) -> Image.Image:
 
 
 def _scorer_layers(goals: list[Any]) -> list[tuple[Image.Image, int]]:
-    """Uma camada por artilheiro, na ordem em que aparecem (alternando os lados)."""
+    """Os artilheiros de cada lado numa camada (gols do mesmo jogador agrupados)."""
     rows: list[tuple[Image.Image, int]] = []
-    for side, center_x in (("home", 230), ("away", 970)):
+    for order, (side, center_x) in enumerate((("home", 230), ("away", 970))):
         entries = _goals_by_side(goals, side)
-        y = 458
-        for index, (minute, scorer) in enumerate(entries[:MAX_SCORERS]):
-            layer = _layer()
-            draw = ImageDraw.Draw(layer)
-            label = fit(draw, f"{minute}  {scorer}", font(30, True), 400)
-            width = draw.textlength(label, font=font(30, True))
-            left = center_x - (width + 36) / 2
-            _ball(draw, left + 11, y, 11)
-            draw.text((left + 32, y), label, font=font(30, True), fill="white", anchor="lm")
-            rows.append((layer, index * 2 + (0 if side == "home" else 1)))
-            y += 40
-        if len(entries) > MAX_SCORERS:
-            layer = _layer()
-            text_center(
-                ImageDraw.Draw(layer),
-                (center_x, y),
-                f"+{len(entries) - MAX_SCORERS} gols",
-                24,
-                False,
-                MUTED,
-            )
-            rows.append((layer, MAX_SCORERS * 2 + (0 if side == "home" else 1)))
-    rows.sort(key=lambda row: row[1])
+        if not entries:
+            continue
+        layer = _layer()
+        _draw_scorers(ImageDraw.Draw(layer), center_x, entries)
+        rows.append((layer, order))
     return rows
 
 
