@@ -39,10 +39,6 @@ from src.db import DATABASE_PATH
 from src.game import get_wallet, register_user
 from src.wagers import parse_wager
 
-CASINO_INTRO = (
-    "Jogos **justos**: o retorno médio é 100% do que você aposta, a casa não fica com "
-    "nada. Dá para ganhar (e perder) bastante no curto prazo. Escolha o valor e o jogo."
-)
 DEFAULT_BET = 1_000
 SLOT_LABELS = {
     "cereja": "🍒",
@@ -94,9 +90,7 @@ class CasinoView(discord.ui.View):
 
     def embed(self) -> discord.Embed:
         balance = get_wallet(self.owner.id, self.cog.database_path)["memilets"]
-        embed = discord.Embed(
-            title="🎰 Cassino", description=f"*{CASINO_INTRO}*", color=discord.Color.gold()
-        )
+        embed = discord.Embed(title="🎰 Cassino", color=discord.Color.gold())
         embed.add_field(name="Aposta", value=f"{icons.memilets(self.bet)} Memilets")
         embed.add_field(name="Saldo", value=f"{icons.memilets(balance)} Memilets")
         embed.add_field(

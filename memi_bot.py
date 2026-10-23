@@ -3728,7 +3728,7 @@ AJUDA_JOGO = [
             ("mm!ativar <quantidade>", "ativa os rolls guardados: +1 contratação a cada 10"),
             ("mm!inventario", "caixas e pacotes ganhos nas caixas, para abrir de graça"),
             ("mm!pacote [epico]", "uma carta de jogador livre do mercado (nunca Base)"),
-            ("mm!allin", "aposta de 30 mil: roleta com 1 chance em 10 de Ícone ou melhor"),
+            ("mm!allin", "aposta de 75 mil: roleta com 1 chance em 10 de Ícone ou melhor"),
             (
                 "mm!construir [1-12] / mm!destruir",
                 "Centro de Treinamento: torre de upgrades eternos",
@@ -3744,7 +3744,7 @@ AJUDA_JOGO = [
             ("mm!troca @pessoa", "monta uma troca de jogadores e Memilets"),
             ("mm!dar @pessoa <jogador|valor>", "doa um jogador ou Memilets"),
             ("mm!pay @pessoa <quantia>", "manda Memilets para outra pessoa"),
-            ("mm!cassino [valor]", "cara ou coroa, caça-níquel, roleta e minas (jogos justos)"),
+            ("mm!cassino [valor]", "cara ou coroa, caça-níquel, roleta e minas"),
         ],
     ),
     (

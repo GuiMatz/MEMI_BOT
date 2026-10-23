@@ -144,7 +144,7 @@ class HubTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             labels, ["½", "×2", "Valor…", "Cara ou coroa", "Caça-níquel", "Roleta", "Minas"]
         )
-        self.assertIn("justos", view.embed().description)
+        self.assertEqual(view.embed().title, "🎰 Cassino")
         tempdir.cleanup()
 
 
