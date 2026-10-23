@@ -9,8 +9,59 @@ from typing import Any
 import discord
 
 from src.accents import rarity_color
+from src.transactions import PACK_SALE_FACTOR
 from src.card_image import animated_photo, render_player_card, render_player_card_gif
 from src.ratings import rarity_label
+
+
+def followup_sender(interaction: discord.Interaction) -> Callable[..., Awaitable[Any]]:
+    """`send(**kwargs)` para um botão que faz trabalho demorado (roll, imagem): segura a
+    interação ("pensando…") e manda a resposta como mensagem nova, devolvendo a mensagem.
+
+    Aceita os mesmos argumentos do `context.reply` usado nos comandos (`mention_author` é
+    ignorado), para o mesmo código servir aos dois."""
+
+    async def send(**kwargs: Any) -> Any:
+        kwargs.pop("mention_author", None)
+        if not interaction.response.is_done():
+            await interaction.response.defer(thinking=True)
+        return await interaction.followup.send(wait=True, **kwargs)
+
+    return send
+
+
+def _player_choices(database_path, current: str, owner_id: int | None) -> list[tuple[str, str]]:
+    """(rótulo, valor) dos 25 jogadores que mais combinam com o que foi digitado."""
+    from src.db import connect, normalize_player_name
+    from src.ratings import GAME_OVERALL_SQL
+
+    typed = normalize_player_name(current or "")
+    owned = "JOIN player_ownership AS o ON o.player_id = p.id AND o.discord_user_id = ?"
+    query = f"""
+        SELECT COALESCE(NULLIF(p.display_name, ''), p.name) AS label, {GAME_OVERALL_SQL} AS overall,
+               p.game_position
+        FROM players AS p {owned if owner_id is not None else ""}
+        WHERE normalize_player_name(COALESCE(NULLIF(p.display_name, ''), p.name)) LIKE ?
+        ORDER BY overall DESC, label LIMIT 25
+    """
+    arguments = ([str(owner_id)] if owner_id is not None else []) + [f"%{typed}%"]
+    with connect(database_path) as connection:
+        rows = connection.execute(query, arguments).fetchall()
+    return [
+        (
+            f"{row['label']} · {row['overall']} · {row['game_position'] or '—'}"[:100],
+            row["label"][:100],
+        )
+        for row in rows
+    ]
+
+
+async def player_choices(
+    database_path, current: str, owner_id: int | None = None
+) -> list[discord.app_commands.Choice[str]]:
+    """Sugestões do `/comando` enquanto a pessoa digita o nome (só os dela com `owner_id`)."""
+    rows = await asyncio.to_thread(_player_choices, database_path, current, owner_id)
+    return [discord.app_commands.Choice(name=label, value=value) for label, value in rows]
 
 
 def player_label(player: dict[str, Any]) -> str:
@@ -54,7 +105,7 @@ def card_embed(
     if player.get("locked"):
         lines.append("🔒 Protegido (não aparece em vendas)")
     if player.get("pack_origin"):
-        lines.append("📦 Veio de pacote: vende por 25% do valor")
+        lines.append(f"📦 Veio de pacote: vende por {round(PACK_SALE_FACTOR * 100)}% do valor")
     if "owner_name" in player:
         lines.append(f"🔒 Contratado por **{owner}**" if owner else "🟢 Livre para contratar")
     embed = discord.Embed(

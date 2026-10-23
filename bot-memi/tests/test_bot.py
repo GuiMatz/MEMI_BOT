@@ -36,8 +36,16 @@ class DiscordBotSetupTests(unittest.IsolatedAsyncioTestCase):
                         "vender",
                         "proteger",
                         "dar",
+                        "pay",
+                        "penaltis",
+                        "desafio",
+                        "cassino",
                         "troca",
                         "pacote",
+                        "shop",
+                        "allin",
+                        "ativar",
+                        "inventario",
                         "time",
                         "personalizar",
                         "escudo",
@@ -68,5 +76,32 @@ class DiscordBotSetupTests(unittest.IsolatedAsyncioTestCase):
                     },
                 )
                 self.assertIs(bot.get_command("ajudajogo"), bot.get_command("futae"))
+                # mm!ajuda <comando>: aceita alias e mostra uso e exemplos.
+                from src.command_help import COMMAND_HELP, command_help_embed
+
+                embed = command_help_embed(bot, "sw")
+                self.assertEqual(embed.title, "❔ mm!starwish")
+                self.assertIsNone(command_help_embed(bot, "naoexiste"))
+                for name in COMMAND_HELP:  # todo detalhe aponta para um comando de verdade
+                    self.assertIsNotNone(bot.get_command(name), name)
+                # ..roll, ..obter e ..rolls valem como mm!roll.
+                from types import SimpleNamespace
+                from unittest.mock import patch
+
+                from src.bot import command_prefix
+
+                with patch(
+                    "src.bot.commands.when_mentioned", side_effect=lambda *_: []
+                ):  # sem login
+                    for text, prefix in (("..roll", ".."), ("MM!roll", "MM!"), ("mm!tu", "mm!")):
+                        self.assertIn(prefix, command_prefix(bot, SimpleNamespace(content=text)))
+                    self.assertEqual(command_prefix(bot, SimpleNamespace(content=".roll")), [])
+                for alias in ("obter", "rolls"):
+                    self.assertIs(bot.get_command(alias), bot.get_command("roll"))
+                # /wish, /starwish, /scout, /vender e /proteger, com sugestões de nome.
+                self.assertEqual(
+                    {command.name for command in bot.tree.get_commands()},
+                    {"wish", "starwish", "scout", "vender", "proteger"},
+                )
             finally:
                 await bot.close()

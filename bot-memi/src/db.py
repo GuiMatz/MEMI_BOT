@@ -411,6 +411,30 @@ CREATE TABLE IF NOT EXISTS mascots (
     UNIQUE (name, owner)
 );
 
+CREATE TABLE IF NOT EXISTS pve_progress (
+    discord_user_id TEXT PRIMARY KEY REFERENCES game_users(discord_user_id) ON DELETE CASCADE,
+    ladder INTEGER NOT NULL DEFAULT 0 CHECK (ladder >= 0)
+);
+
+CREATE TABLE IF NOT EXISTS pve_log (
+    discord_user_id TEXT NOT NULL REFERENCES game_users(discord_user_id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    period TEXT NOT NULL,
+    team_key TEXT NOT NULL,
+    won INTEGER NOT NULL DEFAULT 0,
+    played_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_pve_log_user ON pve_log(discord_user_id, kind, period);
+
+CREATE TABLE IF NOT EXISTS user_inventory (
+    discord_user_id TEXT NOT NULL REFERENCES game_users(discord_user_id)
+        ON DELETE CASCADE,
+    item TEXT NOT NULL,
+    amount INTEGER NOT NULL DEFAULT 0 CHECK (amount >= 0),
+    PRIMARY KEY (discord_user_id, item)
+);
+
 CREATE TABLE IF NOT EXISTS user_bonuses (
     discord_user_id TEXT NOT NULL REFERENCES game_users(discord_user_id)
         ON DELETE CASCADE,
@@ -579,6 +603,15 @@ def initialize_database(database_path: str | Path = DATABASE_PATH) -> None:
             "box_office": "INTEGER NOT NULL DEFAULT 0",
             "box_office_total": "INTEGER NOT NULL DEFAULT 0",
             "last_rt_at": "TEXT",
+            # Rolls guardados ativados (`mm!ativar`), contratações extras ganhas com eles e
+            # a sobra (< 10) que conta para a próxima contratação.
+            "active_rolls": "INTEGER NOT NULL DEFAULT 0",
+            "bonus_claims": "INTEGER NOT NULL DEFAULT 0",
+            "activation_carry": "INTEGER NOT NULL DEFAULT 0",
+            # Caixas seguidas sem Épico (ou melhor): a garantia de Épico.
+            "epic_pity": "INTEGER NOT NULL DEFAULT 0",
+            # Caixas seguidas sem Lendário: a garantia de Lendário.
+            "legendary_pity": "INTEGER NOT NULL DEFAULT 0",
         }
         for column, definition in game_user_migrations.items():
             if column not in game_user_columns:

@@ -11,9 +11,9 @@
 Ao sair de um elenco, o jogador deixa a escalação e perde capitania e cobranças.
 
 Travas: jogador **protegido** (`toggle_protection`, o 🔒 do `mm!proteger`) não entra em
-venda nenhuma. Jogador que veio de **pacote** vende por `PACK_SALE_FACTOR` do valor (a
-marca acompanha a carta mesmo depois de trocas) e passa `PACK_LOCK` sem poder ser
-vendido, doado ou trocado.
+venda nenhuma. Jogador que veio de **pacote** pode ser vendido na hora, mas por
+`PACK_SALE_FACTOR` do valor (a marca acompanha a carta mesmo depois de trocas), e passa
+`PACK_LOCK` sem poder ser doado ou trocado.
 """
 
 from __future__ import annotations
@@ -32,8 +32,8 @@ from src.ratings import EFFECTIVE_OVERALL_SQL, GAME_OVERALL_SQL, RARITY_TIERS
 TRADE_LIFETIME = timedelta(minutes=15)
 MAX_TRADE_PLAYERS = 5
 MAX_SALE_PLAYERS = 200
-PACK_SALE_FACTOR = 0.25
-PACK_LOCK = timedelta(days=7)
+PACK_SALE_FACTOR = 0.5
+PACK_LOCK = timedelta(hours=1)
 # Valor da carta pelo overall de jogo (o da carta, sem bolas): 400 Memilets no 60 e
 # +11,6% por ponto, dobrando a cada ~6 pontos (70 ≈ 1.200, 80 ≈ 3.600, 90 ≈ 10.800,
 # 97 ≈ 23.300). Carta melhor sempre vale mais; o valor de mercado real não conta.
@@ -119,7 +119,10 @@ def _pack_locked(player: dict[str, Any], now: datetime) -> datetime | None:
 
 
 def _check_movable(players: Iterable[dict[str, Any]], action: str, *, selling=False) -> None:
-    """Barra protegidos (só na venda) e jogadores de pacote ainda travados."""
+    """Barra protegidos (só na venda) e, na doação e na troca, cartas de pacote travadas.
+
+    Vender carta de pacote é livre a qualquer hora (pelo valor reduzido).
+    """
     now = _utc_now()
     for player in players:
         if selling and player.get("locked"):
@@ -127,7 +130,7 @@ def _check_movable(players: Iterable[dict[str, Any]], action: str, *, selling=Fa
                 f"🔒 **{player['name']}** está protegido. Tire a proteção com "
                 f"`mm!proteger {player['name']}` antes de vender."
             )
-        until = _pack_locked(player, now)
+        until = None if selling else _pack_locked(player, now)
         if until is not None:
             raise TransactionError(
                 f"📦 **{player['name']}** veio de pacote e só pode ser {action} a partir de "
@@ -505,18 +508,14 @@ def quick_sale_ids(
     below: int | None = None,
     position: str | None = None,
 ) -> list[int]:
-    """Reservas que a venda rápida pode vender com o filtro (sem 🔒 e sem trava de pacote)."""
+    """Reservas que a venda rápida pode vender com o filtro (sem 🔒)."""
     clauses = [
         "o.discord_user_id = ?",
         "o.locked = 0",
-        "(o.pack_locked_until IS NULL OR o.pack_locked_until <= ?)",
         "NOT EXISTS (SELECT 1 FROM team_lineups AS l "
         "WHERE l.player_id = p.id AND l.discord_user_id = o.discord_user_id)",
     ]
-    parameters: list[Any] = [
-        str(discord_user_id),
-        _utc_now().isoformat(timespec="seconds"),
-    ]
+    parameters: list[Any] = [str(discord_user_id)]
     if rarity is not None:
         index = next(
             (i for i, tier in enumerate(RARITY_TIERS) if tier[0].casefold() == rarity.casefold()),

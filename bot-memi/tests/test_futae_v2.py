@@ -165,7 +165,7 @@ class CosmeticTests(Case):
         with self.assertRaises(TeamError):
             set_team_field(100, "stadium_name", "Maracanã", self.database_path)
 
-    def test_each_equipped_cosmetic_adds_100_to_daily_cap(self):
+    def test_each_equipped_cosmetic_adds_250_to_daily_cap(self):
         self.add_catalog()
         for kind, name in (("tecnico", "Telê Santana"), ("liga", "Premier League")):
             give_item(100, "Pessoa", kind, name, self.database_path)
@@ -173,7 +173,7 @@ class CosmeticTests(Case):
         give_item(100, "Pessoa", "estadio", "Maracanã", self.database_path)
         equip(100, "estadio", "Maracanã", self.database_path)  # estádio não soma no daily
         reward = claim_daily(100, "Pessoa", self.database_path, now=NOW, rng=random.Random(1))
-        self.assertEqual(reward.cap, 500)
+        self.assertEqual(reward.cap, 1_200 + 2 * 250)
 
     def test_crate_never_repeats_a_cosmetic_the_user_already_has(self):
         self.add_catalog()
@@ -513,7 +513,7 @@ class MenuTests(unittest.IsolatedAsyncioTestCase):
         economy = EconomyCog(self.bot)
         embed, view = economy.upgrade_menu(self.user)
         self.assertTrue(embed.description.startswith(f"*{UPGRADES_INTRO}*"))
-        self.assertEqual(len(view.children[0].options), 11)
+        self.assertEqual(len(view.children[0].options), 12)
         embed, _ = economy.crate_menu(self.user)
         self.assertTrue(embed.description.startswith(f"*{CRATES_INTRO}*"))
         club = ClubCog(self.bot)
@@ -521,6 +521,32 @@ class MenuTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(embed.description.startswith(f"*{TOWER_INTRO}*"))
         self.assertIn("`12` ", embed.description)
         self.assertEqual(embed.image.url, "attachment://torre.png")
+
+    async def test_tower_menu_builds_and_destroys_through_confirmation(self):
+        from src.cogs.club import ClubCog, TowerView
+        from src.cogs.common import ConfirmView
+
+        club = ClubCog(self.bot)
+        view = TowerView(club, self.user)
+        self.assertEqual(len(view.children), 1)  # sem andares: só o menu, sem destruir
+        self.assertEqual(len(view.children[0].options), 12)
+        with connect(self.database_path) as connection:
+            connection.execute(
+                "UPDATE game_users SET memilets = 100000 WHERE discord_user_id = '100'"
+            )
+        build_floor(100, "Pessoa", 3, self.database_path)
+        view = TowerView(club, self.user)
+        select, destroy = view.children
+        self.assertNotIn("3", [option.value for option in select.options])
+        self.assertEqual(destroy.label, "Destruir a torre")
+        content, confirm = club.build_prompt(self.user, 5)
+        self.assertIsInstance(confirm, ConfirmView)
+        self.assertIn("andar **5**", content)
+        _, refused = club.build_prompt(self.user, 3)
+        self.assertIsNone(refused)
+        embed, confirm = club.destroy_prompt(self.user)
+        self.assertIn("Andar 3", embed.description)
+        self.assertIsInstance(confirm, ConfirmView)
 
     async def test_purchase_prompt_asks_before_buying(self):
         from src.cogs.economy import EconomyCog, resolve_upgrade

@@ -54,7 +54,12 @@ reivindicados pelo botão: quem rolou tem 5 segundos de exclusividade (aumentáv
 minutos e cada pessoa tem um claim por ciclo (renova junto com os rolls).
 Os claims são atômicos e cada jogador só pode ter um dono.
 
-Comandos oficiais do **FUT.AE** incluem `mm!futae`, `mm!left`, `mm!top [categoria]`, `mm!scout <nome>`, `mm!daily`, `mm!upgrade`, `mm!crates`,
+Todo comando funciona com `mm!` ou com o atalho `..` (`..roll`, `..amistoso`, `..tu`). O
+roll também atende por `..obter` e `..rolls`. `/wish`, `/starwish`, `/scout`, `/vender` e
+`/proteger` também existem como comandos de barra, sugerindo o nome do jogador enquanto se
+digita (no `/vender` e no `/proteger`, só os seus). Eles são registrados quando o bot liga.
+
+Comandos oficiais do **FUT.AE** incluem `mm!futae`, `mm!left`, `mm!top [categoria]`, `mm!scout <nome>`, `mm!daily`, `mm!shop`, `mm!upgrade`, `mm!crates`,
 `mm!wish`, `mm!wishlist`/`mm!wl`, `mm!starwish`/`mm!sw`, `mm!vender`, `mm!proteger`, `mm!troca`, `mm!dar`, `mm!pacote`, `mm!personalizar`, `mm!time`,
 `mm!escalar`, `mm!tatica`, `mm!amistoso` e `mm!campeonato`. A economia diária
 usa cooldown de 24 horas; wishes e Star Wishes afetam a roleta e
@@ -269,22 +274,43 @@ O FUT.AE é um módulo do MeMi BOT, não um bot separado. O menu geral continua 
 
 ### Economia e coleção pessoal
 
-- `mm!daily` paga de 100 a 300 Memilets (mais os bônus) e libera de novo 24 horas
+- `mm!daily` paga de 400 a 1.200 Memilets (mais os bônus) e libera de novo 24 horas
   depois, menos as reduções de upgrades, torre e crates (mínimo de 8 horas).
 - `mm!wishlist` e `mm!wl` mostram a lista completa de wishes em embed.
 - `mm!starwish` e `mm!sw` identificam Star Wishes com o emoji `⭐`.
-- `mm!upgrade` tem 10 upgrades com limite (rolls, wishes, Star Wish, daily, proteção
-  de wish, teto do daily, exclusividade, reembolso da demissão, bilheteria e renda), sempre
-  com confirmação.
+- `mm!upgrade` tem 12 upgrades com limite (rolls, wishes, Star Wish, daily, proteção
+  de wish, teto do daily, exclusividade, valor de venda, `mm!rt`, bilheteria, renda e o
+  **Contrato Relâmpago**: até 20% de chance de a contratação não gastar o claim do ciclo),
+  sempre com confirmação. O Seguro de Contrato (+10% de venda por nível) custa 5 mil + 5 mil
+  por nível.
 - `mm!crates`, `mm!construir`, `mm!destruir`, `mm!renda`, `mm!bilheteria` e
   `mm!cosmeticos` (com `mm!emblema`, `mm!uniforme`, `mm!estadio`, `mm!tecnico`,
   `mm!liga` e `mm!mascote`) completam a economia do clube.
 - `mm!vender base|comum|…`, `mm!vender abaixo 70` e `mm!vender posicao ZAG` vendem todos
   os reservas do filtro de uma vez (sem titulares nem 🔒), com o total antes.
 - `mm!proteger <nome>` liga/desliga o 🔒: o jogador some de todas as vendas.
-- `mm!crates 5|10` abre várias caixas; os rolls da caixa ficam guardados (não expiram).
-- `mm!pacote` dá uma carta livre do mercado (nunca Base); carta de pacote vende por 25%
-  e fica 7 dias sem poder ser vendida, doada ou trocada.
+- `mm!crates 5|10` abre várias caixas; os rolls da caixa ficam guardados (não expiram) e
+  só valem depois de `mm!ativar <quantidade>` (ex.: `mm!ativar 20`). Ativados, entram depois dos rolls do ciclo, e
+  cada 10 ativados dão **+1 contratação extra** (usada quando o claim do ciclo já foi). A
+  sobra conta para a próxima.
+- Garantias das caixas: 15 caixas seguidas sem Raro (ou melhor) e a próxima traz um Raro;
+  50 sem Épico (ou melhor) e a próxima traz um Épico; 200 sem Lendário e a próxima traz um
+  Lendário. Os três contadores aparecem no `mm!crates` e no resultado de cada abertura.
+- As caixas também dão caixas e pacotes: Raro dá +1 caixa ou pacote de jogador; Épico, caixa
+  épica ou pacote de jogador; Lendário, pacote épico. Eles vão para o `mm!inventario` (ou
+  `mm!inv`, `mm!mochila`), que tem um botão **Abrir** por item, com a animação de sempre e
+  sem cobrar. Os cosméticos ficam no `mm!cosmeticos`.
+- `mm!construir` mostra a torre com um menu para escolher o andar a construir e o botão de
+  destruir; os dois pedem confirmação, como `mm!construir <1-12>` e `mm!destruir`.
+- `mm!pacote` dá uma carta livre do mercado (nunca Base); carta de pacote vende na hora
+  por 50% e fica 1 hora sem poder ser doada ou trocada.
+- `mm!shop` (ou `mm!loja`) mostra tudo o que dá para comprar, com botões: caixas, pacotes,
+  upgrades, torre e all-in. A **caixa épica** (`mm!crates epica [1|5|10]`, 4× a caixa) é a
+  caixa comum sem a chance de vir só o básico: o item extra sempre vem, nas mesmas
+  proporções da comum; o **pacote épico** (`mm!pacote epico`, 15.000) só traz Raro ou melhor, com 5% de Ícone e 1% de Galáctico, e a carta vende pelo valor cheio (sem o corte de 50% do pacote comum).
+- `mm!allin` é uma aposta de 30.000: uma roleta de 20 fatias gira em GIF e, quando para,
+  vira a carta. 2 fatias douradas dão Ícone ou melhor (1 em 10); as outras, uma carta como
+  a do pacote comum. Sem Ícone livre no mercado, não gira e não cobra.
 - `mm!topi` mostra o top dos jogadores em cartas (◀ ▶ e lista).
 - `mm!semfoto [meus]` mostra os jogadores sem foto, do maior overall para o menor, um
   por vez: **📷 Enviar foto** salva a imagem (já vira a foto da carta) e passa para o
@@ -307,6 +333,13 @@ O FUT.AE é um módulo do MeMi BOT, não um bot separado. O menu geral continua 
 - `mm!troca @pessoa` abre um montador com os dois elencos (até 5 jogadores por lado e
   Memilets); a outra pessoa aceita ou recusa, e quem propôs pode cancelar.
 - `mm!dar @pessoa <jogador|valor>` doa um jogador ou Memilets, com confirmação.
+- `mm!pay @pessoa <quantia>` (ou `mm!pagar`, `mm!pix`) manda Memilets, com confirmação.
+- No roll, um jogador livre que renderia mais que o seu titular numa vaga (ou que preenche
+  uma vaga vazia) vem com o aviso "⬆️ Melhor que o seu titular de CA (Fulano · 78 → 87)".
+  Contratando, ele já entra no time nessa vaga (quem sai perde capitão, falta e pênalti).
+- `mm!tu` e `mm!carteira` têm atalhos (Rolar, Daily, Missões, Ativar rolls, Inventário); o
+  roll tem **Rolar de novo**; o daily mostra as missões e resgata as prontas; os botões de
+  compra ficam cinza dizendo quanto falta; `mm!ajuda <comando>` explica cada comando.
 
 ### Times e partidas
 
@@ -317,7 +350,38 @@ O FUT.AE é um módulo do MeMi BOT, não um bot separado. O menu geral continua 
   "Selecionar todos" (mesmo mais de 25), incluir titulares, proteger com 🔒 e ver os
   protegidos, com a cotação ao vivo. `mm!proteger` sem nome abre nos protegidos.
 - `mm!amistoso` simula partidas de 90 minutos com força por setores, xG, gols,
-  artilheiros e estilos táticos.
+  artilheiros e estilos táticos. `mm!amistoso @pessoa idaevolta` joga ida (na casa de quem
+  desafiou) e volta (na casa do outro): vale o placar somado e o empate no agregado vai para
+  os pênaltis no fim da volta. A renda, se escolhida, é só a do jogo de ida.
+- Apostas entre duas pessoas: `mm!amistoso @pessoa [idaevolta] aposta 1000` e
+  `mm!penaltis @pessoa 1000`. O outro aceita, cada um entra com o valor (ou ninguém, se
+  faltar saldo) e quem vence leva o pote. Amistoso apostado não gera renda; se a partida
+  não acontecer, as apostas voltam.
+- `mm!cassino [valor]` (`apostar`, `bet`, `casino`) abre o cassino: um painel com a
+  aposta (½, ×2 ou valor digitado, de 100 a 100.000) e quatro jogos **justos** (retorno
+  médio de exatamente 100%, a casa não fica com nada), cada um com animação em GIF:
+  - **Cara ou coroa**: acertou, 2x.
+  - **Caça-níquel**: três rolos (cereja, limão, sino, estrela, diamante, sete); três iguais
+    pagam de 4x a 250x e dois iguais pagam ~1,24x (o valor que fecha a conta em 100%).
+  - **Roleta**: 36 números sem o zero; cor ou par/ímpar 2x, dúzia 3x, número 36x.
+  - **Minas**: grade 4×4 com 1, 3, 5 ou 8 bombas; cada casa segura multiplica o prêmio
+    pela chance exata de ter passado e dá para sacar a qualquer hora. Se o jogo ficar
+    aberto, ele saca sozinho o que já foi ganho.
+- `mm!desafio` (`pve`, `lendas`) abre os desafios contra times lendários, montados na hora
+  com as lendas da enciclopédia (12 clubes brasileiros, seleções lendárias e a Seleção
+  Mundial), cada um na formação em que rende mais:
+  - **Escada**: 28 degraus do mais fácil (times do mercado, força ~62) à Seleção Mundial
+    (~97); vencer libera o próximo e paga 400 + 200 por degrau (só na primeira vez), com
+    uma caixa a cada 5 degraus.
+  - **Chefão do dia**: um time lendário reforçado (+1), 1 tentativa; 3.000 + caixa épica.
+  - **Chefão da semana**: uma seleção lendária (ou a Mundial) reforçada (+2), 3
+    tentativas; 12.000 + pacote épico.
+  - **Desafio livre**: qualquer time lendário; prêmio na primeira vitória do dia contra
+    cada um. Empate vai para os pênaltis.
+- `mm!penaltis @pessoa` é uma disputa de pênaltis interativa: quem bate escolhe o canto e
+  quem defende escolhe onde pular, em segredo. Acertar o canto defende 75% das vezes; errar
+  ainda pode dar trave (6%). 5 cobranças para cada lado, morte súbita no empate, e quem
+  demora mais de 60 s tem o canto sorteado.
 - `mm!campeonato` permite inscrição, início, configuração de canal e agendamento,
   com liga, classificação e final.
 - `mm!admin testeamistoso` e `mm!admin testecampeonato <quantidade>` executam testes

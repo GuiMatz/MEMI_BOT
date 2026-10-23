@@ -39,7 +39,7 @@ from src.income import (
     income_status,
     venue_name,
 )
-from src.perks import TOWER_FLOORS
+from src.perks import TOWER_FLOORS, TOWER_SHORT
 from src.teams import ensure_team, get_team
 from src.tower import TowerError, build_floor, destroy_preview, destroy_tower, tower_status
 
@@ -205,6 +205,71 @@ class MissionsView(discord.ui.View):
         await interaction.response.edit_message(embed=embed, attachments=[file], view=self)
 
 
+class TowerView(discord.ui.View):
+    """Menu da torre: escolher o andar para construir e o botão de destruir.
+
+    Os dois só abrem a confirmação (a mesma do `mm!construir N` e do `mm!destruir`)."""
+
+    def __init__(self, cog: "ClubCog", owner: discord.abc.User):
+        super().__init__(timeout=300)
+        self.cog = cog
+        self.owner = owner
+        self.message = None
+        status = tower_status(owner.id, cog.database_path)
+        options = [
+            discord.SelectOption(
+                label=f"Andar {floor} · {TOWER_SHORT[floor]}",
+                description=f"{effect[:80]} · {status.next_price:,}".replace(",", "."),
+                value=str(floor),
+            )
+            for floor, effect in TOWER_FLOORS.items()
+            if not status.built_in_current(floor)
+        ]
+        if options:
+            select = discord.ui.Select(
+                placeholder=f"Construir um andar ({status.next_price:,} Memilets)".replace(
+                    ",", "."
+                ),
+                options=options,
+                row=0,
+            )
+            select.callback = self._build
+            self.add_item(select)
+        if status.total_built:
+            destroy = discord.ui.Button(
+                label="Destruir a torre", emoji="💥", style=discord.ButtonStyle.danger, row=1
+            )
+            destroy.callback = self._destroy
+            self.add_item(destroy)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner.id:
+            await interaction.response.send_message(
+                "Essa torre não é sua. Use `mm!construir` para ver a sua.", ephemeral=True
+            )
+            return False
+        return True
+
+    async def _build(self, interaction: discord.Interaction) -> None:
+        number = int(interaction.data["values"][0])
+        content, view = self.cog.build_prompt(interaction.user, number)
+        if view is None:
+            await interaction.response.send_message(content, ephemeral=True)
+            return
+        await interaction.response.send_message(content, view=view)
+        view.message = await interaction.original_response()
+
+    async def _destroy(self, interaction: discord.Interaction) -> None:
+        embed, view = self.cog.destroy_prompt(interaction.user)
+        if view is None:
+            await interaction.response.send_message(
+                "Você ainda não construiu nenhum andar.", ephemeral=True
+            )
+            return
+        await interaction.response.send_message(embed=embed, view=view)
+        view.message = await interaction.original_response()
+
+
 class ClubCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -226,7 +291,7 @@ class ClubCog(commands.Cog):
             name="Investido", value=f"{icons.memilets(status.spent)} (volta inteiro)", inline=True
         )
         embed.set_image(url="attachment://torre.png")
-        embed.set_footer(text="mm!construir <1-12> constrói · mm!destruir devolve tudo")
+        embed.set_footer(text="Escolha o andar no menu · ou mm!construir <1-12> e mm!destruir")
         return embed
 
     async def tower_file(self, user: discord.abc.User) -> discord.File:
@@ -239,9 +304,11 @@ class ClubCog(commands.Cog):
     async def build(self, context: commands.Context, floor: str | None = None) -> None:
         ensure_team(context.author.id, context.author.display_name, self.database_path)
         if floor is None:
-            await context.reply(
+            view = TowerView(self, context.author)
+            view.message = await context.reply(
                 embed=self.tower_embed(context.author),
                 file=await self.tower_file(context.author),
+                view=view,
                 mention_author=False,
             )
             return
@@ -250,16 +317,20 @@ class ClubCog(commands.Cog):
                 "Escolha um andar de 1 a 12: `mm!construir 5`.", mention_author=False
             )
             return
-        number = int(floor)
-        status = tower_status(context.author.id, self.database_path)
+        content, view = self.build_prompt(context.author, int(floor))
+        message = await context.reply(content, view=view, mention_author=False)
+        if view:
+            view.message = message
+
+    def build_prompt(self, author: discord.abc.User, number: int) -> tuple[str, ConfirmView | None]:
+        """Pergunta de confirmação para construir o andar `number` (ou o motivo de não dar)."""
+        status = tower_status(author.id, self.database_path)
         if status.built_in_current(number):
-            await context.reply(
+            return (
                 f"O andar {number} já está pronto nesta construção. Termine os outros antes de "
                 "começar a próxima.",
-                mention_author=False,
+                None,
             )
-            return
-        author = context.author
 
         async def confirm(interaction: discord.Interaction) -> None:
             try:
@@ -280,26 +351,33 @@ class ClubCog(commands.Cog):
         view = ConfirmView(
             author.id, confirm, confirm_label="Construir", cancel_text="Construção cancelada."
         )
-        view.message = await context.reply(
+        return (
             f"Construir o andar **{number}** ({TOWER_FLOORS[number]}) por "
             f"{icons.memilets(status.next_price)} Memilets?",
-            view=view,
-            mention_author=False,
+            view,
         )
 
     @commands.command(name="destruir")
     async def destroy(self, context: commands.Context) -> None:
-        preview = destroy_preview(context.author.id, self.database_path)
-        if not preview.floors:
+        embed, view = self.destroy_prompt(context.author)
+        if view is None:
             await context.reply("Você ainda não construiu nenhum andar.", mention_author=False)
             return
+        view.message = await context.reply(embed=embed, view=view, mention_author=False)
+
+    def destroy_prompt(
+        self, author: discord.abc.User
+    ) -> tuple[discord.Embed | None, ConfirmView | None]:
+        """Aviso do que se perde ao destruir, com a confirmação; (None, None) sem andares."""
+        preview = destroy_preview(author.id, self.database_path)
+        if not preview.floors:
+            return None, None
         lost = [
             f"• Andar {floor}: {TOWER_FLOORS[floor]}" + (f" (×{times})" if times > 1 else "")
             for floor, times in sorted(preview.floors.items())
         ]
         if preview.ball_players:
             lost.append("• Bolas do andar 12: " + ", ".join(preview.ball_players))
-        author = context.author
 
         async def confirm(interaction: discord.Interaction) -> None:
             try:
@@ -331,7 +409,7 @@ class ClubCog(commands.Cog):
             cancel_text="A torre continua de pé.",
             danger=True,
         )
-        view.message = await context.reply(embed=embed, view=view, mention_author=False)
+        return embed, view
 
     # Renda e bilheteria -------------------------------------------------------------------
 
@@ -478,7 +556,7 @@ class ClubCog(commands.Cog):
 
     # Cosméticos ---------------------------------------------------------------------------
 
-    @commands.command(name="cosmeticos", aliases=["cosméticos", "inventario", "inventário", "inv"])
+    @commands.command(name="cosmeticos", aliases=["cosméticos"])
     async def cosmetics(self, context: commands.Context, kind: str | None = None) -> None:
         ensure_team(context.author.id, context.author.display_name, self.database_path)
         wanted = KIND_ALIASES.get(normalize_player_name(kind)) if kind else None
@@ -547,7 +625,7 @@ class ClubCog(commands.Cog):
         extra = (
             " O amistoso em casa agora pode gerar renda (`mm!renda`)."
             if kind == "estadio"
-            else " +100 no máximo do daily."
+            else " +250 no máximo do daily."
         )
         await context.reply(
             f"{emoji} {label} equipado: **{item['name']}**.{extra}", mention_author=False

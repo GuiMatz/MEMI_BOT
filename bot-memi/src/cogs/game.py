@@ -11,13 +11,15 @@ from discord.ext import commands
 from src import icons
 from src.cosmetics import COSMETIC_KINDS, LABEL_TO_KIND, free_counts, owners_of
 from src.db import DATABASE_PATH, normalize_player_name
-from src.economy import get_account_status
+from src.command_help import command_help_embed
+from src.economy import EconomyError, activate_rolls, get_account_status
 from src.cogs.common import (
     CardPagerView,
     PlayerChoiceView,
     ambiguity_text,
     card_embed,
     card_file,
+    player_choices,
     player_label,
 )
 from src.game import (
@@ -252,11 +254,15 @@ FUTAE_SECTIONS = (
     ),
     (
         "🪙 Economia",
-        "`mm!daily` — de 100 a 300 Memilets (+100 por cosmético equipado)\n"
+        "`mm!daily` — de 400 a 1.200 Memilets (+250 por cosmético equipado)\n"
         "`mm!carteira` — saldo, limites e timers\n"
-        "`mm!upgrade` — loja de upgrades (sempre pede confirmação)\n"
-        "`mm!crates [1|5|10]` — caixas com rolls guardados, cosméticos e bônus\n"
-        "`mm!pacote` — uma carta de jogador livre do mercado (nunca Base)\n"
+        "`mm!shop`/`mm!loja` — tudo o que dá para comprar, com botões\n"
+        "`mm!upgrade` — upgrades permanentes (sempre pede confirmação)\n"
+        "`mm!crates [epica] [1|5|10]` — caixas com rolls guardados, cosméticos e bônus\n"
+        "`mm!ativar <quantidade>` — ativa os rolls guardados (+1 contratação a cada 10)\n"
+        "`mm!inventario` — caixas e pacotes ganhos nas caixas, para abrir de graça\n"
+        "`mm!pacote [epico]` — uma carta de jogador livre do mercado (nunca Base)\n"
+        "`mm!allin` — aposta de 30 mil: roleta com 1 em 10 de Ícone ou melhor\n"
         "`mm!construir [1-12]` / `mm!destruir` — Centro de Treinamento (torre)\n"
         "`mm!renda` · `mm!bilheteria` — dinheiro do estádio e do campeonato\n"
         "`mm!missoes` — missões diárias e semanais · `mm!rt` — zera o claim (upgrade)",
@@ -276,7 +282,11 @@ FUTAE_SECTIONS = (
         "`mm!vender` — painel de venda com filtros, seleção em massa e 🔒 (ou `mm!vender <nome>`)\n"
         "`mm!proteger <nome>` — 🔒 tira o jogador de todas as vendas\n"
         "`mm!troca @pessoa` — monta a troca nos menus · `mm!dar @pessoa <jogador|valor>`\n"
-        "`mm!amistoso @pessoa` — partida narrada; o 1º do dia em casa rende renda\n"
+        "`mm!pay @pessoa <quantia>` — manda Memilets para outra pessoa\n"
+        "`mm!cassino [valor]` — cara ou coroa, caça-níquel, roleta e minas (jogos justos)\n"
+        "`mm!amistoso @pessoa [idaevolta] [aposta N]` — partida narrada, ida e volta, apostada\n"
+        "`mm!penaltis @pessoa [aposta]` — disputa de pênaltis escolhendo o canto\n"
+        "`mm!desafio` — partidas contra times lendários: escada, chefões e desafio livre\n"
         "`mm!campeonato` — campeonato diário; o campeão leva 500 Memilets\n"
         "`mm!temporada [mês]` — tabela do mês · `mm!temporadas` — campeão de cada mês",
     ),
@@ -609,6 +619,86 @@ def top_line(index: int, player: dict) -> str:
     )
 
 
+class AccountHubView(discord.ui.View):
+    """Atalhos do `mm!tu` e da `mm!carteira`: rolar, daily, missões, ativar e inventário.
+
+    Cada botão chama o mesmo código do comando (no cog dele), sem digitar nada."""
+
+    def __init__(self, bot: commands.Bot, owner, status):
+        super().__init__(timeout=300)
+        self.bot = bot
+        self.owner = owner
+        self.stored = status.roll_tokens
+        self._add("Rolar", "🎲", discord.ButtonStyle.success, self._roll)
+        self._add(
+            "Daily",
+            "🎁",
+            discord.ButtonStyle.primary,
+            self._daily,
+            disabled=status.daily_available_at is not None,
+        )
+        self._add("Missões", "🎯", discord.ButtonStyle.secondary, self._missions)
+        if self.stored:
+            self._add(
+                f"Ativar {min(self.stored, 10)} rolls",
+                "📦",
+                discord.ButtonStyle.secondary,
+                self._activate,
+            )
+        self._add("Inventário", "🎒", discord.ButtonStyle.secondary, self._inventory)
+
+    def _add(self, label, emoji, style, callback, *, disabled=False) -> None:
+        button = discord.ui.Button(label=label, emoji=emoji, style=style, disabled=disabled)
+        button.callback = callback
+        self.add_item(button)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner.id:
+            await interaction.response.send_message(
+                "Esses atalhos são de quem abriu. Use `mm!tu` para os seus.", ephemeral=True
+            )
+            return False
+        return True
+
+    async def _roll(self, interaction: discord.Interaction) -> None:
+        await self.bot.get_cog("RollsCog").roll_from_button(interaction)
+
+    async def _daily(self, interaction: discord.Interaction) -> None:
+        content, view = self.bot.get_cog("EconomyCog").daily_reply(interaction.user)
+        await interaction.response.send_message(content, **({"view": view} if view else {}))
+
+    async def _missions(self, interaction: discord.Interaction) -> None:
+        from src.cogs.club import MissionsView
+
+        club = self.bot.get_cog("ClubCog")
+        await interaction.response.defer(thinking=True)
+        embed, file = await club.missions_message(interaction.user)
+        await interaction.followup.send(
+            embed=embed, file=file, view=MissionsView(club, interaction.user)
+        )
+
+    async def _activate(self, interaction: discord.Interaction) -> None:
+        economy = self.bot.get_cog("EconomyCog")
+        try:
+            result = activate_rolls(
+                interaction.user.id,
+                interaction.user.display_name,
+                economy.database_path,
+                min(self.stored, 10),
+            )
+        except EconomyError as error:
+            await interaction.response.send_message(str(error), ephemeral=True)
+            return
+        text = f"🎲 {result.activated} rolls ativados (agora {result.active_rolls} ativos)."
+        if result.claims_gained:
+            text += f" ✅ +{result.claims_gained} contratação extra."
+        await interaction.response.send_message(text)
+
+    async def _inventory(self, interaction: discord.Interaction) -> None:
+        embed, view = self.bot.get_cog("EconomyCog").inventory_menu(interaction.user)
+        await interaction.response.send_message(embed=embed, view=view)
+
+
 class GameCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -670,13 +760,17 @@ class GameCog(commands.Cog):
         )
         await context.reply(embed=embed, mention_author=False)
 
-    @commands.command(name="scout", aliases=["im", "info"])
+    @commands.hybrid_command(
+        name="scout", aliases=["im", "info"], description="A carta e os dados de um jogador"
+    )
+    @discord.app_commands.describe(query="Nome do jogador (sugestões enquanto digita)")
     async def player_info(
         self,
         context: commands.Context,
         *,
         query: str,
     ) -> None:
+        await context.defer()
         chosen, candidates = find_player(query, self.database_path, limit=15)
         players = [chosen] if chosen else candidates
         items = [] if chosen else search_catalog(query, self.database_path, limit=10)
@@ -703,6 +797,10 @@ class GameCog(commands.Cog):
         )
         kwargs = {"file": file} if file else {}
         await context.reply(content=content, embed=embed, view=view, mention_author=False, **kwargs)
+
+    @player_info.autocomplete("query")
+    async def _scout_names(self, interaction: discord.Interaction, current: str):
+        return await player_choices(self.database_path, current)
 
     @commands.command(name="top")
     async def top_players(
@@ -968,7 +1066,12 @@ class GameCog(commands.Cog):
             name="🎲 Rolls",
             value=(
                 f"{status.rolls_left}/{status.roll_capacity} no ciclo"
-                + (f" + {status.roll_tokens} extras" if status.roll_tokens else "")
+                + (f" + {status.active_rolls} ativos" if status.active_rolls else "")
+                + (
+                    f"\n{status.roll_tokens} guardados (`mm!ativar <quantidade>`)"
+                    if status.roll_tokens
+                    else ""
+                )
             ),
             inline=True,
         )
@@ -980,7 +1083,12 @@ class GameCog(commands.Cog):
             ),
             inline=True,
         )
-        embed.add_field(name="⏱️ Claim", value=_timestamp(status.claim_available_at), inline=True)
+        embed.add_field(
+            name="⏱️ Claim",
+            value=_timestamp(status.claim_available_at)
+            + (f"\n+{status.bonus_claims} extra(s)" if status.bonus_claims else ""),
+            inline=True,
+        )
         embed.add_field(
             name="🎁 Daily",
             value=f"{_timestamp(status.daily_available_at)}\nmáx. {status.daily_cap}",
@@ -996,29 +1104,38 @@ class GameCog(commands.Cog):
                 name="🛡️ Proteção de wish", value=f"{status.wish_protection} s", inline=True
             )
         embed.set_footer(text="mm!upgrade e mm!construir para evoluir · mm!tu para ver os timers")
-        await context.reply(embed=embed, mention_author=False)
+        await context.reply(
+            embed=embed, view=AccountHubView(self.bot, context.author, status), mention_author=False
+        )
 
     @commands.command(name="tu", aliases=["timers", "timer"])
     async def timers(self, context: commands.Context) -> None:
         status = get_account_status(
             context.author.id, context.author.display_name, self.database_path
         )
-        extras = f" (+{status.roll_tokens} extras)" if status.roll_tokens else ""
+        extras = f" (+{status.active_rolls} ativos)" if status.active_rolls else ""
         if status.instant_rolls:
             extras += f" · {status.instant_rolls} instantâneo(s) da crate"
         lines = [
             f"🎲 **{status.rolls_left}/{status.roll_capacity} rolls**{extras} · "
             f"renovam {_timestamp(status.rolls_reset_at)}",
-            f"⏱️ Claim: {_timestamp(status.claim_available_at)}",
+            f"⏱️ Claim: {_timestamp(status.claim_available_at)}"
+            + (f" · +{status.bonus_claims} extra(s)" if status.bonus_claims else ""),
             f"🎁 Daily: {_timestamp(status.daily_available_at)}",
             f"{icons.memilets()} Saldo: **{_thousands(status.memilets)} Memilets**",
         ]
+        if status.roll_tokens:
+            lines.append(
+                f"📦 {status.roll_tokens} rolls guardados · ative com `mm!ativar <quantidade>`"
+            )
         embed = discord.Embed(
             title=f"Timers de {context.author.display_name}",
             description="\n".join(lines),
             color=discord.Color.blurple(),
         )
-        await context.reply(embed=embed, mention_author=False)
+        await context.reply(
+            embed=embed, view=AccountHubView(self.bot, context.author, status), mention_author=False
+        )
 
 
 class StandaloneHelpCog(commands.Cog):
@@ -1028,12 +1145,20 @@ class StandaloneHelpCog(commands.Cog):
         self.bot = bot
 
     @commands.command(name="help", aliases=["ajuda", "comandos"])
-    async def general_help(self, context: commands.Context) -> None:
+    async def general_help(self, context: commands.Context, command: str = "") -> None:
+        if command:
+            embed = command_help_embed(self.bot, command)
+            await context.reply(
+                embed=embed,
+                content=None if embed else f"Não achei o comando `{command[:30]}`.",
+                mention_author=False,
+            )
+            return
         view = PagedView(
             "MeMi BOT — ajuda",
             [],
             color=discord.Color.blurple(),
-            footer="Use os botões para navegar entre MeMi BOT e FUT.AE.",
+            footer="Use os botões para navegar · mm!ajuda <comando> mostra o detalhe.",
         )
         view.pages = [[page] for page in GENERAL_HELP_PAGES]
         view.index = 0

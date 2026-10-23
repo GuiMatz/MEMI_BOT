@@ -73,6 +73,7 @@ _ARQ_TOKEN = Path(__file__).with_name("token.txt")
 TOKEN = _ARQ_TOKEN.read_text(encoding="utf-8").strip() if _ARQ_TOKEN.exists() else ""
 
 PREFIX = "mm!"
+PREFIX_CURTO = ".."  # atalho: ..roll, ..amistoso funcionam igual a mm!roll, mm!amistoso
 
 # O bot acompanha todos os chats acessíveis; o config.json só guarda os IDs do dono,
 # do canal de avisos e do servidor.
@@ -3694,6 +3695,9 @@ AJUDA_JOGO = [
         [
             ("mm!roll", "rola um jogador; 10 rolls a cada 30 min (hora cheia e meia hora)"),
             ("mm!tu", "mostra rolls restantes, claim (a cada 30 min) e daily com horário"),
+            ("mm!ajuda <comando>", "explica um comando com exemplos: mm!ajuda crates"),
+            ("..comando", "atalho para todos os comandos: ..roll, ..obter, ..amistoso, ..tu"),
+            ("/wish /scout /vender…", "versão com barra, que sugere o nome do jogador ao digitar"),
             ("mm!scout <nome>", "ficha de jogador, técnico, estádio, emblema, uniforme ou mascote"),
             ("mm!top [categoria]", "catálogo: jogadores, cartola, técnicos, emblemas, mascotes…"),
             ("mm!left", "jogadores e cosméticos (emblemas, uniformes…) ainda livres"),
@@ -3713,11 +3717,18 @@ AJUDA_JOGO = [
     (
         "🪙 FUT.AE · Economia",
         [
-            ("mm!daily", "100 a 300 Memilets; cada cosmético equipado soma +100 ao máximo"),
+            ("mm!daily", "400 a 1.200 Memilets; cada cosmético equipado soma +250 ao máximo"),
             ("mm!carteira", "saldo, rolls, wishes, timers e preço da crate"),
-            ("mm!upgrade", "loja de upgrades (rolls, wishes, Star Wish, daily…), com confirmação"),
-            ("mm!crates [1|5|10]", "caixas: rolls guardados, cosméticos, bônus e upgrades"),
-            ("mm!pacote", "uma carta de jogador livre do mercado (nunca Base)"),
+            ("mm!shop / mm!loja", "tudo o que dá para comprar: caixas, pacotes, upgrades e torre"),
+            (
+                "mm!upgrade",
+                "upgrades permanentes (rolls, wishes, Star Wish, daily…), com confirmação",
+            ),
+            ("mm!crates [epica] [1|5|10]", "caixas: rolls guardados, cosméticos, bônus e upgrades"),
+            ("mm!ativar <quantidade>", "ativa os rolls guardados: +1 contratação a cada 10"),
+            ("mm!inventario", "caixas e pacotes ganhos nas caixas, para abrir de graça"),
+            ("mm!pacote [epico]", "uma carta de jogador livre do mercado (nunca Base)"),
+            ("mm!allin", "aposta de 30 mil: roleta com 1 chance em 10 de Ícone ou melhor"),
             (
                 "mm!construir [1-12] / mm!destruir",
                 "Centro de Treinamento: torre de upgrades eternos",
@@ -3732,6 +3743,8 @@ AJUDA_JOGO = [
             ("mm!proteger <nome>", "🔒 tira o jogador de todas as vendas"),
             ("mm!troca @pessoa", "monta uma troca de jogadores e Memilets"),
             ("mm!dar @pessoa <jogador|valor>", "doa um jogador ou Memilets"),
+            ("mm!pay @pessoa <quantia>", "manda Memilets para outra pessoa"),
+            ("mm!cassino [valor]", "cara ou coroa, caça-níquel, roleta e minas (jogos justos)"),
         ],
     ),
     (
@@ -3749,7 +3762,12 @@ AJUDA_JOGO = [
                 "mm!tatica",
                 "painel com formação, estilo, capitão e cobradores (também por texto)",
             ),
-            ("mm!amistoso @pessoa", "partida narrada; o 1º do dia em casa pode gerar renda"),
+            (
+                "mm!amistoso @pessoa [idaevolta] [aposta N]",
+                "partida narrada, ida e volta e/ou valendo Memilets",
+            ),
+            ("mm!penaltis @pessoa [aposta]", "disputa de pênaltis: escolha o canto e o pulo"),
+            ("mm!desafio", "partidas contra times lendários: escada, chefões e desafio livre"),
             ("mm!campeonato inscrever", "inscreve seu time no campeonato diário"),
             ("mm!campeonato iniciar", "joga o campeonato; o campeão ganha 500 Memilets"),
             ("mm!temporada [mês]", "tabela do mês somando todos os campeonatos diários"),
@@ -3856,7 +3874,17 @@ class AjudaView(discord.ui.View):
 
 class Ajuda(commands.Cog):
     @commands.command(name="help", aliases=["ajuda", "comandos"])
-    async def ajuda(self, ctx):
+    async def ajuda(self, ctx, comando: str = ""):
+        if comando:
+            # `mm!ajuda roll`: o detalhe de um comando do FUT.AE (uso e exemplos).
+            from src.command_help import command_help_embed
+
+            embed = command_help_embed(self.bot, comando)
+            if embed is None:
+                await responder(ctx, "aviso", f"Não achei o comando `{comando[:30]}`.")
+                return
+            await ctx.send(embed=embed)
+            return
         view = AjudaView([AJUDA, AJUDA_JOGO])
         embed = view.paginas[0]
         musicas = self.bot.get_cog("Musicas") if self.bot else None
@@ -3899,6 +3927,7 @@ class MeMiBot(commands.Bot):
         for cog in COGS:
             await self.add_cog(cog(self))
         from src.cogs.admin import AdminCog
+        from src.cogs.casino import CasinoCog
         from src.cogs.club import ClubCog
         from src.cogs.economy import EconomyCog
         from src.cogs.game import GameCog
@@ -3919,6 +3948,7 @@ class MeMiBot(commands.Bot):
             MatchesCog,
             ClubCog,
             AdminCog,
+            CasinoCog,
         ):
             await self.add_cog(cog(self))
         try:
@@ -3938,6 +3968,14 @@ class MeMiBot(commands.Bot):
         return ctx
 
     async def on_ready(self):
+        # Registra os /comandos do FUT.AE (/wish, /scout, /vender…) uma vez por execução.
+        if not getattr(self, "_barra_sincronizada", False):
+            self._barra_sincronizada = True
+            try:
+                registrados = await self.tree.sync()
+                logging.info("Comandos de barra registrados: %s", len(registrados))
+            except discord.HTTPException:
+                logging.exception("Não consegui registrar os comandos de barra.")
         await self.change_presence(activity=discord.Game(name=f"{PREFIX}help"))
         logging.info("%s v%s online como %s", BOT_NAME, versoes_bot.VERSAO_ATUAL, self.user)
 
@@ -3979,11 +4017,12 @@ def criar_intents(membros):
 
 
 def prefixo(bot, message):
-    """Aceita o prefixo em qualquer combinação de maiúsculas/minúsculas (MM!, Mm!, mm!...)."""
+    """Aceita `mm!` (em qualquer combinação de maiúsculas: MM!, Mm!…) e o atalho `..`."""
     prefixos = commands.when_mentioned(bot, message)
-    inicio = (message.content or "")[: len(PREFIX)]
-    if inicio.lower() == PREFIX.lower():
-        prefixos.append(inicio)  # devolve exatamente o que a pessoa digitou
+    for aceito in (PREFIX, PREFIX_CURTO):
+        inicio = (message.content or "")[: len(aceito)]
+        if inicio.lower() == aceito.lower():
+            prefixos.append(inicio)  # devolve exatamente o que a pessoa digitou
     return prefixos
 
 

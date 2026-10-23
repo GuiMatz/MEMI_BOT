@@ -14,14 +14,16 @@ from src.db import DATABASE_PATH, ROOT, initialize_database, normalize_player_na
 
 LOGGER = logging.getLogger("memi")
 PREFIX = "mm!"
+SHORT_PREFIX = ".."  # atalho: ..roll, ..amistoso = mm!roll, mm!amistoso
 
 
 def command_prefix(bot: commands.Bot, message: discord.Message) -> list[str]:
-    """Aceita o prefixo em qualquer combinação de maiúsculas (MM!, Mm!, mM!...)."""
+    """Aceita `mm!` (em qualquer combinação de maiúsculas: MM!, Mm!…) e o atalho `..`."""
     prefixes = commands.when_mentioned(bot, message)
-    start = (message.content or "")[: len(PREFIX)]
-    if start.casefold() == PREFIX:
-        prefixes.append(start)
+    for accepted in (PREFIX, SHORT_PREFIX):
+        start = (message.content or "")[: len(accepted)]
+        if start.casefold() == accepted:
+            prefixes.append(start)
     return prefixes
 
 
@@ -39,6 +41,14 @@ class MemiBot(commands.Bot):
         self.database_path = Path(database_path)
 
     async def on_ready(self) -> None:
+        # Registra os /comandos (/wish, /scout…) no Discord uma vez por execução.
+        if not getattr(self, "_slash_synced", False):
+            self._slash_synced = True
+            try:
+                synced = await self.tree.sync()
+                LOGGER.info("Comandos de barra registrados: %s", len(synced))
+            except discord.HTTPException:
+                LOGGER.exception("Não consegui registrar os comandos de barra.")
         LOGGER.info(
             "Bot pronto: %s (%s); message_content=%s; comandos=%s",
             self.user,
@@ -66,6 +76,7 @@ class MemiBot(commands.Bot):
         await self.load_extension("src.cogs.matches")
         await self.load_extension("src.cogs.club")
         await self.load_extension("src.cogs.admin")
+        await self.load_extension("src.cogs.casino")
         from src.encyclopedia import prepare_game_data
 
         report = prepare_game_data(self.database_path)

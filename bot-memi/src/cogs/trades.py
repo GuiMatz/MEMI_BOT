@@ -17,7 +17,6 @@ Tudo mostra o resultado antes de acontecer:
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
 from collections.abc import Awaitable, Callable, Iterable
 from typing import Any
 
@@ -25,7 +24,13 @@ import discord
 from discord.ext import commands
 
 from src import icons
-from src.cogs.common import ConfirmView, PlayerChoiceView, ambiguity_text, player_label
+from src.cogs.common import (
+    ConfirmView,
+    PlayerChoiceView,
+    ambiguity_text,
+    player_choices,
+    player_label,
+)
 from src.db import DATABASE_PATH, connect, normalize_player_name
 from src.ratings import RARITY_TIERS, rarity_index
 from src.game import list_owned_players, register_user, resolve_player
@@ -241,13 +246,11 @@ class SalePanelView(OwnerView):
         owned = list_owned_players(self.owner_id, self.database_path, limit=5000, sort_by="overall")
         owned.reverse()  # mais fracos primeiro: é quem costuma ir embora
         starters = {int(player["id"]) for player in get_lineup(self.owner_id, self.database_path)}
-        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         for player in owned:
             player["starter"] = int(player["id"]) in starters
-            player["pack_locked"] = (player.get("pack_locked_until") or "") > now
         self.owned = owned
         self.by_id = {int(player["id"]): player for player in owned}
-        sellable = [p for p in owned if not p.get("locked") and not p["pack_locked"]]
+        sellable = [p for p in owned if not p.get("locked")]
         self.values: dict[int, int] = {}
         if sellable:
             quote = sale_quote(self.owner_id, [p["id"] for p in sellable], self.database_path)
@@ -260,9 +263,7 @@ class SalePanelView(OwnerView):
         return [
             p
             for p in self.owned
-            if not p.get("locked")
-            and not p["pack_locked"]
-            and (self.include_starters or not p["starter"])
+            if not p.get("locked") and (self.include_starters or not p["starter"])
         ]
 
     def filtered(self) -> list[dict[str, Any]]:
@@ -446,8 +447,6 @@ class SalePanelView(OwnerView):
             if not self.include_starters:
                 hidden.append("titulares")
             hidden.append("🔒 protegidos")
-            if any(p["pack_locked"] for p in self.owned):
-                hidden.append("📦 cartas de pacote ainda travadas")
             embed = discord.Embed(
                 title="💰 Vender jogadores",
                 description=(
@@ -919,8 +918,14 @@ class TradesCog(commands.Cog):
 
     # Venda
 
-    @commands.command(name="vender", aliases=["demitir", "vende", "sell"])
+    @commands.hybrid_command(
+        name="vender",
+        aliases=["demitir", "vende", "sell"],
+        description="Vende um jogador seu (ou um filtro: base, abaixo 70, posicao ZAG)",
+    )
+    @discord.app_commands.describe(query="Seu jogador ou um filtro (sugestões enquanto digita)")
     async def sell(self, context: commands.Context, *, query: str | None = None) -> None:
+        await context.defer()
         register_user(context.author.id, context.author.display_name, self.database_path)
         quick = self._quick_filter(query or "")
         if quick is not None:
@@ -992,8 +997,14 @@ class TradesCog(commands.Cog):
         )
         view.message = await context.reply(embed=embed, view=view, mention_author=False)
 
-    @commands.command(name="proteger", aliases=["cadeado", "lock", "favorito"])
+    @commands.hybrid_command(
+        name="proteger",
+        aliases=["cadeado", "lock", "favorito"],
+        description="Liga/desliga o 🔒: o jogador some das vendas",
+    )
+    @discord.app_commands.describe(query="Seu jogador (sugestões enquanto digita)")
     async def protect(self, context: commands.Context, *, query: str | None = None) -> None:
+        await context.defer()
         register_user(context.author.id, context.author.display_name, self.database_path)
         owned = self._owned(context.author.id)
         if not query:
@@ -1053,6 +1064,28 @@ class TradesCog(commands.Cog):
             await self._confirm_gift(context, target, [player], 0, send)
 
         await self._resolve(context, text, self._owned(context.author.id), chosen)
+
+    @commands.command(name="pay", aliases=["pagar", "pix"])
+    async def pay(self, context: commands.Context, *, arguments: str = "") -> None:
+        """`mm!pay @pessoa <quantia>`: manda Memilets para outra pessoa (com confirmação)."""
+        target = next((member for member in context.message.mentions if not member.bot), None)
+        amount = re.sub(r"[.\s]", "", re.sub(r"<@!?\d+>", " ", arguments))
+        if target is None or target.id == context.author.id or not amount.isdigit():
+            await context.reply(
+                "Use `mm!pay @pessoa <quantia>` para mandar Memilets: `mm!pay @Ana 5000`.",
+                mention_author=False,
+            )
+            return
+        if int(amount) <= 0:
+            await context.reply("A quantia precisa ser maior que zero.", mention_author=False)
+            return
+        await self._confirm_gift(
+            context,
+            target,
+            [],
+            int(amount),
+            lambda **kwargs: context.reply(mention_author=False, **kwargs),
+        )
 
     async def _confirm_gift(self, context, target, players, amount: int, send) -> None:
         lines = []
@@ -1182,6 +1215,14 @@ class TradesCog(commands.Cog):
             await context.reply(str(error), mention_author=False)
             return
         await context.reply(f"{STATUS_TEXT[status]} (#{trade_id}).", mention_author=False)
+
+    @sell.autocomplete("query")
+    async def _sell_names(self, interaction: discord.Interaction, current: str):
+        return await player_choices(self.database_path, current, interaction.user.id)
+
+    @protect.autocomplete("query")
+    async def _protect_names(self, interaction: discord.Interaction, current: str):
+        return await player_choices(self.database_path, current, interaction.user.id)
 
 
 async def setup(bot: commands.Bot) -> None:

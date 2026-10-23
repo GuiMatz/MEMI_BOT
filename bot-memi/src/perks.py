@@ -20,11 +20,14 @@ BASE_STAR_WISHES = 1
 BASE_EXCLUSIVE_SECONDS = 5
 BASE_DAILY_COOLDOWN = timedelta(hours=24)
 MIN_DAILY_COOLDOWN = timedelta(hours=8)
-DAILY_MIN_AMOUNT = 100
-DAILY_BASE_CAP = 300
-COSMETIC_DAILY_BONUS = 100
+DAILY_MIN_AMOUNT = 400
+DAILY_BASE_CAP = 1_200
+# Quanto cada cosmético equipado, nível de upgrade e o andar 11 somam ao máximo.
+DAILY_MAX_STEP = 250
+COSMETIC_DAILY_BONUS = DAILY_MAX_STEP
 CRATE_BASE_PRICE = 500
 CRATE_MIN_PRICE = 250
+FREE_CLAIM_STEP = 0.04  # +4% por nível do Contrato Relâmpago
 BOX_OFFICE_BASE_CAP = 1_000
 INCOME_BASE = 100
 
@@ -54,35 +57,35 @@ UPGRADES: dict[str, UpgradeSpec] = {
         "Declarar Interesse", "+1 slot de Star Wish", 5, 4_000, 2_000, "#EAB308", "🟡"
     ),
     "daily": UpgradeSpec(
-        "Adiantar o Salário", "-10 min no cooldown do daily", 12, 1_000, 250, "#F97316", "🟠"
+        "Adiantar o Salário", "-15 min no cooldown do daily", 12, 1_000, 250, "#F97316", "🟠"
     ),
     "wish_protection": UpgradeSpec(
         "Prioridade na Negociação",
         "+1 s de proteção quando uma wish sua é rolada",
         10,
-        1_500,
-        750,
+        1_000,
+        400,
         "#EF4444",
         "🔴",
     ),
     "daily_max": UpgradeSpec(
-        "Incorporação Financeira", "+100 no máximo do daily", 5, 2_500, 1_500, "#A855F7", "🟣"
+        "Incorporação Financeira", "+250 no máximo do daily", 5, 2_500, 1_500, "#A855F7", "🟣"
     ),
     "exclusivity": UpgradeSpec(
         "Agente Exclusivo",
         "+1 s só seu para contratar o que você rolou",
         10,
-        1_500,
-        750,
+        1_000,
+        400,
         "#14B8A6",
         "🩵",
     ),
     "dismiss_refund": UpgradeSpec(
         "Seguro de Contrato",
-        "+10% no reembolso do mm!demitir",
+        "+10% no valor de venda das cartas",
         5,
-        1_000,
-        500,
+        5_000,
+        5_000,
         "#64748B",
         "⚪",
     ),
@@ -105,7 +108,16 @@ UPGRADES: dict[str, UpgradeSpec] = {
         "🟤",
     ),
     "match_income": UpgradeSpec(
-        "Patrocínio Master", "+25 na renda do amistoso", 4, 1_500, 1_000, "#0EA5E9", "🔷"
+        "Patrocínio Master", "+50 na renda do amistoso", 4, 1_500, 1_000, "#0EA5E9", "🔷"
+    ),
+    "free_claim": UpgradeSpec(
+        "Contrato Relâmpago",
+        "+4% de chance de a contratação não gastar o claim do ciclo",
+        5,
+        4_000,
+        2_500,
+        "#FACC15",
+        "⚡",
     ),
 }
 
@@ -121,7 +133,7 @@ TOWER_FLOORS: dict[int, str] = {
     8: "+1 slot de Star Wish",
     9: "-1 h no cooldown do daily",
     10: "+1 s de proteção de wish",
-    11: "+100 no máximo do daily",
+    11: "+250 no máximo do daily",
     12: "+1 bola em um jogador aleatório dos 11 escalados",
 }
 # Rótulo curto de cada andar, para a imagem da torre.
@@ -136,7 +148,7 @@ TOWER_SHORT: dict[int, str] = {
     8: "+1 Star Wish",
     9: "Daily -1 h",
     10: "Proteção +1 s",
-    11: "Daily máx. +100",
+    11: "Daily máx. +250",
     12: "+1 bola no time",
 }
 TOWER_FIRST_PRICE = 1_000
@@ -186,7 +198,7 @@ class Perks:
     @property
     def daily_cooldown(self) -> timedelta:
         reduction = timedelta(
-            minutes=10 * self.upgrades["daily"] + self.bonuses["daily_minutes"] + 60 * self.floor(9)
+            minutes=15 * self.upgrades["daily"] + self.bonuses["daily_minutes"] + 60 * self.floor(9)
         )
         return max(MIN_DAILY_COOLDOWN, BASE_DAILY_COOLDOWN - reduction)
 
@@ -195,8 +207,8 @@ class Perks:
         return (
             DAILY_BASE_CAP
             + COSMETIC_DAILY_BONUS * self.equipped_cosmetics
-            + 100 * self.upgrades["daily_max"]
-            + 100 * self.floor(11)
+            + DAILY_MAX_STEP * self.upgrades["daily_max"]
+            + DAILY_MAX_STEP * self.floor(11)
         )
 
     @property
@@ -222,7 +234,12 @@ class Perks:
 
     @property
     def income_bonus(self) -> int:
-        return 25 * self.upgrades["match_income"] + 50 * self.floor(6)
+        return 50 * self.upgrades["match_income"] + 50 * self.floor(6)
+
+    @property
+    def free_claim_chance(self) -> float:
+        """Chance de a contratação não gastar o claim do ciclo (Contrato Relâmpago)."""
+        return FREE_CLAIM_STEP * self.upgrades["free_claim"]
 
     @property
     def double_ball_chance(self) -> float:

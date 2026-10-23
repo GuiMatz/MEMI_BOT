@@ -28,21 +28,21 @@ class Mission:
 
 
 DAILY = {
-    "rolar_20": Mission("Role 20 vezes", "roll", 20, 150),
-    "contratar_1": Mission("Contrate 1 jogador", "claim", 1, 150),
-    "amistoso_1": Mission("Jogue 1 amistoso", "friendly", 1, 120),
-    "vitoria_1": Mission("Vença 1 amistoso", "friendly_win", 1, 200),
-    "crate_1": Mission("Abra 1 crate", "crate", 1, 150),
-    "daily_1": Mission("Resgate o daily", "daily", 1, 80),
+    "rolar_20": Mission("Role 20 vezes", "roll", 20, 375),
+    "contratar_1": Mission("Contrate 1 jogador", "claim", 1, 375),
+    "amistoso_1": Mission("Jogue 1 amistoso", "friendly", 1, 300),
+    "vitoria_1": Mission("Vença 1 amistoso", "friendly_win", 1, 500),
+    "crate_1": Mission("Abra 1 crate", "crate", 1, 375),
+    "daily_1": Mission("Resgate o daily", "daily", 1, 200),
 }
 WEEKLY = {
-    "rolar_150": Mission("Role 150 vezes", "roll", 150, 900),
-    "contratar_8": Mission("Contrate 8 jogadores", "claim", 8, 900),
-    "craque": Mission("Contrate um jogador 85+", "claim_85", 1, 1_000),
-    "vitorias_5": Mission("Vença 5 amistosos", "friendly_win", 5, 1_000),
-    "campeonato_3": Mission("Jogue 3 jogos de campeonato", "championship_match", 3, 900),
-    "crates_5": Mission("Abra 5 crates", "crate", 5, 800),
-    "torre_1": Mission("Construa 1 andar da torre", "tower", 1, 700),
+    "rolar_150": Mission("Role 150 vezes", "roll", 150, 2_250),
+    "contratar_8": Mission("Contrate 8 jogadores", "claim", 8, 2_250),
+    "craque": Mission("Contrate um jogador 85+", "claim_85", 1, 2_500),
+    "vitorias_5": Mission("Vença 5 amistosos", "friendly_win", 5, 2_500),
+    "campeonato_3": Mission("Jogue 3 jogos de campeonato", "championship_match", 3, 2_250),
+    "crates_5": Mission("Abra 5 crates", "crate", 5, 2_000),
+    "torre_1": Mission("Construa 1 andar da torre", "tower", 1, 1_750),
 }
 DAILY_COUNT = 3
 WEEKLY_COUNT = 2

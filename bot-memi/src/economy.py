@@ -12,6 +12,7 @@ from src.clock import BRASILIA
 from src.cosmetics import COSMETIC_KINDS, grant, random_new_item
 from src.db import DATABASE_PATH, connect
 from src.game import register_user
+from src.inventory import InventoryEmpty, give, take
 from src.missions import record
 from src.perks import (
     BONUS_LIMITS,
@@ -33,28 +34,48 @@ UPGRADE_LABELS = {key: spec.name for key, spec in UPGRADES.items()}
 # Crates V2: toda caixa traz 1 item Básico e, com sorte, 1 item de outra raridade.
 # As chances são baixas de propósito: tirar algo raro deve ser difícil de verdade.
 CRATE_RARITIES = ("basico", "incomum", "raro", "epico", "lendario")
-CRATE_EXTRA_CHANCES = {"lendario": 0.005, "epico": 0.015, "raro": 0.05, "incomum": 0.15}
+CRATE_EXTRA_CHANCES = {"lendario": 0.006, "epico": 0.018, "raro": 0.055, "incomum": 0.16}
+# Caixa épica: a caixa comum sem a chance de vir só o Básico. O item extra sempre vem, nas
+# mesmas proporções da comum (Incomum ~67%, Raro ~23%, Épico ~7,5%, Lendário ~2,5%).
+# Custa 4 caixas: 4 comuns dão em média ~1 item extra.
+EPIC_CRATE_MULTIPLIER = 4
+EPIC_CRATE_EXTRA_CHANCES = {
+    rarity: chance / sum(CRATE_EXTRA_CHANCES.values())
+    for rarity, chance in CRATE_EXTRA_CHANCES.items()
+}
 # Memilets que vêm no lugar dos itens de cada raridade (um OU outro, nunca os dois).
 # Calibrado para a caixa de Memilets devolver, em média, quase o preço (~480 de 500):
 # a caixa comum não parece prejuízo e os itens raros são o lucro.
 CRATE_MEMILETS = {
-    "basico": (250, 400),
+    "basico": (240, 390),
     "incomum": (450, 600),
     "raro": (900, 900),
     "epico": (1_500, 1_500),
     "lendario": (2_500, 2_500),
 }
-# Garantia: a cada 30 caixas sem Raro (ou melhor), a seguinte traz pelo menos um Raro.
-CRATE_PITY_LIMIT = 30
+# Garantias: em 15 caixas sem Raro (ou melhor) vem um Raro; em 50 sem Épico (ou melhor),
+# um Épico. Cada uma tem seu contador; a de Épico vale primeiro.
+CRATE_PITY_LIMIT = 15
+EPIC_PITY_LIMIT = 50
+LEGENDARY_PITY_LIMIT = 200
 CRATE_BATCHES = (1, 5, 10)
+# A cada 10 rolls guardados ativados (`mm!ativar`), 1 contratação extra.
+ROLLS_PER_BONUS_CLAIM = 10
 CRATE_ITEM_CHANCE = 0.5
 CRATE_DOUBLE_CHANCE = 0.05
 CRATE_INSTANT_ROLLS = (1, 3)
 CRATE_ITEMS = {
     "incomum": ("cosmetic",),
-    "raro": ("daily_1h", "wish_protection"),
-    "epico": ("star_wish_slot", "wish_slot", "daily_2h"),
-    "lendario": ("permanent_roll", "random_upgrade", "crate_discount"),
+    "raro": ("daily_1h", "wish_protection", "bonus_crate", "player_pack"),
+    "epico": ("star_wish_slot", "wish_slot", "daily_2h", "epic_crate", "player_pack"),
+    "lendario": ("permanent_roll", "random_upgrade", "crate_discount", "epic_pack"),
+}
+# Itens de crate que vão para o inventário (`mm!inventario`) para abrir depois.
+CRATE_INVENTORY_ITEMS = {
+    "bonus_crate": "caixa",
+    "epic_crate": "caixa_epica",
+    "player_pack": "pacote",
+    "epic_pack": "pacote_epico",
 }
 # Item de crate -> (bônus permanente, quanto soma).
 CRATE_BONUS_ITEMS = {
@@ -122,6 +143,10 @@ class CrateResult:
     doubled: bool = False
     pity: int = 0
     guaranteed: bool = False
+    epic_pity: int = 0
+    guaranteed_epic: bool = False
+    legendary_pity: int = 0
+    guaranteed_legendary: bool = False
 
     @property
     def memilets(self) -> int:
@@ -370,6 +395,27 @@ def get_crate_pity(discord_user_id: int | str, database_path: str | Path = DATAB
     return int(row["crate_pity"]) if row else 0
 
 
+def get_epic_pity(discord_user_id: int | str, database_path: str | Path = DATABASE_PATH) -> int:
+    """Caixas seguidas sem Épico (a garantia vem em `EPIC_PITY_LIMIT`)."""
+    with connect(database_path) as connection:
+        row = connection.execute(
+            "SELECT epic_pity FROM game_users WHERE discord_user_id = ?", (str(discord_user_id),)
+        ).fetchone()
+    return int(row["epic_pity"]) if row else 0
+
+
+def get_legendary_pity(
+    discord_user_id: int | str, database_path: str | Path = DATABASE_PATH
+) -> int:
+    """Caixas seguidas sem Lendário (a garantia vem em `LEGENDARY_PITY_LIMIT`)."""
+    with connect(database_path) as connection:
+        row = connection.execute(
+            "SELECT legendary_pity FROM game_users WHERE discord_user_id = ?",
+            (str(discord_user_id),),
+        ).fetchone()
+    return int(row["legendary_pity"]) if row else 0
+
+
 def open_crates(
     discord_user_id: int | str,
     display_name: str,
@@ -377,12 +423,36 @@ def open_crates(
     database_path: str | Path = DATABASE_PATH,
     *,
     rng: random.Random | random.SystemRandom | None = None,
+    epic: bool = False,
+    from_inventory: bool = False,
 ) -> list[CrateResult]:
-    """Abre `count` caixas seguidas; confere antes se o saldo paga todas."""
+    """Abre `count` caixas seguidas; confere antes se o saldo paga todas.
+
+    `from_inventory=True`: caixas ganhas, do inventário (sem cobrar, qualquer quantidade);
+    para quando acabam."""
+    register_user(discord_user_id, display_name, database_path)
+    if from_inventory:
+        results = []
+        for _ in range(count):
+            try:
+                results.append(
+                    open_crate(
+                        discord_user_id,
+                        display_name,
+                        database_path,
+                        rng=rng,
+                        epic=epic,
+                        from_inventory=True,
+                    )
+                )
+            except InsufficientFunds:
+                if not results:
+                    raise
+                break
+        return results
     if count not in CRATE_BATCHES:
         raise ValueError("Quantidade de caixas inválida.")
-    register_user(discord_user_id, display_name, database_path)
-    price = get_crate_price(discord_user_id, database_path)
+    price = get_crate_price(discord_user_id, database_path) * (EPIC_CRATE_MULTIPLIER if epic else 1)
     with connect(database_path) as connection:
         balance = connection.execute(
             "SELECT memilets FROM game_users WHERE discord_user_id = ?",
@@ -390,11 +460,18 @@ def open_crates(
         ).fetchone()["memilets"]
     if balance < price * count:
         affordable = balance // price
+        noun = "caixa" if count == 1 else "caixas"
+        if epic:
+            noun += " épica" if count == 1 else " épicas"
+        verb = "custa" if count == 1 else "custam"
         raise InsufficientFunds(
-            f"{count} caixas custam {price * count:,} Memilets".replace(",", ".")
+            f"{count} {noun} {verb} {price * count:,} Memilets".replace(",", ".")
             + (f"; seu saldo paga {affordable}." if affordable else "; seu saldo não paga nenhuma.")
         )
-    return [open_crate(discord_user_id, display_name, database_path, rng=rng) for _ in range(count)]
+    return [
+        open_crate(discord_user_id, display_name, database_path, rng=rng, epic=epic)
+        for _ in range(count)
+    ]
 
 
 def get_crate_price(discord_user_id: int | str, database_path: str | Path = DATABASE_PATH) -> int:
@@ -409,8 +486,14 @@ def open_crate(
     *,
     now: datetime | None = None,
     rng: random.Random | random.SystemRandom | None = None,
+    epic: bool = False,
+    from_inventory: bool = False,
 ) -> CrateResult:
     """Abre uma crate: Básico sempre e, com sorte, 1 item de outra raridade.
+
+    `epic=True` abre a caixa épica: preço × `EPIC_CRATE_MULTIPLIER` e as chances de
+    `EPIC_CRATE_EXTRA_CHANCES`. `from_inventory=True` abre uma caixa ganha (do
+    `mm!inventario`): tira do inventário em vez de cobrar.
 
     A caixa vem inteira em itens ou inteira em Memilets: Memilets nunca vêm junto com
     item. Cosméticos são sempre novos para a pessoa. Em 5% das caixas com item, o item
@@ -423,13 +506,20 @@ def open_crate(
     with connect(database_path) as connection:
         connection.execute("BEGIN IMMEDIATE")
         perks = load_perks(connection, user_id)
-        price = perks.crate_price
+        price = perks.crate_price * (EPIC_CRATE_MULTIPLIER if epic else 1)
+        if from_inventory:
+            try:
+                take(connection, user_id, "caixa_epica" if epic else "caixa")
+            except InventoryEmpty as error:
+                raise InsufficientFunds(str(error)) from None
+            price = 0
         balance = connection.execute(
             "SELECT memilets FROM game_users WHERE discord_user_id = ?",
             (user_id,),
         ).fetchone()["memilets"]
         if balance < price:
-            raise InsufficientFunds(f"Uma crate custa {price} Memilets.")
+            name = "Uma caixa épica" if epic else "Uma crate"
+            raise InsufficientFunds(f"{name} custa {price:,} Memilets.".replace(",", "."))
         connection.execute(
             """
             UPDATE game_users SET memilets = memilets - ?, updated_at = CURRENT_TIMESTAMP
@@ -441,7 +531,7 @@ def open_crate(
         extra = None
         draw = generator.random()
         cumulative = 0.0
-        for rarity, chance in CRATE_EXTRA_CHANCES.items():
+        for rarity, chance in (EPIC_CRATE_EXTRA_CHANCES if epic else CRATE_EXTRA_CHANCES).items():
             cumulative += chance
             if draw < cumulative:
                 extra = rarity
@@ -451,10 +541,31 @@ def open_crate(
             (user_id,),
         ).fetchone()
         pity = int(pity_row["crate_pity"]) if pity_row else 0
+        counters = connection.execute(
+            "SELECT epic_pity, legendary_pity FROM game_users WHERE discord_user_id = ?",
+            (user_id,),
+        ).fetchone()
+        epic_pity = int(counters["epic_pity"])
+        legendary_pity = int(counters["legendary_pity"])
+        # Três garantias: Lendário em LEGENDARY_PITY_LIMIT caixas sem Lendário, Épico em
+        # EPIC_PITY_LIMIT sem Épico (ou melhor) e Raro em CRATE_PITY_LIMIT sem Raro (ou
+        # melhor). A maior vale primeiro.
+        guaranteed_legendary = legendary_pity + 1 >= LEGENDARY_PITY_LIMIT and extra != "lendario"
+        if guaranteed_legendary:
+            extra = "lendario"
+        guaranteed_epic = epic_pity + 1 >= EPIC_PITY_LIMIT and extra not in ("epico", "lendario")
+        if guaranteed_epic:
+            extra = "epico"
         guaranteed = pity + 1 >= CRATE_PITY_LIMIT and extra in (None, "incomum")
         if guaranteed:
             extra = "raro"
         pity = 0 if extra in ("raro", "epico", "lendario") else min(CRATE_PITY_LIMIT, pity + 1)
+        epic_pity = 0 if extra in ("epico", "lendario") else min(EPIC_PITY_LIMIT, epic_pity + 1)
+        legendary_pity = 0 if extra == "lendario" else min(LEGENDARY_PITY_LIMIT, legendary_pity + 1)
+        connection.execute(
+            "UPDATE game_users SET epic_pity = ?, legendary_pity = ? WHERE discord_user_id = ?",
+            (epic_pity, legendary_pity, user_id),
+        )
         connection.execute(
             """
             INSERT INTO user_upgrades (discord_user_id, upgrade_key, crate_pity) VALUES (?, 'rolls', ?)
@@ -502,11 +613,78 @@ def open_crate(
                 """,
                 (total, user_id),
             )
-        return CrateResult(price, tuple(prizes), doubled, pity, guaranteed)
+        return CrateResult(
+            price,
+            tuple(prizes),
+            doubled,
+            pity,
+            guaranteed,
+            epic_pity,
+            guaranteed_epic,
+            legendary_pity,
+            guaranteed_legendary,
+        )
+
+
+@dataclass(frozen=True)
+class Activation:
+    activated: int
+    claims_gained: int
+    active_rolls: int
+    bonus_claims: int
+    carry: int  # rolls ativados que ainda não completaram 10
+
+
+def activate_rolls(
+    discord_user_id: int | str,
+    display_name: str,
+    database_path: str | Path = DATABASE_PATH,
+    amount: int | None = None,
+) -> Activation:
+    """`mm!ativar`: os rolls guardados passam a valer (depois dos rolls do ciclo) e cada
+    `ROLLS_PER_BONUS_CLAIM` ativados dão 1 contratação extra. A sobra conta para a próxima."""
+    user_id = str(discord_user_id)
+    register_user(user_id, display_name, database_path)
+    with connect(database_path) as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        row = connection.execute(
+            "SELECT roll_tokens FROM user_upgrades "
+            "WHERE discord_user_id = ? AND upgrade_key = 'rolls'",
+            (user_id,),
+        ).fetchone()
+        stored = int(row["roll_tokens"]) if row else 0
+        if not stored:
+            raise EconomyError("Você não tem rolls guardados. Eles vêm das caixas (`mm!crates`).")
+        if amount is not None and not 1 <= amount <= stored:
+            raise EconomyError(f"Você tem {stored} rolls guardados; ative de 1 a {stored}.")
+        activated = stored if amount is None else amount
+        account = connection.execute(
+            "SELECT active_rolls, bonus_claims, activation_carry FROM game_users "
+            "WHERE discord_user_id = ?",
+            (user_id,),
+        ).fetchone()
+        claims, carry = divmod(int(account["activation_carry"]) + activated, ROLLS_PER_BONUS_CLAIM)
+        connection.execute(
+            "UPDATE user_upgrades SET roll_tokens = roll_tokens - ? "
+            "WHERE discord_user_id = ? AND upgrade_key = 'rolls'",
+            (activated, user_id),
+        )
+        connection.execute(
+            "UPDATE game_users SET active_rolls = active_rolls + ?, "
+            "bonus_claims = bonus_claims + ?, activation_carry = ? WHERE discord_user_id = ?",
+            (activated, claims, carry, user_id),
+        )
+    return Activation(
+        activated,
+        claims,
+        int(account["active_rolls"]) + activated,
+        int(account["bonus_claims"]) + claims,
+        carry,
+    )
 
 
 def _give_instant_rolls(connection, user_id: str, amount: int) -> None:
-    """Rolls da crate vão para o estoque de rolls extras: não expiram, usa quando quiser."""
+    """Rolls da crate ficam guardados: não expiram e só valem depois de `mm!ativar`."""
     connection.execute(
         """
         INSERT INTO user_upgrades (discord_user_id, upgrade_key, roll_tokens)
@@ -542,6 +720,9 @@ def _give_item(
             key = rng.choice(open_upgrades)
             _raise_upgrade(connection, user_id, key)
             return CratePrize(rarity, "random_upgrade", 1, UPGRADES[key].name)
+        if item in CRATE_INVENTORY_ITEMS:
+            give(connection, user_id, CRATE_INVENTORY_ITEMS[item])
+            return CratePrize(rarity, item, 1)
         bonus_key, amount = CRATE_BONUS_ITEMS[item]
         if perks.bonuses[bonus_key] + amount > BONUS_LIMITS[bonus_key]:
             continue
@@ -558,7 +739,7 @@ def describe_prize(prize: CratePrize) -> str:
         return f"{prize.amount:,} Memilets".replace(",", ".")
     if prize.kind == "instant_rolls":
         plural = "s" if prize.amount > 1 else ""
-        return f"{prize.amount} roll{plural} guardado{plural} (use quando quiser)"
+        return f"{prize.amount} roll{plural} guardado{plural} (ative com mm!ativar <quantidade>)"
     if prize.kind.startswith("cosmetic:"):
         kind = prize.kind.split(":", 1)[1]
         label, emoji, *_ = COSMETIC_KINDS[kind]
@@ -572,6 +753,10 @@ def describe_prize(prize: CratePrize) -> str:
         "permanent_roll": "+1 roll permanente por ciclo",
         "random_upgrade": f"+1 nível em **{prize.name}**",
         "crate_discount": "-10 Memilets no preço da crate (permanente)",
+        "bonus_crate": "+1 caixa no inventário (mm!inventario)",
+        "epic_crate": "+1 caixa épica no inventário (mm!inventario)",
+        "player_pack": "+1 pacote de jogador no inventário (mm!inventario)",
+        "epic_pack": "+1 pacote épico no inventário (mm!inventario)",
     }
     return texts[prize.kind]
 
@@ -596,6 +781,8 @@ class AccountStatus:
     crate_price: int = CRATE_BASE_PRICE
     wish_protection: int = 0
     instant_rolls: int = 0
+    active_rolls: int = 0  # rolls guardados já ativados
+    bonus_claims: int = 0  # contratações extras dos rolls ativados
 
 
 def get_account_status(
@@ -617,7 +804,8 @@ def get_account_status(
         perks = load_perks(connection, user_id)
         instant = cycle_bonus_rolls(connection, user_id, cycle_key)
         row = connection.execute(
-            "SELECT last_claim_at, last_daily_at FROM game_users WHERE discord_user_id = ?",
+            "SELECT last_claim_at, last_daily_at, active_rolls, bonus_claims FROM game_users "
+            "WHERE discord_user_id = ?",
             (user_id,),
         ).fetchone()
         usage = connection.execute(
@@ -680,4 +868,6 @@ def get_account_status(
         crate_price=perks.crate_price,
         wish_protection=perks.wish_protection_seconds,
         instant_rolls=instant,
+        active_rolls=int(row["active_rolls"]),
+        bonus_claims=int(row["bonus_claims"]),
     )

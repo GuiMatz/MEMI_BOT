@@ -2,14 +2,18 @@ import random
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
+from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
 
 from src.cosmetics import CosmeticError, equip_key, grant
 from src.db import connect, initialize_database
 from src.economy import (
+    CRATE_EXTRA_CHANCES,
     CRATE_PITY_LIMIT,
     CRATE_PRICE,
+    EPIC_CRATE_EXTRA_CHANCES,
+    EPIC_CRATE_MULTIPLIER,
     CratePrize,
     InsufficientFunds,
     get_crate_pity,
@@ -17,7 +21,17 @@ from src.economy import (
 )
 from src.game import claim_player, get_wallet, register_user
 from src.ratings import game_overall
-from src.packs import PACK_PRICE, PackError, open_pack
+from src.packs import (
+    ALL_IN_PRICE,
+    ALL_IN_TOP,
+    ALL_IN_WHEEL,
+    EPIC_PACK_ODDS,
+    EPIC_PACK_PRICE,
+    PACK_PRICE,
+    PackError,
+    open_all_in,
+    open_pack,
+)
 from src.teams import ensure_team, get_team, set_lineup_slot
 from src.transactions import (
     PACK_SALE_FACTOR,
@@ -89,7 +103,7 @@ class ProtectionAndQuickSaleTests(Case):
         with self.assertRaises(TransactionError):
             toggle_protection(100, other, self.database_path)
 
-    def test_quick_sale_filters_and_skips_starters_locked_and_pack_locked(self):
+    def test_quick_sale_filters_skips_starters_and_locked_but_sells_pack_cards(self):
         # Overall bruto 45 vira 63 no jogo (Comum); 75 vira 81 (Raro).
         commons = [self.add_player(f"Comum {n}", 45, "ZAG", owner=100) for n in range(3)]
         rare = self.add_player("Raro", 75, "CA", owner=100)
@@ -97,8 +111,13 @@ class ProtectionAndQuickSaleTests(Case):
         set_lineup_slot(100, 1, starter, self.database_path)
         toggle_protection(100, commons[0], self.database_path)
         self.mark_pack(commons[1], datetime.now(timezone.utc) + timedelta(days=3))
-        self.assertEqual(quick_sale_ids(100, self.database_path, rarity="Comum"), [commons[2]])
-        self.assertEqual(quick_sale_ids(100, self.database_path, below=70), [commons[2]])
+        # Carta de pacote entra na venda (por 50%); protegido e titular ficam de fora.
+        self.assertEqual(
+            quick_sale_ids(100, self.database_path, rarity="Comum"), [commons[1], commons[2]]
+        )
+        self.assertEqual(
+            quick_sale_ids(100, self.database_path, below=70), [commons[1], commons[2]]
+        )
         self.assertEqual(quick_sale_ids(100, self.database_path, position="CA"), [rare])
         with self.assertRaises(TransactionError):
             quick_sale_ids(100, self.database_path, rarity="Inexistente")
@@ -120,15 +139,16 @@ class PackRuleTests(Case):
         self.assertEqual(quote["total"], max(1, round(full * PACK_SALE_FACTOR)))
         self.assertIn("veio de pacote", " ".join(quote["players"][0]["warnings"]))
 
-    def test_pack_lock_blocks_sale_gift_and_trade(self):
+    def test_pack_card_sells_right_away_at_half_but_cannot_be_given_or_traded(self):
         player = self.add_player("Travado", 80, owner=100)
         self.mark_pack(player, datetime.now(timezone.utc) + timedelta(days=6))
-        with self.assertRaises(TransactionError):
-            sell_players(100, [player], self.database_path)
         with self.assertRaises(TransactionError):
             give_players(100, "A", 200, "B", [player], 0, self.database_path)
         with self.assertRaises(TransactionError):
             create_trade(100, "A", 200, "B", [player], [], 0, 0, self.database_path)
+        expected = max(1, round(sale_value(game_overall(80)) * PACK_SALE_FACTOR))
+        self.assertEqual(PACK_SALE_FACTOR, 0.5)
+        self.assertEqual(sell_players(100, [player], self.database_path), expected)
 
     def test_pack_mark_follows_the_card_after_a_trade(self):
         player = self.add_player("Viajante", 80, owner=100)
@@ -150,7 +170,7 @@ class OpenPackTests(Case):
         result = open_pack(100, "Pessoa A", self.database_path, now=now, rng=random.Random(1))
         self.assertEqual(result.player["id"], good)
         self.assertEqual(self.memilets(100), 10)
-        self.assertEqual(result.locked_until, now + timedelta(days=7))
+        self.assertEqual(result.locked_until, now + timedelta(hours=1))
         with connect(self.database_path) as connection:
             row = connection.execute(
                 "SELECT discord_user_id, pack_origin FROM player_ownership WHERE player_id = ?",
@@ -168,6 +188,117 @@ class OpenPackTests(Case):
             open_pack(100, "Pessoa A", self.database_path, rng=random.Random(3))
         self.assertEqual(self.memilets(100), PACK_PRICE * 2)  # o pacote falho não cobra
 
+    def test_epic_pack_costs_more_and_only_gives_rare_or_better(self):
+        self.add_player("Comum", 45)  # 63 no jogo: o épico não pode cair nele
+        rare = self.add_player("Raro", 75)  # 81 no jogo
+        self.set_memilets(100, EPIC_PACK_PRICE * 2)
+        result = open_pack(100, "Pessoa A", self.database_path, rng=random.Random(1), epic=True)
+        self.assertEqual(result.player["id"], rare)
+        self.assertEqual(result.price, EPIC_PACK_PRICE)
+        self.assertEqual(self.memilets(100), EPIC_PACK_PRICE)
+        with self.assertRaises(PackError):
+            open_pack(100, "Pessoa A", self.database_path, rng=random.Random(2), epic=True)
+        self.assertEqual(self.memilets(100), EPIC_PACK_PRICE)  # sem Raro livre, não cobra
+        quote = sale_quote(100, [rare], self.database_path)
+        self.assertEqual(quote["total"], sale_value(game_overall(75)))  # sem corte de pacote
+        with self.assertRaises(TransactionError):  # mas a trava de doar continua
+            give_players(100, "A", 200, "B", [rare], 0, self.database_path)
+        self.assertGreater(EPIC_PACK_PRICE, PACK_PRICE * 3)
+        self.assertEqual(min(EPIC_PACK_ODDS), 3)
+        self.assertAlmostEqual(sum(EPIC_PACK_ODDS.values()), 1.0)
+
+    def test_epic_pack_instant_sale_stays_below_its_price(self):
+        from src.ratings import RARITY_TIERS
+
+        expected = 0.0
+        for tier, chance in EPIC_PACK_ODDS.items():
+            low, high = RARITY_TIERS[tier][2], RARITY_TIERS[tier][3]
+            values = [sale_value(overall) for overall in range(low, high + 1)]  # valor cheio
+            expected += chance * sum(values) / len(values)
+        self.assertLess(expected, EPIC_PACK_PRICE)
+
+
+class FixedWheel(random.Random):
+    """Para a roleta na fatia `slot`; o resto do sorteio pega sempre o primeiro."""
+
+    def __init__(self, slot):
+        super().__init__(0)
+        self.slot = slot
+
+    def randrange(self, n):
+        return self.slot if n == len(ALL_IN_WHEEL) else 0
+
+    def choices(self, population, weights=None, k=1):
+        return [population[0]] * k
+
+
+class AllInTests(Case):
+    def test_wheel_is_one_in_ten_for_icon_or_better(self):
+        gold = sum(1 for tier in ALL_IN_WHEEL if tier in ALL_IN_TOP)
+        self.assertEqual(gold / len(ALL_IN_WHEEL), 0.1)
+        self.assertEqual(min(ALL_IN_TOP), 6)  # 6 = Ícone
+
+    def test_without_a_free_icon_the_wheel_does_not_spin_or_charge(self):
+        self.add_player("Comum", 45)
+        self.set_memilets(100, ALL_IN_PRICE)
+        with self.assertRaises(PackError) as error:
+            open_all_in(100, "Pessoa A", self.database_path, rng=FixedWheel(0))
+        self.assertIn("Nada foi cobrado", str(error.exception))
+        self.assertEqual(self.memilets(100), ALL_IN_PRICE)
+
+    def test_gold_slice_gives_an_icon_and_other_slices_a_common_card(self):
+        common = self.add_player("Comum", 45)
+        icon = self.add_player("Ícone", 96)
+        self.set_memilets(100, ALL_IN_PRICE * 2)
+        gold = ALL_IN_WHEEL.index(6)
+        result = open_all_in(100, "Pessoa A", self.database_path, rng=FixedWheel(gold))
+        self.assertEqual(
+            (result.player["id"], result.slot, result.price), (icon, gold, ALL_IN_PRICE)
+        )
+        self.add_player("Outro Ícone", 95)  # precisa haver Ícone livre para girar
+        result = open_all_in(100, "Pessoa A", self.database_path, rng=FixedWheel(0))
+        self.assertEqual(result.player["id"], common)
+        self.assertEqual(self.memilets(100), 0)
+
+    def test_wheel_gif_spins_and_holds_on_the_last_frame(self):
+        from PIL import Image
+
+        from src.crate_animation import HOLD_MS, all_in_wheel_gif
+        from src.lineup_image import TIER_COLORS
+
+        data = all_in_wheel_gif(
+            ALL_IN_WHEEL, 5, TIER_COLORS, {i: str(i) for i in range(9)}, top_label="ÍCONE"
+        )
+        image = Image.open(BytesIO(data))
+        self.assertGreater(image.n_frames, 30)
+        image.seek(image.n_frames - 1)
+        self.assertGreaterEqual(image.info["duration"], HOLD_MS)  # o Pillow junta quadros iguais
+
+    def test_spin_then_the_message_becomes_the_card(self):
+        import asyncio
+        from unittest.mock import AsyncMock, patch
+
+        import discord
+
+        from src.cogs import economy as cog_module
+        from src.cogs.economy import EconomyCog
+
+        self.add_player("Ícone", 96)
+        self.add_player("Comum", 45)
+        self.set_memilets(100, ALL_IN_PRICE)
+        cog = EconomyCog(SimpleNamespace(database_path=self.database_path))
+        author = SimpleNamespace(id=100, display_name="Pessoa A")
+        card = (discord.Embed(title="carta"), b"GIF89a")
+        send, edit = AsyncMock(), AsyncMock()
+        with (
+            patch.object(cog_module, "all_in_wheel_gif", lambda *a, **k: b"GIF89a"),
+            patch.object(cog_module, "ALL_IN_SPIN_SECONDS", 0),
+            patch.object(EconomyCog, "card_reveal", AsyncMock(return_value=card)),
+        ):
+            asyncio.run(cog.all_in_with_animation(author, send, edit))
+        self.assertEqual(send.call_args.kwargs["file"].filename, "roleta.gif")
+        self.assertEqual(edit.call_args.kwargs["embed"].title, "carta")
+
 
 class CrateBatchTests(Case):
     def test_open_several_crates_and_check_balance_first(self):
@@ -182,6 +313,118 @@ class CrateBatchTests(Case):
         with self.assertRaises(ValueError):
             open_crates(100, "Pessoa A", 7, self.database_path)
         self.assertLessEqual(get_crate_pity(100, self.database_path), CRATE_PITY_LIMIT)
+
+    def test_raro_every_15_and_epico_every_50_without_luck(self):
+        from src.economy import EPIC_PITY_LIMIT, get_epic_pity, open_crate
+
+        class Unlucky(random.Random):
+            def random(self):
+                return 0.99  # nunca sai item extra por sorte
+
+        self.add_player("Atacante")
+        self.assertEqual((CRATE_PITY_LIMIT, EPIC_PITY_LIMIT), (15, 50))
+        self.set_memilets(100, CRATE_PRICE * EPIC_PITY_LIMIT)
+        results = [
+            open_crate(100, "Pessoa A", self.database_path, rng=Unlucky(1))
+            for _ in range(EPIC_PITY_LIMIT)
+        ]
+        raro = [index + 1 for index, result in enumerate(results) if result.guaranteed]
+        self.assertEqual(raro, [15, 30, 45])
+        self.assertTrue(results[-1].guaranteed_epic)
+        self.assertEqual(results[-1].best_rarity, "epico")
+        self.assertEqual(results[-2].epic_pity, EPIC_PITY_LIMIT - 1)
+        self.assertEqual(get_epic_pity(100, self.database_path), 0)
+
+    def test_lendario_guaranteed_after_200_without_luck(self):
+        from src.economy import LEGENDARY_PITY_LIMIT, get_legendary_pity, open_crate
+
+        class Unlucky(random.Random):
+            def random(self):
+                return 0.99
+
+        self.add_player("Atacante")
+        self.assertEqual(LEGENDARY_PITY_LIMIT, 200)
+        self.set_memilets(100, CRATE_PRICE * LEGENDARY_PITY_LIMIT)
+        results = [
+            open_crate(100, "Pessoa A", self.database_path, rng=Unlucky(1))
+            for _ in range(LEGENDARY_PITY_LIMIT)
+        ]
+        epics = [index + 1 for index, result in enumerate(results) if result.guaranteed_epic]
+        self.assertEqual(epics, [50, 100, 150])  # no 200, o Lendário vem no lugar
+        self.assertTrue(results[-1].guaranteed_legendary)
+        self.assertEqual(results[-1].best_rarity, "lendario")
+        self.assertEqual(results[-2].legendary_pity, LEGENDARY_PITY_LIMIT - 1)
+        self.assertEqual(get_legendary_pity(100, self.database_path), 0)
+
+    def test_batch_lists_every_crate_and_counts_rarities_for_the_gif(self):
+        import asyncio
+        from unittest.mock import AsyncMock, patch
+
+        from src.cogs import economy as cog_module
+        from src.cogs.economy import EconomyCog
+
+        self.add_player("Atacante")
+        self.set_memilets(100, CRATE_PRICE * 10)
+        cog = EconomyCog(SimpleNamespace(database_path=self.database_path))
+        author = SimpleNamespace(id=100, display_name="Pessoa A")
+        seen = {}
+
+        def fake_gif(rarity, tiles, counts=None, headline=None):
+            seen.update(rarity=rarity, tiles=tiles, counts=dict(counts or {}))
+            return b"GIF89a"
+
+        edit = AsyncMock()
+        with patch.object(cog_module, "prize_gif", fake_gif):
+            asyncio.run(cog.open_with_animation(author, AsyncMock(), edit, count=10))
+        embed = edit.call_args.kwargs["embed"]
+        self.assertEqual(sum(seen["counts"].values()), 10)
+        # Os cartões do GIF somam exatamente o que o texto diz no topo.
+        coins = next((t.title for t in seen["tiles"] if t.icon == "coin"), None)
+        if coins:
+            self.assertIn(coins, embed.description)
+        caixas = [field for field in embed.fields if field.name.startswith("Caixa ")]
+        self.assertEqual(len(caixas), 10)
+        for rarity, amount in seen["counts"].items():
+            label = cog_module.RARITY_LABELS[rarity]
+            self.assertEqual(sum(field.name.endswith(label) for field in caixas), amount)
+
+    def test_single_crate_gif_shows_exactly_its_prizes(self):
+        from src.cogs.economy import EconomyCog
+
+        self.add_player("Atacante")
+        self.set_memilets(100, CRATE_PRICE)
+        cog = EconomyCog(SimpleNamespace(database_path=self.database_path))
+        (result,) = open_crates(100, "Pessoa A", 1, self.database_path, rng=random.Random(9))
+        tiles = cog.prize_tiles(100, list(result.prizes))
+        coins = sum(prize.amount for prize in result.prizes if prize.kind == "memilets")
+        rolls = sum(prize.amount for prize in result.prizes if prize.kind == "instant_rolls")
+        titles = [tile.title for tile in tiles]
+        if coins:
+            self.assertIn(f"{coins:,}".replace(",", "."), titles)
+        if rolls:
+            self.assertIn(f"{rolls} roll{'s' if rolls > 1 else ''}", titles)
+
+    def test_epic_crate_never_comes_with_only_the_basic_item(self):
+        self.add_player("Atacante")
+        self.set_memilets(100, CRATE_PRICE * EPIC_CRATE_MULTIPLIER * 10)
+        results = open_crates(
+            100, "Pessoa A", 10, self.database_path, rng=random.Random(5), epic=True
+        )
+        # A primeira custa 5 caixas; o prêmio "-10 no preço da crate" barateia as seguintes.
+        self.assertEqual(results[0].price, CRATE_PRICE * EPIC_CRATE_MULTIPLIER)
+        self.assertTrue(
+            all(result.price <= CRATE_PRICE * EPIC_CRATE_MULTIPLIER for result in results)
+        )
+        self.assertTrue(all(result.best_rarity != "basico" for result in results))
+        self.assertAlmostEqual(sum(EPIC_CRATE_EXTRA_CHANCES.values()), 1.0)
+        # Mesmas proporções da caixa comum, só sem a chance de vir só o básico.
+        total = sum(CRATE_EXTRA_CHANCES.values())
+        for rarity, chance in EPIC_CRATE_EXTRA_CHANCES.items():
+            self.assertAlmostEqual(chance, CRATE_EXTRA_CHANCES[rarity] / total)
+        self.set_memilets(100, 0)
+        with self.assertRaises(InsufficientFunds) as error:
+            open_crates(100, "Pessoa A", 1, self.database_path, epic=True)
+        self.assertIn("épica", str(error.exception))
 
     def test_prize_tiles_sum_coins_and_rolls_and_keep_items(self):
         from src.cogs.economy import EconomyCog
@@ -200,6 +443,203 @@ class CrateBatchTests(Case):
         self.assertIn("1.200", titles)
         self.assertIn("3 rolls", titles)
         self.assertIn("+1 Star Wish", titles)
+
+
+class InventoryTests(Case, unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        Case.setUp(self)
+
+    def give(self, item, amount=1):
+        from src.inventory import give
+
+        with connect(self.database_path) as connection:
+            give(connection, "100", item, amount)
+
+    def test_crate_can_give_crates_and_packs_that_go_to_the_inventory(self):
+        from unittest.mock import patch
+
+        from src import economy
+        from src.inventory import get_inventory
+
+        self.assertIn("player_pack", economy.CRATE_ITEMS["raro"])
+        self.assertIn("player_pack", economy.CRATE_ITEMS["epico"])
+        self.assertIn("epic_pack", economy.CRATE_ITEMS["lendario"])
+        for rarity, item, stored in (
+            ("raro", "bonus_crate", "caixa"),
+            ("raro", "player_pack", "pacote"),
+            ("epico", "epic_crate", "caixa_epica"),
+            ("lendario", "epic_pack", "pacote_epico"),
+        ):
+            with (
+                patch.dict(economy.CRATE_ITEMS, {rarity: (item,)}),
+                connect(self.database_path) as connection,
+            ):
+                prize = economy._give_item(
+                    connection, "100", rarity, random.Random(1), self.database_path
+                )
+            self.assertEqual((prize.kind, prize.rarity), (item, rarity))
+            self.assertIn("mm!inventario", economy.describe_prize(prize))
+        self.assertEqual(
+            get_inventory(100, self.database_path),
+            {"caixa": 1, "caixa_epica": 1, "pacote": 1, "pacote_epico": 1},
+        )
+
+    def test_inventory_crate_opens_for_free_and_only_once(self):
+        from src.inventory import get_inventory
+
+        self.add_player("Atacante")
+        self.set_memilets(100, 0)
+        self.give("caixa")
+        # rng fixo: a caixa sai com Memilets, sem cair outra caixa de prêmio.
+        (result,) = open_crates(
+            100, "Pessoa A", 1, self.database_path, rng=random.Random(9), from_inventory=True
+        )
+        self.assertFalse(any(prize.kind == "bonus_crate" for prize in result.prizes))
+        self.assertEqual(result.price, 0)
+        self.assertEqual(get_inventory(100, self.database_path), {})
+        with self.assertRaises(InsufficientFunds):
+            open_crates(100, "Pessoa A", 1, self.database_path, from_inventory=True)
+
+    def test_inventory_pack_is_free_and_comes_back_if_the_market_is_empty(self):
+        from src.inventory import get_inventory
+
+        self.set_memilets(100, 0)
+        self.give("pacote")
+        with self.assertRaises(PackError):
+            open_pack(100, "Pessoa A", self.database_path, from_inventory=True)
+        self.assertEqual(get_inventory(100, self.database_path), {"pacote": 1})
+        player = self.add_player("Bom", 45)
+        result = open_pack(
+            100, "Pessoa A", self.database_path, rng=random.Random(1), from_inventory=True
+        )
+        self.assertEqual((result.player["id"], result.price), (player, 0))
+        self.assertEqual(self.memilets(100), 0)
+        self.assertEqual(get_inventory(100, self.database_path), {})
+
+    async def test_ativar_needs_the_amount_and_activates_exactly_that(self):
+        from unittest.mock import AsyncMock
+
+        from src.cogs.economy import EconomyCog
+        from src.economy import get_account_status
+
+        with connect(self.database_path) as connection:
+            connection.execute(
+                "INSERT INTO user_upgrades (discord_user_id, upgrade_key, roll_tokens) "
+                "VALUES ('100', 'rolls', 25)"
+            )
+        cog = EconomyCog(SimpleNamespace(database_path=self.database_path))
+        context = SimpleNamespace(
+            author=SimpleNamespace(id=100, display_name="Pessoa A"), reply=AsyncMock()
+        )
+        await EconomyCog.activate.callback(cog, context, None)
+        self.assertIn("mm!ativar 20", context.reply.call_args.args[0])
+        self.assertIn("**25**", context.reply.call_args.args[0])
+        status = get_account_status(100, "Pessoa A", self.database_path)
+        self.assertEqual((status.roll_tokens, status.active_rolls), (25, 0))  # nada ativado
+        await EconomyCog.activate.callback(cog, context, "20")
+        status = get_account_status(100, "Pessoa A", self.database_path)
+        self.assertEqual((status.roll_tokens, status.active_rolls, status.bonus_claims), (5, 20, 2))
+
+    async def test_inventory_menu_has_one_open_button_per_item(self):
+        from src.cogs.economy import EconomyCog
+
+        cog = EconomyCog(SimpleNamespace(database_path=self.database_path))
+        author = SimpleNamespace(id=100, display_name="Pessoa A")
+        embed, view = cog.inventory_menu(author)
+        self.assertIn("Vazio", embed.description)
+        self.assertEqual(view.children, [])
+        self.give("caixa_epica", 2)
+        self.give("pacote")
+        embed, view = cog.inventory_menu(author)
+        self.assertIn("Caixa épica** × 2", embed.description)
+        self.assertEqual(
+            [item.label for item in view.children],
+            ["Abrir caixa épica (2)", "Abrir pacote de jogador (1)", "Abrir todas as caixas (2)"],
+        )
+
+    async def test_open_all_inventory_crates_in_one_batch(self):
+        from unittest.mock import AsyncMock, patch
+
+        from src.cogs import economy as cog_module
+        from src.cogs.economy import EconomyCog
+        from src.inventory import get_inventory
+
+        self.add_player("Atacante")
+        self.give("caixa", 3)
+        self.give("caixa_epica", 2)
+        self.give("pacote")
+        cog = EconomyCog(SimpleNamespace(database_path=self.database_path))
+        author = SimpleNamespace(id=100, display_name="Pessoa A")
+        edit = AsyncMock()
+        from src import economy
+
+        # Sem prêmios de inventário, para a conta do que sobra ser exata.
+        plain = {"raro": ("daily_1h",), "epico": ("wish_slot",), "lendario": ("permanent_roll",)}
+        with (
+            patch.object(cog_module, "prize_gif", lambda *a, **k: b"GIF89a"),
+            patch.dict(economy.CRATE_ITEMS, plain),
+        ):
+            await cog.open_all_inventory_crates(author, AsyncMock(), edit)
+        fields = [f for f in edit.call_args.kwargs["embed"].fields if f.name.startswith("Caixa ")]
+        self.assertEqual(len(fields), 5)
+        self.assertEqual(get_inventory(100, self.database_path), {"pacote": 1})  # pacote fica
+        self.assertNotIn("caixa", get_inventory(100, self.database_path))
+
+
+class PlayerChoicesTests(Case, unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        Case.setUp(self)
+
+    async def test_suggestions_match_typed_name_and_can_be_only_own_players(self):
+        from src.cogs.common import player_choices
+
+        self.add_player("Vinícius Júnior", 88, "PE")
+        self.add_player("Vinícius Souza", 70, "MC", owner=100)
+        self.add_player("Outro", 75)
+        names = [choice.value for choice in await player_choices(self.database_path, "vini")]
+        self.assertEqual(names, ["Vinícius Júnior", "Vinícius Souza"])  # sem acento também acha
+        own = await player_choices(self.database_path, "vini", owner_id=100)
+        self.assertEqual([choice.value for choice in own], ["Vinícius Souza"])
+        self.assertTrue(own[0].name.endswith(" · MC"))  # nome · overall · posição
+
+
+class ShopTests(Case, unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        Case.setUp(self)
+
+    async def test_shop_lists_everything_for_sale_with_buy_buttons(self):
+        from src.cogs.economy import EconomyCog
+
+        cog = EconomyCog(SimpleNamespace(database_path=self.database_path))
+        author = SimpleNamespace(id=100, display_name="Pessoa A")
+        # Sem saldo: tudo cinza, dizendo quanto falta.
+        self.set_memilets(100, 0)
+        _, view = cog.shop_menu(author)
+        buy = [item for item in view.children if "(" in (item.label or "")]
+        self.assertTrue(buy and all(item.disabled and "faltam" in item.label for item in buy))
+        self.set_memilets(100, 1_000_000)
+        embed, view = cog.shop_menu(author)
+        self.assertIn(
+            f"Abrir 1 ({CRATE_PRICE}) · Raro 0/{CRATE_PITY_LIMIT}", [i.label for i in view.children]
+        )
+        names = [field.name for field in embed.fields]
+        for section in ("📦 Caixas", "🃏 Pacotes de jogador", "🛒 Upgrades", "🏗️ Torre"):
+            self.assertIn(section, names)
+        text = " ".join(field.value for field in embed.fields)
+        self.assertIn("Caixa épica", text)
+        self.assertIn("Pacote épico", text)
+        labels = [item.label for item in view.children]
+        self.assertIn(
+            f"Caixa épica ({CRATE_PRICE * EPIC_CRATE_MULTIPLIER:,})".replace(",", "."), labels
+        )
+        self.assertIn(f"Pacote épico ({EPIC_PACK_PRICE:,})".replace(",", "."), labels)
+        self.assertIn("Upgrades", labels)
+
+    def test_loja_opens_the_shop_not_the_upgrades(self):
+        from src.cogs.economy import EconomyCog
+
+        self.assertIn("loja", EconomyCog.shop.aliases)
+        self.assertNotIn("loja", EconomyCog.upgrade.aliases)
 
 
 class CustomizeTests(Case, unittest.IsolatedAsyncioTestCase):

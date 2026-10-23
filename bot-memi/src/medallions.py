@@ -117,6 +117,7 @@ UPGRADE_ICONS = {
     "claim_reset": "refresh",
     "box_office_cap": "ticket",
     "match_income": "chart-bar",
+    "free_claim": "bolt",
 }
 
 

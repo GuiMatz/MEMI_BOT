@@ -12,6 +12,8 @@ import discord
 from discord.ext import commands, tasks
 
 from src import icons
+from src.cogs.penalties import PenaltyChallengeView
+from src.wagers import WagerError, check_wager, parse_wager, pay, take_stakes
 from src.championship import (
     CHAMPION_PRIZE,
     CHAMPIONSHIP_TIMEZONE,
@@ -24,6 +26,9 @@ from src.db import DATABASE_PATH, connect, normalize_player_name
 from src.income import IncomeError, collect_income, income_status, venue_name
 from src.missions import record_event
 from src.narration import narrate
+from src.positions import slot_rating
+from src.pve import PveError, opponent_for, record_result
+from src.cogs.pve_views import PveHubView, hub_embed
 from src.score_image import render_score_gif
 from src.simulation import penalty_events, penalty_shootout_kicks, simulate_match
 from src.team_stats import (
@@ -47,6 +52,82 @@ async def score_file(home, away, home_goals, away_goals, goals, **options) -> di
         render_score_gif, home, away, home_goals, away_goals, list(goals), **options
     )
     return discord.File(image, filename="placar.gif")
+
+
+# `mm!amistoso @pessoa idaevolta`: um jogo na casa de cada time, vale o placar somado.
+TWO_LEG_WORDS = {"idaevolta", "ida", "iv", "2", "volta"}
+
+
+def parse_friendly_options(text: str) -> tuple[bool, int, list[str]]:
+    """(ida e volta?, aposta, palavras que não entendi) de "idaevolta aposta 1000"."""
+    two_legs, wager, unknown = False, 0, []
+    for raw in (text or "").split():
+        # O valor vem do texto original ("1.000" não pode virar "1 000").
+        word = normalize_player_name(raw).replace(" ", "")
+        if word in TWO_LEG_WORDS:
+            two_legs = True
+        elif word in {"aposta", "apostado", "bet", "valendo", "e", "volta"}:
+            continue
+        elif (value := parse_wager(raw)) is not None:
+            wager = value
+        else:
+            unknown.append(word)
+    return two_legs, wager, unknown
+
+
+class FriendlyWagerView(discord.ui.View):
+    """Amistoso apostado: o desafiado aceita (as duas apostas saem) e quem vence leva tudo."""
+
+    def __init__(self, cog, context, opponent, wager: int, two_legs: bool):
+        super().__init__(timeout=120)
+        self.cog = cog
+        self.context = context
+        self.opponent = opponent
+        self.wager = wager
+        self.two_legs = two_legs
+        self.message: discord.Message | None = None
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.opponent.id:
+            await interaction.response.send_message(
+                "Só quem foi desafiado responde.", ephemeral=True
+            )
+            return False
+        return True
+
+    @discord.ui.button(label="Aceitar a aposta", emoji="💰", style=discord.ButtonStyle.success)
+    async def accept(self, interaction: discord.Interaction, button) -> None:
+        self.stop()
+        author = self.context.author
+        try:
+            take_stakes(
+                (author.id, author.display_name),
+                (self.opponent.id, self.opponent.display_name),
+                self.wager,
+                self.cog.database_path,
+            )
+        except WagerError as error:
+            await interaction.response.edit_message(content=str(error), view=None)
+            return
+        await interaction.response.edit_message(
+            content=f"💰 Aposta aceita: {self.wager * 2:,} Memilets em jogo!".replace(",", "."),
+            view=None,
+        )
+        await self.cog.play_wagered(self.context, self.opponent, self.wager, self.two_legs)
+
+    @discord.ui.button(label="Recusar", style=discord.ButtonStyle.secondary)
+    async def refuse(self, interaction: discord.Interaction, button) -> None:
+        self.stop()
+        await interaction.response.edit_message(
+            content=f"{self.opponent.display_name} recusou a aposta.", view=None
+        )
+
+    async def on_timeout(self) -> None:
+        if self.message:
+            try:
+                await self.message.edit(content="Desafio apostado expirou.", view=None)
+            except discord.HTTPException:
+                pass
 
 
 class IncomeChoiceView(discord.ui.View):
@@ -305,27 +386,191 @@ class MatchesCog(commands.Cog):
         view = StatsView(context.author.id, target.id, self.database_path)
         view.message = await context.reply(embed=view.embed(), view=view, mention_author=False)
 
+    @commands.command(name="desafio", aliases=["desafios", "pve", "lendas", "chefao", "chefão"])
+    async def pve_hub(self, context: commands.Context) -> None:
+        """`mm!desafio`: escada, chefões e desafio livre contra times lendários."""
+        try:
+            _, players = get_valid_lineup(context.author.id, self.database_path)
+            strength = round(
+                sum(
+                    slot_rating(p["effective_overall"], p["natural_position"], p["position"])
+                    for p in players
+                )
+                / len(players)
+            )
+        except TeamError:
+            strength = None
+        await context.reply(
+            embed=hub_embed(context.author, self.database_path, strength),
+            view=PveHubView(self, context.author, self.database_path),
+            mention_author=False,
+        )
+
+    async def start_pve(self, interaction: discord.Interaction, kind: str, team_key) -> None:
+        """Um clique no painel: confere se dá para jogar, narra a partida e paga o prêmio."""
+        user = interaction.user
+        try:
+            team = opponent_for(user.id, kind, team_key, self.database_path)
+            get_valid_lineup(user.id, self.database_path)
+        except (PveError, TeamError) as error:
+            await interaction.response.send_message(str(error), ephemeral=True)
+            return
+        titles = {
+            "escada": "Escada",
+            "dia": "Chefão do dia",
+            "semana": "Chefão da semana",
+            "livre": "Desafio livre",
+        }
+        await interaction.response.send_message(
+            f"⚔️ **{user.display_name}** × {team.label} (força {team.strength}) · {titles[kind]}"
+        )
+        send = interaction.channel.send
+        won = await self._pve_match(send, user, team, titles[kind])
+        if won is None:
+            return
+        gains = await asyncio.to_thread(
+            record_result, user.id, user.display_name, kind, team, won, self.database_path
+        )
+        if won:
+            reward = " · ".join(gains) if gains else "sem prêmio (já ganho hoje)"
+            await send(f"🏆 **{user.display_name}** venceu {team.label}! Prêmio: {reward}.")
+        else:
+            await send(f"💥 {team.label} venceu desta vez. Tente de novo!")
+
+    async def _pve_match(self, send, user, team, title: str) -> bool | None:
+        """Partida narrada do time da pessoa (mandante) contra um time lendário."""
+        try:
+            home, home_players = get_valid_lineup(user.id, self.database_path)
+        except TeamError as error:
+            await send(str(error))
+            return None
+        away = team.as_team()
+        away_players = list(team.players)
+        result = simulate_match(
+            home["team_name"],
+            home_players,
+            away["team_name"],
+            away_players,
+            home_style=home["style"],
+            away_style="balanced",
+            home_tactics=home,
+            home_advantage=True,
+        )
+        timeline = list(result.events)
+        penalties = None
+        if result.home_goals == result.away_goals:
+            kicks = penalty_shootout_kicks(
+                home_players, away_players, home_taker_id=home.get("penalty_player_id")
+            )
+            timeline += penalty_events(kicks, result.home_name, result.away_name)
+            penalties = (kicks[-1].home_score, kicks[-1].away_score)
+        await narrate(
+            lambda embed: send(embed=embed),
+            result.home_name,
+            result.away_name,
+            timeline,
+            title=title,
+            penalties=penalties,
+            home_color=home.get("color"),
+        )
+        await send(
+            file=await score_file(
+                home,
+                away,
+                result.home_goals,
+                result.away_goals,
+                result.goals,
+                title=title,
+                venue=venue_name(home),
+                penalties=penalties,
+            )
+        )
+        return result.home_goals > result.away_goals or (
+            penalties is not None and penalties[0] > penalties[1]
+        )
+
+    @commands.command(name="penaltis", aliases=["pênaltis", "penalti", "penaltys", "pk"])
+    async def penalties(
+        self, context: commands.Context, opponent: discord.Member, wager: str | None = None
+    ) -> None:
+        """`mm!penaltis @pessoa [aposta]`: disputa de pênaltis, escolhendo o canto."""
+        if opponent.bot or opponent.id == context.author.id:
+            await context.reply("Desafie outra pessoa.", mention_author=False)
+            return
+        amount = 0
+        if wager:
+            amount = parse_wager(wager) or 0
+            try:
+                check_wager(amount)
+            except WagerError as error:
+                await context.reply(str(error), mention_author=False)
+                return
+        view = PenaltyChallengeView(context.author, opponent, amount, self.database_path)
+        stake = (
+            f" valendo **{amount:,}** Memilets de cada (quem vence leva {amount * 2:,})".replace(
+                ",", "."
+            )
+            if amount
+            else ""
+        )
+        view.message = await context.reply(
+            f"⚽ {opponent.mention}, **{context.author.display_name}** te desafiou para os "
+            f"pênaltis{stake}! São 5 cobranças para cada lado: quem bate escolhe o canto e "
+            "quem defende escolhe onde pular.",
+            view=view,
+            mention_author=False,
+        )
+
     @commands.command(name="amistoso")
     async def friendly(
         self,
         context: commands.Context,
         opponent: discord.Member,
+        *,
+        options: str = "",
     ) -> None:
+        """`mm!amistoso @pessoa [idaevolta] [aposta 1000]`."""
         if opponent.bot or opponent.id == context.author.id:
             await context.reply(
                 "Escolha outra pessoa com um time configurado.",
                 mention_author=False,
             )
             return
+        two_legs, wager, unknown = parse_friendly_options(options)
+        if unknown:
+            await context.reply(
+                "Use `mm!amistoso @pessoa` (jogo único), `mm!amistoso @pessoa idaevolta` "
+                "(um jogo na casa de cada time) e, para apostar, `aposta 1000` no fim: "
+                "`mm!amistoso @pessoa idaevolta aposta 1000`.",
+                mention_author=False,
+            )
+            return
         try:
+            if wager:
+                check_wager(wager)
             get_valid_lineup(context.author.id, self.database_path)
             get_valid_lineup(opponent.id, self.database_path)
-        except TeamError as error:
+        except (TeamError, WagerError) as error:
             await context.reply(str(error), mention_author=False)
+            return
+        if wager:
+            # Apostado: o outro aceita (e as duas apostas saem); não vale renda.
+            view = FriendlyWagerView(self, context, opponent, wager, two_legs)
+            kind = "um ida e volta" if two_legs else "um amistoso"
+            view.message = await context.reply(
+                f"💰 {opponent.mention}, **{context.author.display_name}** te desafiou para "
+                f"{kind} valendo **{wager:,}** Memilets de cada (quem vence leva "
+                f"{wager * 2:,}). Amistoso apostado não gera renda.".replace(",", "."),
+                view=view,
+                mention_author=False,
+            )
             return
 
         async def play(with_income: bool) -> None:
-            await self._play_friendly(context, opponent, with_income)
+            if two_legs:
+                await self._play_two_legs(context, opponent, with_income)
+            else:
+                await self._play_friendly(context, opponent, with_income)
 
         if not income_status(context.author.id, self.database_path).ready:
             await play(False)
@@ -333,21 +578,25 @@ class MatchesCog(commands.Cog):
         view = IncomeChoiceView(context.author.id, play)
         view.message = await context.reply(
             "🏟️ Esse amistoso vai gerar renda para o clube, tem certeza?\n"
-            "Depois dele, a próxima renda só sai em **24 h** (amistosos sem renda continuam "
+            + ("No ida e volta, a renda é só do jogo de ida (na sua casa). " if two_legs else "")
+            + "Depois dele, a próxima renda só sai em **24 h** (amistosos sem renda continuam "
             "liberados). Regras em `mm!renda`.",
             view=view,
             mention_author=False,
         )
 
-    async def _play_friendly(
-        self, context: commands.Context, opponent: discord.Member, with_income: bool
-    ) -> None:
+    async def _leg(
+        self, context: commands.Context, home_id: int, away_id: int, title: str, shootout
+    ):
+        """Um jogo narrado, com o placar no fim. `shootout(result)` diz se vai para os pênaltis.
+
+        Devolve (resultado, pênaltis ou None), ou None se algum time ficou inválido."""
         try:
-            home, home_players = get_valid_lineup(context.author.id, self.database_path)
-            away, away_players = get_valid_lineup(opponent.id, self.database_path)
+            home, home_players = get_valid_lineup(home_id, self.database_path)
+            away, away_players = get_valid_lineup(away_id, self.database_path)
         except TeamError as error:
             await context.send(str(error))
-            return
+            return None
         result = simulate_match(
             home["team_name"],
             home_players,
@@ -359,10 +608,9 @@ class MatchesCog(commands.Cog):
             away_tactics=away,
             home_advantage=True,
         )
-        # Empate no amistoso também vai para os pênaltis.
         timeline = list(result.events)
         penalties = None
-        if result.home_goals == result.away_goals:
+        if shootout(result):
             kicks = penalty_shootout_kicks(
                 home_players,
                 away_players,
@@ -371,14 +619,14 @@ class MatchesCog(commands.Cog):
             )
             timeline += penalty_events(kicks, result.home_name, result.away_name)
             penalties = (kicks[-1].home_score, kicks[-1].away_score)
-        record_friendly(context.author.id, opponent.id, result, penalties, self.database_path)
-        await context.send(f"🏟️ Local: **{venue_name(home)}**")
+        record_friendly(home_id, away_id, result, penalties, self.database_path)
+        await context.send(f"🏟️ {title} · Local: **{venue_name(home)}**")
         await narrate(
             lambda embed: context.send(embed=embed),
             result.home_name,
             result.away_name,
             timeline,
-            title="Amistoso",
+            title=title,
             penalties=penalties,
             home_color=home.get("color"),
             away_color=away.get("color"),
@@ -390,21 +638,97 @@ class MatchesCog(commands.Cog):
                 result.home_goals,
                 result.away_goals,
                 result.goals,
-                title="Amistoso",
+                title=title,
                 venue=venue_name(home),
                 penalties=penalties,
             )
         )
-        for user_id in (context.author.id, opponent.id):
+        for user_id in (home_id, away_id):
             record_event(user_id, "friendly", self.database_path)
+        return result, penalties
+
+    async def _play_friendly(
+        self, context: commands.Context, opponent: discord.Member, with_income: bool
+    ) -> None:
+        # Empate no amistoso também vai para os pênaltis.
+        played = await self._leg(
+            context,
+            context.author.id,
+            opponent.id,
+            "Amistoso",
+            lambda result: result.home_goals == result.away_goals,
+        )
+        if played is None:
+            return
+        result, penalties = played
         # Empate não existe mais no amistoso: quem ganha nos pênaltis também vence.
         home_won = result.home_goals > result.away_goals or (
             penalties is not None and penalties[0] > penalties[1]
         )
         winner = context.author.id if home_won else opponent.id
         record_event(winner, "friendly_win", self.database_path)
-        if not with_income:
+        if with_income:
+            await self._collect_income(context, result)
+        return winner
+
+    async def _play_two_legs(
+        self, context: commands.Context, opponent: discord.Member, with_income: bool
+    ) -> None:
+        """Ida na casa de quem desafiou, volta na casa do outro; vale o placar somado.
+        Empate no agregado: pênaltis no fim da volta. A renda (se escolhida) é só a da ida."""
+        first = await self._leg(
+            context, context.author.id, opponent.id, "Amistoso · Ida", lambda result: False
+        )
+        if first is None:
             return
+        ida, _ = first
+        if with_income:
+            await self._collect_income(context, ida)
+
+        def tied_on_aggregate(volta) -> bool:
+            return ida.home_goals + volta.away_goals == ida.away_goals + volta.home_goals
+
+        second = await self._leg(
+            context, opponent.id, context.author.id, "Amistoso · Volta", tied_on_aggregate
+        )
+        if second is None:
+            return
+        volta, penalties = second
+        challenger = ida.home_goals + volta.away_goals
+        rival = ida.away_goals + volta.home_goals
+        if challenger != rival:
+            challenger_won = challenger > rival
+        else:
+            challenger_won = penalties is not None and penalties[1] > penalties[0]
+        winner = context.author if challenger_won else opponent
+        record_event(winner.id, "friendly_win", self.database_path)
+        decided = (
+            f" (pênaltis {max(penalties)} a {min(penalties)})"
+            if challenger == rival and penalties
+            else ""
+        )
+        await context.send(
+            f"🏆 **Agregado:** {ida.home_name} {challenger} × {rival} {ida.away_name}{decided}. "
+            f"**{winner.display_name}** venceu o ida e volta!"
+        )
+        return winner.id
+
+    async def play_wagered(self, context, opponent, wager: int, two_legs: bool) -> None:
+        """Joga o amistoso apostado e paga o pote; se não der para jogar, devolve as apostas."""
+        if two_legs:
+            winner = await self._play_two_legs(context, opponent, False)
+        else:
+            winner = await self._play_friendly(context, opponent, False)
+        if winner is None:
+            for user_id in (context.author.id, opponent.id):
+                pay(user_id, wager, self.database_path)
+            await context.send("A partida não aconteceu: as apostas voltaram.")
+            return
+        pay(winner, wager * 2, self.database_path)
+        name = context.author.display_name if winner == context.author.id else opponent.display_name
+        await context.send(f"💰 **{name}** levou o pote de {icons.memilets(wager * 2)} Memilets.")
+
+    async def _collect_income(self, context: commands.Context, result) -> None:
         try:
             income = collect_income(
                 context.author.id, result.home_goals, result.away_goals, self.database_path

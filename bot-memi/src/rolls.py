@@ -67,6 +67,7 @@ class ClaimOutcome:
     reward_amount: int | None = None
     retry_at: datetime | None = None
     protected_until: datetime | None = None
+    free_claim: bool = False  # Contrato Relâmpago: não gastou o claim do ciclo
 
 
 def _utc_now(value: datetime | None) -> datetime:
@@ -152,14 +153,12 @@ def roll_player(
             (user_id, cycle_key),
         ).fetchone()
         rolls_used = int(usage["rolls_used"]) if usage else 0
-        roll_upgrade = connection.execute(
-            """
-            SELECT roll_tokens FROM user_upgrades
-            WHERE discord_user_id = ? AND upgrade_key = 'rolls'
-            """,
-            (user_id,),
-        ).fetchone()
-        roll_tokens = int(roll_upgrade["roll_tokens"]) if roll_upgrade else 0
+        # Rolls guardados só valem depois de ativados (`mm!ativar`): esses são os ativos.
+        roll_tokens = int(
+            connection.execute(
+                "SELECT active_rolls FROM game_users WHERE discord_user_id = ?", (user_id,)
+            ).fetchone()["active_rolls"]
+        )
         perks = load_perks(connection, user_id)
         roll_capacity = perks.roll_capacity + cycle_bonus_rolls(connection, user_id, cycle_key)
         exclusive_seconds = perks.exclusive_seconds
@@ -251,10 +250,7 @@ def roll_player(
         record(connection, user_id, "roll", now=current_time)
         if use_roll_token:
             connection.execute(
-                """
-                UPDATE user_upgrades SET roll_tokens = roll_tokens - 1
-                WHERE discord_user_id = ? AND upgrade_key = 'rolls'
-                """,
+                "UPDATE game_users SET active_rolls = active_rolls - 1 WHERE discord_user_id = ?",
                 (user_id,),
             )
             roll_tokens -= 1
@@ -383,10 +379,12 @@ def claim_roll_offer(
     database_path: str | Path = DATABASE_PATH,
     *,
     now: datetime | None = None,
+    rng: random.Random | random.SystemRandom | None = None,
 ) -> ClaimOutcome:
     """Resgata a moeda ou atribui o jogador em uma transação atômica."""
     current_time = _utc_now(now)
     user_id = str(discord_user_id)
+    generator = rng or random.SystemRandom()
     with connect(database_path) as connection:
         connection.execute("BEGIN IMMEDIATE")
         offer = connection.execute(
@@ -454,15 +452,19 @@ def claim_roll_offer(
                 return ClaimOutcome("exclusive")
 
         account = connection.execute(
-            "SELECT last_claim_at FROM game_users WHERE discord_user_id = ?",
+            "SELECT last_claim_at, bonus_claims FROM game_users WHERE discord_user_id = ?",
             (user_id,),
         ).fetchone()
         if account is None:
             raise LookupError("A conta de jogo ainda não foi cadastrada.")
         claimer_perks = load_perks(connection, user_id)
         # Um claim por ciclo: o claim renova junto com os rolls (hora cheia e meia hora).
+        # Com o do ciclo já usado, gasta uma contratação extra (dos rolls ativados), se houver.
         cycle_start = _cycle_start(current_time)
-        if account["last_claim_at"] and claimed_at(account["last_claim_at"]) >= cycle_start:
+        use_bonus = bool(
+            account["last_claim_at"] and claimed_at(account["last_claim_at"]) >= cycle_start
+        )
+        if use_bonus and not account["bonus_claims"]:
             return ClaimOutcome("cooldown", retry_at=cycle_start + CYCLE_LENGTH)
 
         owner = connection.execute(
@@ -480,13 +482,26 @@ def claim_roll_offer(
             "INSERT INTO player_ownership (player_id, discord_user_id) VALUES (?, ?)",
             (offer["player_id"], user_id),
         )
-        connection.execute(
-            """
-            UPDATE game_users SET last_claim_at = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE discord_user_id = ?
-            """,
-            (current_time.isoformat(timespec="seconds"), user_id),
-        )
+        # Contrato Relâmpago: com sorte, a contratação não gasta nada (nem o claim do
+        # ciclo, nem uma contratação extra).
+        chance = claimer_perks.free_claim_chance
+        free_claim = bool(chance) and generator.random() < chance
+        if free_claim:
+            pass
+        elif use_bonus:
+            connection.execute(
+                "UPDATE game_users SET bonus_claims = bonus_claims - 1, "
+                "updated_at = CURRENT_TIMESTAMP WHERE discord_user_id = ?",
+                (user_id,),
+            )
+        else:
+            connection.execute(
+                """
+                UPDATE game_users SET last_claim_at = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE discord_user_id = ?
+                """,
+                (current_time.isoformat(timespec="seconds"), user_id),
+            )
         connection.execute(
             """
             UPDATE claim_offers
@@ -511,4 +526,4 @@ def claim_roll_offer(
                     "UPDATE game_users SET memilets = memilets + ? WHERE discord_user_id = ?",
                     (reward, user_id),
                 )
-        return ClaimOutcome("player_claimed", reward_amount=reward or None)
+        return ClaimOutcome("player_claimed", reward_amount=reward or None, free_claim=free_claim)
