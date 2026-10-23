@@ -348,6 +348,13 @@ def opponent_for(
             if team.key == team_key:
                 return team
         raise PveError("Não achei esse time lendário.")
+    if kind.startswith("campanha:"):
+        campaign = CAMPAIGNS.get(kind.split(":", 1)[1])
+        if campaign is None:
+            raise PveError("Campanha desconhecida.")
+        with connect(database_path) as connection:
+            step, _ = campaign_step(connection, str(discord_user_id), campaign.key)
+        return campaign.teams()[step]
     raise PveError("Modo de desafio desconhecido.")
 
 
@@ -378,9 +385,12 @@ def record_result(
             "INSERT INTO pve_log (discord_user_id, kind, period, team_key, won) VALUES (?, ?, ?, ?, ?)",
             (user_id, kind, period, team.key, int(won)),
         )
+        campaign = CAMPAIGNS.get(kind.split(":", 1)[1]) if kind.startswith("campanha:") else None
+        if campaign is not None:
+            gains += _advance_campaign(connection, user_id, campaign, won)
         if not won:
             return gains
-        memilets = 0
+        memilets = CAMPAIGN_STEP_PRIZE if campaign is not None else 0
         if kind == "escada":
             row = connection.execute(
                 "SELECT ladder FROM pve_progress WHERE discord_user_id = ?", (user_id,)
@@ -413,7 +423,264 @@ def record_result(
                 (memilets, user_id),
             )
             gains.insert(0, f"{memilets:,} Memilets".replace(",", "."))
+        gains += _check_achievements(connection, user_id)
     return gains
+
+
+# --- Campanhas ------------------------------------------------------------------------
+
+
+def _nation_key(country: str) -> str:
+    return "selecao:" + country.lower()
+
+
+@dataclass(frozen=True)
+class Campaign:
+    key: str
+    name: str
+    emoji: str
+    description: str
+    stages: tuple[str, ...]  # nome de cada partida (vazio = "Jogo N")
+    reset_on_loss: bool
+    prize: int
+    epic_packs: int
+
+    def teams(self) -> list[PveTeam]:
+        by_key = {team.key: team for team in legend_teams()}
+        if self.key == "brasileirao":
+            return [team for team in legend_teams() if team.key.startswith("clube:")]
+        if self.key == "copa":
+            keys = [_nation_key(c) for c in ("Uruguai", "Portugal", "França", "Brasil")]
+            return [by_key[key] for key in keys if key in by_key]
+        nations = [team for team in legend_teams() if team.key.startswith("selecao:")]
+        return nations[-5:] + [by_key["mundial"]]
+
+    def stage(self, step: int) -> str:
+        return self.stages[step] if step < len(self.stages) else f"Jogo {step + 1}"
+
+
+CAMPAIGN_STEP_PRIZE = 300
+CAMPAIGNS = {
+    "brasileirao": Campaign(
+        "brasileirao",
+        "Lendas do Brasileirão",
+        "🛡️",
+        "Os 12 grandes clubes brasileiros lendários, do mais fraco ao mais forte. Perdeu, "
+        "tenta o mesmo jogo de novo.",
+        (),
+        False,
+        15_000,
+        1,
+    ),
+    "copa": Campaign(
+        "copa",
+        "Copa das Lendas",
+        "🏆",
+        "Mata-mata contra seleções lendárias, das oitavas à final. **Perdeu, está fora**: a "
+        "Copa recomeça das oitavas.",
+        ("Oitavas de final", "Quartas de final", "Semifinal", "Final"),
+        True,
+        25_000,
+        1,
+    ),
+    "mundial": Campaign(
+        "mundial",
+        "Rumo ao Mundial",
+        "🌍",
+        "As 5 seleções lendárias mais fortes e, no fim, a Seleção Mundial. Perdeu, tenta o "
+        "mesmo jogo de novo.",
+        (),
+        False,
+        40_000,
+        2,
+    ),
+}
+
+
+def campaign_step(connection, user_id: str, campaign: str) -> tuple[int, int]:
+    row = connection.execute(
+        "SELECT step, completions FROM pve_campaigns WHERE discord_user_id = ? AND campaign = ?",
+        (user_id, campaign),
+    ).fetchone()
+    return (int(row["step"]), int(row["completions"])) if row else (0, 0)
+
+
+def campaign_progress(
+    discord_user_id: int | str, database_path: str | Path = DATABASE_PATH
+) -> dict[str, tuple[int, int]]:
+    """Campanha -> (próxima partida, vezes que completou)."""
+    with connect(database_path) as connection:
+        return {key: campaign_step(connection, str(discord_user_id), key) for key in CAMPAIGNS}
+
+
+def _advance_campaign(connection, user_id: str, campaign: Campaign, won: bool) -> list[str]:
+    step, completions = campaign_step(connection, user_id, campaign.key)
+    total = len(campaign.teams())
+    gains: list[str] = []
+    if not won:
+        if campaign.reset_on_loss and step:
+            step = 0
+            gains.append(f"🔁 Eliminado! A {campaign.name} recomeça do início.")
+        else:
+            return gains
+    elif step + 1 >= total:
+        step, completions = 0, completions + 1
+        for _ in range(campaign.epic_packs):
+            give(connection, user_id, "pacote_epico")
+        gains.append(
+            f"{campaign.emoji} **{campaign.name} completa!** +{campaign.prize:,}".replace(",", ".")
+        )
+        if campaign.epic_packs:
+            gains.append(f"🎴 +{campaign.epic_packs} pacote(s) épico(s) no inventário")
+        _pay(connection, user_id, campaign.prize)
+    else:
+        step += 1
+    connection.execute(
+        """
+        INSERT INTO pve_campaigns (discord_user_id, campaign, step, completions)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(discord_user_id, campaign) DO UPDATE SET
+            step = excluded.step, completions = excluded.completions
+        """,
+        (user_id, campaign.key, step, completions),
+    )
+    return gains
+
+
+def _pay(connection, user_id: str, amount: int) -> None:
+    connection.execute(
+        "UPDATE game_users SET memilets = memilets + ? WHERE discord_user_id = ?",
+        (amount, user_id),
+    )
+
+
+# --- Conquistas -----------------------------------------------------------------------
+
+
+def _wins(connection, user_id: str, where: str, *args) -> int:
+    return connection.execute(
+        f"SELECT COUNT(*) FROM pve_log WHERE discord_user_id = ? AND won = 1 AND {where}",
+        (user_id, *args),
+    ).fetchone()[0]
+
+
+def _ladder_done(connection, user_id: str) -> bool:
+    row = connection.execute(
+        "SELECT ladder FROM pve_progress WHERE discord_user_id = ?", (user_id,)
+    ).fetchone()
+    return bool(row) and int(row["ladder"]) >= len(WARMUP_TEAMS) + len(legend_teams())
+
+
+def _completed(campaign: str):
+    return lambda connection, user_id: campaign_step(connection, user_id, campaign)[1] > 0
+
+
+# Conquista -> (emoji, nome, como ganhar, prêmio, regra).
+ACHIEVEMENTS = {
+    "primeira_lenda": (
+        "⭐",
+        "Primeira lenda",
+        "Vença um time lendário",
+        1_000,
+        lambda c, u: _wins(c, u, "team_key NOT LIKE 'treino:%'") > 0,
+    ),
+    "chefao_dia": (
+        "☀️",
+        "Chefe do dia",
+        "Vença um chefão do dia",
+        2_000,
+        lambda c, u: _wins(c, u, "kind = 'dia'") > 0,
+    ),
+    "cacador": (
+        "🎯",
+        "Caçador de chefões",
+        "Vença 10 chefões do dia",
+        8_000,
+        lambda c, u: _wins(c, u, "kind = 'dia'") >= 10,
+    ),
+    "chefao_semana": (
+        "🗓️",
+        "Rei da semana",
+        "Vença um chefão da semana",
+        5_000,
+        lambda c, u: _wins(c, u, "kind = 'semana'") > 0,
+    ),
+    "escada": ("🪜", "Topo da escada", "Complete a escada", 10_000, _ladder_done),
+    "camp_brasileirao": (
+        "🛡️",
+        "Lenda nacional",
+        "Complete as Lendas do Brasileirão",
+        5_000,
+        _completed("brasileirao"),
+    ),
+    "camp_copa": ("🏆", "Campeão da Copa", "Ganhe a Copa das Lendas", 8_000, _completed("copa")),
+    "camp_mundial": (
+        "🌍",
+        "Rumo ao topo",
+        "Complete o Rumo ao Mundial",
+        10_000,
+        _completed("mundial"),
+    ),
+    "mundial": (
+        "👑",
+        "Melhor do mundo",
+        "Vença a Seleção Mundial",
+        10_000,
+        lambda c, u: _wins(c, u, "team_key LIKE 'mundial%'") > 0,
+    ),
+}
+
+
+def earned_achievements(
+    discord_user_id: int | str, database_path: str | Path = DATABASE_PATH
+) -> set[str]:
+    with connect(database_path) as connection:
+        return {
+            row["achievement"]
+            for row in connection.execute(
+                "SELECT achievement FROM pve_achievements WHERE discord_user_id = ?",
+                (str(discord_user_id),),
+            )
+        }
+
+
+def _check_achievements(connection, user_id: str) -> list[str]:
+    """Libera (e paga) as conquistas que a pessoa acabou de cumprir."""
+    have = {
+        row["achievement"]
+        for row in connection.execute(
+            "SELECT achievement FROM pve_achievements WHERE discord_user_id = ?", (user_id,)
+        )
+    }
+    gains = []
+    for key, (emoji, name, _, prize, rule) in ACHIEVEMENTS.items():
+        if key in have or not rule(connection, user_id):
+            continue
+        connection.execute(
+            "INSERT INTO pve_achievements (discord_user_id, achievement) VALUES (?, ?)",
+            (user_id, key),
+        )
+        _pay(connection, user_id, prize)
+        gains.append(f"🏅 Conquista **{emoji} {name}**: +{prize:,}".replace(",", "."))
+    return gains
+
+
+PVE_TITLES = {
+    "escada": "Escada",
+    "dia": "Chefão do dia",
+    "semana": "Chefão da semana",
+    "livre": "Desafio livre",
+}
+
+
+def pve_title(discord_user_id, kind: str, database_path: str | Path = DATABASE_PATH) -> str:
+    """Título do placar: o modo ou, numa campanha, o nome dela e a fase."""
+    if kind.startswith("campanha:"):
+        campaign = CAMPAIGNS[kind.split(":", 1)[1]]
+        with connect(database_path) as connection:
+            step, _ = campaign_step(connection, str(discord_user_id), campaign.key)
+        return f"{campaign.name} · {campaign.stage(step)}"
+    return PVE_TITLES.get(kind, "Desafio")
 
 
 def seconds_until_tomorrow(now: datetime | None = None) -> int:

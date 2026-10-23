@@ -6,6 +6,9 @@ import discord
 
 from src import icons
 from src.pve import (
+    ACHIEVEMENTS,
+    CAMPAIGN_STEP_PRIZE,
+    CAMPAIGNS,
     DAILY_BOSS_PRIZE,
     DAILY_BOSS_TRIES,
     WEEKLY_BOSS_PRIZE,
@@ -15,6 +18,8 @@ from src.pve import (
     ladder,
     ladder_prize,
     legend_teams,
+    campaign_progress,
+    earned_achievements,
     pve_status,
     weekly_boss,
 )
@@ -22,7 +27,8 @@ from src.pve import (
 PVE_INTRO = (
     "Enfrente times lendários: os grandes clubes brasileiros de todos os tempos, seleções "
     "lendárias e a Seleção Mundial. Suba a **escada** degrau por degrau, encare os "
-    "**chefões** do dia e da semana ou desafie quem quiser no **desafio livre**."
+    "**chefões** do dia e da semana, jogue as **campanhas** ou desafie quem quiser no "
+    "**desafio livre**."
 )
 
 
@@ -106,6 +112,17 @@ class PveHubView(discord.ui.View):
             "semana",
             status.weekly_won or status.weekly_tries >= WEEKLY_BOSS_TRIES,
         )
+        campaigns = discord.ui.Button(
+            label="Campanhas", emoji="📜", style=discord.ButtonStyle.secondary
+        )
+        campaigns.callback = self._campaigns
+        self.add_item(campaigns)
+        achievements = discord.ui.Button(
+            label="Conquistas", emoji="🏅", style=discord.ButtonStyle.secondary
+        )
+        achievements.callback = self._achievements
+        self.add_item(achievements)
+        self.database_path = database_path
         teams = list(legend_teams())
         select = discord.ui.Select(
             placeholder="⚔️ Desafio livre: escolha um time lendário",
@@ -142,5 +159,84 @@ class PveHubView(discord.ui.View):
             return False
         return True
 
+    async def _campaigns(self, interaction: discord.Interaction) -> None:
+        await interaction.response.send_message(
+            embed=campaigns_embed(interaction.user, self.database_path),
+            view=CampaignView(self.cog, self.owner),
+        )
+
+    async def _achievements(self, interaction: discord.Interaction) -> None:
+        await interaction.response.send_message(
+            embed=achievements_embed(interaction.user, self.database_path), ephemeral=True
+        )
+
     async def _free(self, interaction: discord.Interaction) -> None:
         await self.cog.start_pve(interaction, "livre", interaction.data["values"][0])
+
+
+def campaigns_embed(user, database_path) -> discord.Embed:
+    progress = campaign_progress(user.id, database_path)
+    embed = discord.Embed(
+        title="📜 Campanhas lendárias",
+        description=f"Cada vitória numa campanha paga {icons.memilets(CAMPAIGN_STEP_PRIZE)}.",
+        color=discord.Color.from_rgb(230, 181, 74),
+    )
+    for key, campaign in CAMPAIGNS.items():
+        step, done = progress[key]
+        teams = campaign.teams()
+        nxt = teams[step]
+        lines = [
+            campaign.description,
+            f"Próximo: **{campaign.stage(step)}** contra {nxt.label} (força {nxt.strength}) · "
+            f"{step}/{len(teams)}",
+            f"Prêmio final: {icons.memilets(campaign.prize)}"
+            + (f" + {campaign.epic_packs} 🎴 pacote(s) épico(s)" if campaign.epic_packs else ""),
+        ]
+        if done:
+            lines.append(f"✅ Completa {done}x")
+        embed.add_field(
+            name=f"{campaign.emoji} {campaign.name}", value="\n".join(lines), inline=False
+        )
+    return embed
+
+
+def achievements_embed(user, database_path) -> discord.Embed:
+    have = earned_achievements(user.id, database_path)
+    lines = [
+        f"{'✅' if key in have else '⬜'} {emoji} **{name}** · {goal} · {prize:,}".replace(",", ".")
+        for key, (emoji, name, goal, prize, _) in ACHIEVEMENTS.items()
+    ]
+    return discord.Embed(
+        title=f"🏅 Conquistas · {len(have)}/{len(ACHIEVEMENTS)}",
+        description="\n".join(lines),
+        color=discord.Color.from_rgb(230, 181, 74),
+    )
+
+
+class CampaignView(discord.ui.View):
+    """Um botão por campanha: joga a próxima partida dela."""
+
+    def __init__(self, cog, owner):
+        super().__init__(timeout=300)
+        self.cog = cog
+        self.owner = owner
+        for key, campaign in CAMPAIGNS.items():
+            button = discord.ui.Button(
+                label=campaign.name, emoji=campaign.emoji, style=discord.ButtonStyle.primary
+            )
+            button.callback = self._player(key)
+            self.add_item(button)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner.id:
+            await interaction.response.send_message(
+                "Essas campanhas são de quem abriu. Use `mm!desafio`.", ephemeral=True
+            )
+            return False
+        return True
+
+    def _player(self, key: str):
+        async def play(interaction: discord.Interaction) -> None:
+            await self.cog.start_pve(interaction, f"campanha:{key}", None)
+
+        return play

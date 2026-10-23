@@ -27,7 +27,9 @@ from src.income import IncomeError, collect_income, income_status, venue_name
 from src.missions import record_event
 from src.narration import narrate
 from src.positions import slot_rating
-from src.pve import PveError, opponent_for, record_result
+from src.pve import PveError, opponent_for, pve_title, record_result
+from src.pve_crests import crest_for
+from src.compare import compare_image, compare_rows, forecast, head_to_head, snapshot
 from src.cogs.pve_views import PveHubView, hub_embed
 from src.score_image import render_score_gif
 from src.simulation import penalty_events, penalty_shootout_kicks, simulate_match
@@ -39,7 +41,7 @@ from src.team_stats import (
     match_records,
     record_friendly,
 )
-from src.teams import TeamError, get_team, get_valid_lineup
+from src.teams import STYLE_LABELS, TeamError, get_team, get_valid_lineup
 
 SET_PIECE_MARK = {"penalti": " (pênalti)", "falta": " (falta)", "contra": " (contra)"}
 
@@ -128,6 +130,67 @@ class FriendlyWagerView(discord.ui.View):
                 await self.message.edit(content="Desafio apostado expirou.", view=None)
             except discord.HTTPException:
                 pass
+
+
+FORM_EMOJIS = {"V": "🟩", "E": "⬜", "D": "🟥"}
+
+
+def compare_embed(mine, theirs, odds, record) -> discord.Embed:
+    """A tabela lado a lado (▲ em quem é melhor), destaques, confronto e prognóstico."""
+    left, right = mine.name[:14], theirs.name[:14]
+    lines = [f"{'':<9}{left:>14}   {right:<14}"]
+    for label, first, second in compare_rows(mine, theirs):
+        mark_left = "▲" if first > second else " "
+        mark_right = "▲" if second > first else " "
+        lines.append(f"{label:<9}{first:>12} {mark_left}   {mark_right} {second:<12}")
+    embed = discord.Embed(
+        title=f"⚔️ {mine.name} × {theirs.name}",
+        description="```\n" + "\n".join(lines) + "\n```",
+        color=discord.Color.from_rgb(230, 181, 74),
+    )
+    for snap in (mine, theirs):
+        best = snap.best
+        best_text = (
+            f"{best.get('display_name') or best['name']} ({best['effective_overall']})"
+            if best
+            else "—"
+        )
+        form = "".join(FORM_EMOJIS.get(outcome, "") for outcome in snap.form) or "sem jogos"
+        embed.add_field(
+            name=snap.name[:100],
+            value=(
+                f"{snap.team.get('formation') or '—'} · {STYLE_LABELS.get(snap.team.get('style'), '—')}\n"
+                f"⭐ {best_text}\n"
+                f"💰 Elenco vale {icons.memilets(snap.squad_value)}\n"
+                f"Forma: {form}" + ("" if snap.complete else "\n⚠️ Escalação incompleta")
+            ),
+            inline=True,
+        )
+    wins, draws, losses, goals_for, goals_against = record
+    embed.add_field(
+        name="🤝 Confronto direto",
+        value=(
+            f"{wins}V {draws}E {losses}D · gols {goals_for} × {goals_against}"
+            if wins + draws + losses
+            else "Ainda não se enfrentaram."
+        ),
+        inline=False,
+    )
+    if odds:
+        win, draw, loss = (round(value * 100) for value in odds)
+        embed.add_field(
+            name="🔮 Prognóstico (você em casa)",
+            value=f"{mine.name}: **{win}%** · empate **{draw}%** · {theirs.name}: **{loss}%**",
+            inline=False,
+        )
+    else:
+        embed.add_field(
+            name="🔮 Prognóstico",
+            value="Os dois times precisam estar com a escalação completa.",
+            inline=False,
+        )
+    embed.set_image(url="attachment://comparar.png")
+    return embed
 
 
 class IncomeChoiceView(discord.ui.View):
@@ -386,6 +449,29 @@ class MatchesCog(commands.Cog):
         view = StatsView(context.author.id, target.id, self.database_path)
         view.message = await context.reply(embed=view.embed(), view=view, mention_author=False)
 
+    @commands.command(name="comparar", aliases=["vs", "versus", "compare"])
+    async def compare(self, context: commands.Context, opponent: discord.Member) -> None:
+        """`mm!comparar @pessoa`: o seu time e o da pessoa lado a lado."""
+        if opponent.id == context.author.id:
+            await context.reply("Compare com o time de outra pessoa.", mention_author=False)
+            return
+        try:
+            mine = await asyncio.to_thread(snapshot, context.author.id, self.database_path)
+            theirs = await asyncio.to_thread(snapshot, opponent.id, self.database_path)
+        except TeamError as error:
+            await context.reply(str(error), mention_author=False)
+            return
+        odds, record, image = await asyncio.gather(
+            asyncio.to_thread(forecast, mine, theirs),
+            asyncio.to_thread(head_to_head, context.author.id, opponent.id, self.database_path),
+            asyncio.to_thread(compare_image, mine, theirs),
+        )
+        await context.reply(
+            embed=compare_embed(mine, theirs, odds, record),
+            file=discord.File(image, filename="comparar.png"),
+            mention_author=False,
+        )
+
     @commands.command(name="desafio", aliases=["desafios", "pve", "lendas", "chefao", "chefão"])
     async def pve_hub(self, context: commands.Context) -> None:
         """`mm!desafio`: escada, chefões e desafio livre contra times lendários."""
@@ -415,27 +501,23 @@ class MatchesCog(commands.Cog):
         except (PveError, TeamError) as error:
             await interaction.response.send_message(str(error), ephemeral=True)
             return
-        titles = {
-            "escada": "Escada",
-            "dia": "Chefão do dia",
-            "semana": "Chefão da semana",
-            "livre": "Desafio livre",
-        }
+        title = pve_title(user.id, kind, self.database_path)
         await interaction.response.send_message(
-            f"⚔️ **{user.display_name}** × {team.label} (força {team.strength}) · {titles[kind]}"
+            f"⚔️ **{user.display_name}** × {team.label} (força {team.strength}) · {title}"
         )
         send = interaction.channel.send
-        won = await self._pve_match(send, user, team, titles[kind])
+        won = await self._pve_match(send, user, team, title)
         if won is None:
             return
         gains = await asyncio.to_thread(
             record_result, user.id, user.display_name, kind, team, won, self.database_path
         )
         if won:
-            reward = " · ".join(gains) if gains else "sem prêmio (já ganho hoje)"
-            await send(f"🏆 **{user.display_name}** venceu {team.label}! Prêmio: {reward}.")
+            reward = "\n".join(gains) if gains else "sem prêmio (já ganho hoje)"
+            await send(f"🏆 **{user.display_name}** venceu {team.label}!\n{reward}")
         else:
-            await send(f"💥 {team.label} venceu desta vez. Tente de novo!")
+            extra = ("\n" + "\n".join(gains)) if gains else ""
+            await send(f"💥 {team.label} venceu desta vez. Tente de novo!{extra}")
 
     async def _pve_match(self, send, user, team, title: str) -> bool | None:
         """Partida narrada do time da pessoa (mandante) contra um time lendário."""
@@ -445,6 +527,11 @@ class MatchesCog(commands.Cog):
             await send(str(error))
             return None
         away = team.as_team()
+        # Escudo real (clube, federação ou o da Seleção Mundial); sem ele, o gerado de sempre.
+        try:
+            away["logo_path"] = await asyncio.to_thread(crest_for, team.key, self.database_path)
+        except Exception:
+            away["logo_path"] = None
         away_players = list(team.players)
         result = simulate_match(
             home["team_name"],

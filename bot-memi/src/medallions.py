@@ -118,6 +118,7 @@ UPGRADE_ICONS = {
     "box_office_cap": "ticket",
     "match_income": "chart-bar",
     "free_claim": "bolt",
+    "roll_bank": "database",
 }
 
 

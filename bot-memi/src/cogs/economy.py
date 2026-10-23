@@ -119,6 +119,8 @@ UPGRADE_ALIASES = {
     "patrocinio": "match_income",
     "relampago": "free_claim",
     "raio": "free_claim",
+    "banco": "roll_bank",
+    "bancoderolls": "roll_bank",
 }
 
 # Mesma palavra, mesma cor em todo o bot: as cores seguem as séries das cartas.

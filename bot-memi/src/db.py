@@ -411,6 +411,20 @@ CREATE TABLE IF NOT EXISTS mascots (
     UNIQUE (name, owner)
 );
 
+CREATE TABLE IF NOT EXISTS market_listings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    seller_id TEXT NOT NULL REFERENCES game_users(discord_user_id) ON DELETE CASCADE,
+    player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+    price INTEGER NOT NULL CHECK (price > 0),
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active',
+    buyer_id TEXT,
+    sold_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_market_active ON market_listings(status, expires_at);
+
 CREATE TABLE IF NOT EXISTS pve_progress (
     discord_user_id TEXT PRIMARY KEY REFERENCES game_users(discord_user_id) ON DELETE CASCADE,
     ladder INTEGER NOT NULL DEFAULT 0 CHECK (ladder >= 0)
@@ -426,6 +440,21 @@ CREATE TABLE IF NOT EXISTS pve_log (
 );
 
 CREATE INDEX IF NOT EXISTS idx_pve_log_user ON pve_log(discord_user_id, kind, period);
+
+CREATE TABLE IF NOT EXISTS pve_campaigns (
+    discord_user_id TEXT NOT NULL REFERENCES game_users(discord_user_id) ON DELETE CASCADE,
+    campaign TEXT NOT NULL,
+    step INTEGER NOT NULL DEFAULT 0 CHECK (step >= 0),
+    completions INTEGER NOT NULL DEFAULT 0 CHECK (completions >= 0),
+    PRIMARY KEY (discord_user_id, campaign)
+);
+
+CREATE TABLE IF NOT EXISTS pve_achievements (
+    discord_user_id TEXT NOT NULL REFERENCES game_users(discord_user_id) ON DELETE CASCADE,
+    achievement TEXT NOT NULL,
+    earned_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (discord_user_id, achievement)
+);
 
 CREATE TABLE IF NOT EXISTS user_inventory (
     discord_user_id TEXT NOT NULL REFERENCES game_users(discord_user_id)
@@ -612,6 +641,8 @@ def initialize_database(database_path: str | Path = DATABASE_PATH) -> None:
             "epic_pity": "INTEGER NOT NULL DEFAULT 0",
             # Caixas seguidas sem Lendário: a garantia de Lendário.
             "legendary_pity": "INTEGER NOT NULL DEFAULT 0",
+            # Último dia (Brasília) em que o Banco de Rolls já foi creditado.
+            "roll_bank_day": "TEXT",
         }
         for column, definition in game_user_migrations.items():
             if column not in game_user_columns:

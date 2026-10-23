@@ -278,9 +278,10 @@ O FUT.AE é um módulo do MeMi BOT, não um bot separado. O menu geral continua 
   depois, menos as reduções de upgrades, torre e crates (mínimo de 8 horas).
 - `mm!wishlist` e `mm!wl` mostram a lista completa de wishes em embed.
 - `mm!starwish` e `mm!sw` identificam Star Wishes com o emoji `⭐`.
-- `mm!upgrade` tem 12 upgrades com limite (rolls, wishes, Star Wish, daily, proteção
+- `mm!upgrade` tem 13 upgrades com limite (rolls, wishes, Star Wish, daily, proteção
   de wish, teto do daily, exclusividade, valor de venda, `mm!rt`, bilheteria, renda e o
-  **Contrato Relâmpago**: até 20% de chance de a contratação não gastar o claim do ciclo),
+  **Contrato Relâmpago**: até 20% de chance de a contratação não gastar o claim do ciclo;
+  **Banco de Rolls**: até 15 rolls que sobraram ontem viram rolls ativos no primeiro roll do dia),
   sempre com confirmação. O Seguro de Contrato (+10% de venda por nível) custa 5 mil + 5 mil
   por nível.
 - `mm!crates`, `mm!construir`, `mm!destruir`, `mm!renda`, `mm!bilheteria` e
@@ -334,6 +335,12 @@ O FUT.AE é um módulo do MeMi BOT, não um bot separado. O menu geral continua 
   Memilets); a outra pessoa aceita ou recusa, e quem propôs pode cancelar.
 - `mm!dar @pessoa <jogador|valor>` doa um jogador ou Memilets, com confirmação.
 - `mm!pay @pessoa <quantia>` (ou `mm!pagar`, `mm!pix`) manda Memilets, com confirmação.
+- Mercado entre pessoas: `mm!anunciar <jogador> <preço>` põe uma carta à venda (ela fica no
+  elenco até alguém comprar; até 10 anúncios, valem 3 dias; protegidos e cartas na trava
+  do pacote não entram). `mm!mercado` lista os anúncios (mais novos, mais baratos,
+  melhores) com menu de compra; `mm!anuncios` mostra os seus e cancela. Na compra, a carta
+  sai do time de quem vendeu e quem vende recebe o preço menos 5% de taxa. Se a carta sair
+  do elenco de outro jeito, o anúncio some.
 - No roll, um jogador livre que renderia mais que o seu titular numa vaga (ou que preenche
   uma vaga vazia) vem com o aviso "⬆️ Melhor que o seu titular de CA (Fulano · 78 → 87)".
   Contratando, ele já entra no time nessa vaga (quem sai perde capitão, falta e pênalti).
@@ -369,15 +376,29 @@ O FUT.AE é um módulo do MeMi BOT, não um bot separado. O menu geral continua 
     aberto, ele saca sozinho o que já foi ganho.
 - `mm!desafio` (`pve`, `lendas`) abre os desafios contra times lendários, montados na hora
   com as lendas da enciclopédia (12 clubes brasileiros, seleções lendárias e a Seleção
-  Mundial), cada um na formação em que rende mais:
+  Mundial), cada um na formação em que rende mais. No placar, os clubes usam o escudo real
+  (o que o bot já baixou para a tabela `clubs`), as seleções usam o escudo da federação
+  (baixado do TheSportsDB na primeira partida para `data/photos/selecoes/`; sem
+  `THESPORTSDB_API_KEY`, usa a chave pública de teste `123`) e a Seleção Mundial tem um
+  escudo próprio (globo dourado). Sem escudo encontrado, fica o escudo gerado:
   - **Escada**: 28 degraus do mais fácil (times do mercado, força ~62) à Seleção Mundial
     (~97); vencer libera o próximo e paga 400 + 200 por degrau (só na primeira vez), com
     uma caixa a cada 5 degraus.
   - **Chefão do dia**: um time lendário reforçado (+1), 1 tentativa; 3.000 + caixa épica.
   - **Chefão da semana**: uma seleção lendária (ou a Mundial) reforçada (+2), 3
     tentativas; 12.000 + pacote épico.
+  - **Campanhas** (300 por vitória): *Lendas do Brasileirão* (os 12 clubes, 15.000 + pacote
+    épico no fim), *Copa das Lendas* (oitavas à final contra seleções; perdeu, recomeça;
+    25.000 + pacote épico) e *Rumo ao Mundial* (as 5 seleções mais fortes e a Seleção
+    Mundial; 40.000 + 2 pacotes épicos).
+  - **Conquistas**: 9 metas únicas com prêmio (primeira lenda, chefões, escada completa,
+    cada campanha, vencer a Seleção Mundial), no botão Conquistas.
   - **Desafio livre**: qualquer time lendário; prêmio na primeira vitória do dia contra
     cada um. Empate vai para os pênaltis.
+- `mm!comparar @pessoa` (`vs`, `versus`) põe os dois times lado a lado: imagem com as duas
+  escalações, tabela de força, ataque, defesa, meio, goleiro e elenco (▲ em quem é melhor),
+  melhor jogador, valor do elenco, forma dos últimos 5 jogos, confronto direto e o
+  prognóstico (a partida simulada 500 vezes, com quem pediu em casa).
 - `mm!penaltis @pessoa` é uma disputa de pênaltis interativa: quem bate escolhe o canto e
   quem defende escolhe onde pular, em segredo. Acertar o canto defende 75% das vezes; errar
   ainda pode dar trave (6%). 5 cobranças para cada lado, morte súbita no empate, e quem

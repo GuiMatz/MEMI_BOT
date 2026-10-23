@@ -82,6 +82,8 @@ def roll_details(result: RollOutcome, overall: int, upgrade: dict | None = None)
         lines.append("Limite de bolas atingido: +500 Memilets.")
     elif result.kind != "unowned":
         lines.append(f"Duplicata: resgate {result.reward_amount} Memilets.")
+    if result.banked:
+        lines.append(f"🏦 Banco de Rolls: +{result.banked} rolls que sobraram ontem.")
     return "\n".join(lines)
 
 
