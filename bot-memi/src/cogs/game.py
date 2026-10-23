@@ -257,7 +257,7 @@ FUTAE_SECTIONS = (
         "`mm!shop`/`mm!loja` — tudo o que dá para comprar, com botões\n"
         "`mm!upgrade` — upgrades permanentes (sempre pede confirmação)\n"
         "`mm!crates [epica] [1|5|10]` — caixas com rolls guardados, cosméticos e bônus\n"
-        "`mm!ativar [quantidade]` — ativa os rolls guardados (+1 contratação a cada 10)\n"
+        "`mm!ativar <quantidade>` — ativa os rolls guardados (+1 contratação a cada 10)\n"
         "`mm!inventario` — caixas e pacotes ganhos nas caixas, para abrir de graça\n"
         "`mm!pacote [epico]` — uma carta de jogador livre do mercado (nunca Base)\n"
         "`mm!allin` — aposta de 30 mil: roleta com 1 em 10 de Ícone ou melhor\n"
@@ -973,7 +973,11 @@ class GameCog(commands.Cog):
             value=(
                 f"{status.rolls_left}/{status.roll_capacity} no ciclo"
                 + (f" + {status.active_rolls} ativos" if status.active_rolls else "")
-                + (f"\n{status.roll_tokens} guardados (`mm!ativar`)" if status.roll_tokens else "")
+                + (
+                    f"\n{status.roll_tokens} guardados (`mm!ativar <quantidade>`)"
+                    if status.roll_tokens
+                    else ""
+                )
             ),
             inline=True,
         )
@@ -1025,7 +1029,9 @@ class GameCog(commands.Cog):
             f"{icons.memilets()} Saldo: **{_thousands(status.memilets)} Memilets**",
         ]
         if status.roll_tokens:
-            lines.append(f"📦 {status.roll_tokens} rolls guardados · ative com `mm!ativar`")
+            lines.append(
+                f"📦 {status.roll_tokens} rolls guardados · ative com `mm!ativar <quantidade>`"
+            )
         embed = discord.Embed(
             title=f"Timers de {context.author.display_name}",
             description="\n".join(lines),

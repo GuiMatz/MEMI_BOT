@@ -721,7 +721,7 @@ class EconomyCog(commands.Cog):
         if coins:
             summary.append(f"{icons.memilets(coins)} Memilets no total")
         if rolls:
-            summary.append(f"🎲 **{rolls}** rolls guardados (ative com `mm!ativar`)")
+            summary.append(f"🎲 **{rolls}** rolls guardados (ative com `mm!ativar <quantidade>`)")
         specials = [
             prize
             for prize in sorted(prizes, key=lambda item: -order.index(item.rarity))
@@ -784,7 +784,7 @@ class EconomyCog(commands.Cog):
         if rolls:
             lines.append(
                 f"🎲 **{rolls}** roll{'s' if rolls > 1 else ''} guardado{'s' if rolls > 1 else ''} "
-                "(ative com `mm!ativar`)"
+                "(ative com `mm!ativar <quantidade>`)"
             )
         for prize in sorted(prizes, key=lambda item: -order.index(item.rarity)):
             if prize.kind in {"memilets", "instant_rolls"}:
@@ -1062,19 +1062,21 @@ class EconomyCog(commands.Cog):
     @commands.command(name="ativar", aliases=["ativarrolls", "usarrolls"])
     async def activate(self, context: commands.Context, amount: str | None = None) -> None:
         """Ativa os rolls guardados das caixas: +1 contratação a cada 10."""
-        wanted = normalize_player_name(amount or "")
-        if wanted and wanted not in {"tudo", "todos", "all"} and not wanted.isdigit():
+        wanted = (amount or "").strip()
+        if not wanted.isdigit():
+            # Sempre com a quantidade: a pessoa escolhe quantos guardados quer gastar.
+            stored = get_account_status(
+                context.author.id, context.author.display_name, self.database_path
+            ).roll_tokens
             await context.reply(
-                "Use `mm!ativar` (todos) ou `mm!ativar 10` (uma quantidade).",
+                f"Diga quantos rolls quer ativar: `mm!ativar 20`. Você tem **{stored}** "
+                f"guardados; cada {ROLLS_PER_BONUS_CLAIM} ativados dão +1 contratação.",
                 mention_author=False,
             )
             return
         try:
             result = activate_rolls(
-                context.author.id,
-                context.author.display_name,
-                self.database_path,
-                int(wanted) if wanted.isdigit() else None,
+                context.author.id, context.author.display_name, self.database_path, int(wanted)
             )
         except EconomyError as error:
             await context.reply(str(error), mention_author=False)

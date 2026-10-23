@@ -283,7 +283,7 @@ O FUT.AE é um módulo do MeMi BOT, não um bot separado. O menu geral continua 
   os reservas do filtro de uma vez (sem titulares nem 🔒), com o total antes.
 - `mm!proteger <nome>` liga/desliga o 🔒: o jogador some de todas as vendas.
 - `mm!crates 5|10` abre várias caixas; os rolls da caixa ficam guardados (não expiram) e
-  só valem depois de `mm!ativar [quantidade]`. Ativados, entram depois dos rolls do ciclo, e
+  só valem depois de `mm!ativar <quantidade>` (ex.: `mm!ativar 20`). Ativados, entram depois dos rolls do ciclo, e
   cada 10 ativados dão **+1 contratação extra** (usada quando o claim do ciclo já foi). A
   sobra conta para a próxima.
 - As caixas também dão caixas e pacotes: Raro dá +1 caixa ou pacote de jogador; Épico, caixa

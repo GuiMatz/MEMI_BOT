@@ -3721,7 +3721,7 @@ AJUDA_JOGO = [
                 "upgrades permanentes (rolls, wishes, Star Wish, daily…), com confirmação",
             ),
             ("mm!crates [epica] [1|5|10]", "caixas: rolls guardados, cosméticos, bônus e upgrades"),
-            ("mm!ativar [quantidade]", "ativa os rolls guardados: +1 contratação a cada 10"),
+            ("mm!ativar <quantidade>", "ativa os rolls guardados: +1 contratação a cada 10"),
             ("mm!inventario", "caixas e pacotes ganhos nas caixas, para abrir de graça"),
             ("mm!pacote [epico]", "uma carta de jogador livre do mercado (nunca Base)"),
             ("mm!allin", "aposta de 30 mil: roleta com 1 chance em 10 de Ícone ou melhor"),

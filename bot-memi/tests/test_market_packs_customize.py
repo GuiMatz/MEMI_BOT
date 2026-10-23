@@ -466,6 +466,30 @@ class InventoryTests(Case, unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.memilets(100), 0)
         self.assertEqual(get_inventory(100, self.database_path), {})
 
+    async def test_ativar_needs_the_amount_and_activates_exactly_that(self):
+        from unittest.mock import AsyncMock
+
+        from src.cogs.economy import EconomyCog
+        from src.economy import get_account_status
+
+        with connect(self.database_path) as connection:
+            connection.execute(
+                "INSERT INTO user_upgrades (discord_user_id, upgrade_key, roll_tokens) "
+                "VALUES ('100', 'rolls', 25)"
+            )
+        cog = EconomyCog(SimpleNamespace(database_path=self.database_path))
+        context = SimpleNamespace(
+            author=SimpleNamespace(id=100, display_name="Pessoa A"), reply=AsyncMock()
+        )
+        await EconomyCog.activate.callback(cog, context, None)
+        self.assertIn("mm!ativar 20", context.reply.call_args.args[0])
+        self.assertIn("**25**", context.reply.call_args.args[0])
+        status = get_account_status(100, "Pessoa A", self.database_path)
+        self.assertEqual((status.roll_tokens, status.active_rolls), (25, 0))  # nada ativado
+        await EconomyCog.activate.callback(cog, context, "20")
+        status = get_account_status(100, "Pessoa A", self.database_path)
+        self.assertEqual((status.roll_tokens, status.active_rolls, status.bonus_claims), (5, 20, 2))
+
     async def test_inventory_menu_has_one_open_button_per_item(self):
         from src.cogs.economy import EconomyCog
 

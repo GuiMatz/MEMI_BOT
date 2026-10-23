@@ -196,7 +196,7 @@ class RollsCog(commands.Cog):
                 "Eles renovam às "
                 f"**{brasilia_time(error.reset_at)}**."
                 + (
-                    f"\n📦 Você tem **{stored}** rolls guardados: ative com `mm!ativar`."
+                    f"\n📦 Você tem **{stored}** rolls guardados: ative com `mm!ativar <quantidade>`."
                     if stored
                     else ""
                 ),

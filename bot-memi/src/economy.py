@@ -671,7 +671,7 @@ def describe_prize(prize: CratePrize) -> str:
         return f"{prize.amount:,} Memilets".replace(",", ".")
     if prize.kind == "instant_rolls":
         plural = "s" if prize.amount > 1 else ""
-        return f"{prize.amount} roll{plural} guardado{plural} (ative com mm!ativar)"
+        return f"{prize.amount} roll{plural} guardado{plural} (ative com mm!ativar <quantidade>)"
     if prize.kind.startswith("cosmetic:"):
         kind = prize.kind.split(":", 1)[1]
         label, emoji, *_ = COSMETIC_KINDS[kind]
