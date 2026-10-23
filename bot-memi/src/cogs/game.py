@@ -252,7 +252,7 @@ FUTAE_SECTIONS = (
     ),
     (
         "🪙 Economia",
-        "`mm!daily` — de 100 a 300 Memilets (+100 por cosmético equipado)\n"
+        "`mm!daily` — de 500 a 1.500 Memilets (+300 por cosmético equipado)\n"
         "`mm!carteira` — saldo, limites e timers\n"
         "`mm!shop`/`mm!loja` — tudo o que dá para comprar, com botões\n"
         "`mm!upgrade` — upgrades permanentes (sempre pede confirmação)\n"

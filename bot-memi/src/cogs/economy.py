@@ -708,7 +708,7 @@ class EconomyCog(commands.Cog):
         )
         if any(prize.kind.startswith("cosmetic:") for prize in prizes):
             embed.set_footer(
-                text="Veja e equipe em mm!cosmeticos · cada cosmético equipado: +100 no daily"
+                text="Veja e equipe em mm!cosmeticos · cada cosmético equipado: +300 no daily"
             )
         return embed
 

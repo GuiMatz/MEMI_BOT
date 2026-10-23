@@ -20,9 +20,11 @@ BASE_STAR_WISHES = 1
 BASE_EXCLUSIVE_SECONDS = 5
 BASE_DAILY_COOLDOWN = timedelta(hours=24)
 MIN_DAILY_COOLDOWN = timedelta(hours=8)
-DAILY_MIN_AMOUNT = 100
-DAILY_BASE_CAP = 300
-COSMETIC_DAILY_BONUS = 100
+DAILY_MIN_AMOUNT = 500
+DAILY_BASE_CAP = 1_500
+# Quanto cada cosmético equipado, nível de upgrade e o andar 11 somam ao máximo.
+DAILY_MAX_STEP = 300
+COSMETIC_DAILY_BONUS = DAILY_MAX_STEP
 CRATE_BASE_PRICE = 500
 CRATE_MIN_PRICE = 250
 BOX_OFFICE_BASE_CAP = 1_000
@@ -66,7 +68,7 @@ UPGRADES: dict[str, UpgradeSpec] = {
         "🔴",
     ),
     "daily_max": UpgradeSpec(
-        "Incorporação Financeira", "+100 no máximo do daily", 5, 2_500, 1_500, "#A855F7", "🟣"
+        "Incorporação Financeira", "+300 no máximo do daily", 5, 2_500, 1_500, "#A855F7", "🟣"
     ),
     "exclusivity": UpgradeSpec(
         "Agente Exclusivo",
@@ -121,7 +123,7 @@ TOWER_FLOORS: dict[int, str] = {
     8: "+1 slot de Star Wish",
     9: "-1 h no cooldown do daily",
     10: "+1 s de proteção de wish",
-    11: "+100 no máximo do daily",
+    11: "+300 no máximo do daily",
     12: "+1 bola em um jogador aleatório dos 11 escalados",
 }
 # Rótulo curto de cada andar, para a imagem da torre.
@@ -136,7 +138,7 @@ TOWER_SHORT: dict[int, str] = {
     8: "+1 Star Wish",
     9: "Daily -1 h",
     10: "Proteção +1 s",
-    11: "Daily máx. +100",
+    11: "Daily máx. +300",
     12: "+1 bola no time",
 }
 TOWER_FIRST_PRICE = 1_000
@@ -195,8 +197,8 @@ class Perks:
         return (
             DAILY_BASE_CAP
             + COSMETIC_DAILY_BONUS * self.equipped_cosmetics
-            + 100 * self.upgrades["daily_max"]
-            + 100 * self.floor(11)
+            + DAILY_MAX_STEP * self.upgrades["daily_max"]
+            + DAILY_MAX_STEP * self.floor(11)
         )
 
     @property

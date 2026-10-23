@@ -269,7 +269,7 @@ O FUT.AE é um módulo do MeMi BOT, não um bot separado. O menu geral continua 
 
 ### Economia e coleção pessoal
 
-- `mm!daily` paga de 100 a 300 Memilets (mais os bônus) e libera de novo 24 horas
+- `mm!daily` paga de 500 a 1.500 Memilets (mais os bônus) e libera de novo 24 horas
   depois, menos as reduções de upgrades, torre e crates (mínimo de 8 horas).
 - `mm!wishlist` e `mm!wl` mostram a lista completa de wishes em embed.
 - `mm!starwish` e `mm!sw` identificam Star Wishes com o emoji `⭐`.

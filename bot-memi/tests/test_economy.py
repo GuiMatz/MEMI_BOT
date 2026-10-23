@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 
 from src.db import connect, initialize_database
+from src.perks import DAILY_BASE_CAP, DAILY_MAX_STEP, DAILY_MIN_AMOUNT
 from src.economy import (
     DailyCooldown,
     EconomyError,
@@ -58,8 +59,9 @@ class EconomyTests(unittest.TestCase):
             now=NOW,
             rng=random.Random(2),
         )
-        self.assertGreaterEqual(first.amount, 100)
-        self.assertLessEqual(first.amount, 300)
+        self.assertEqual((DAILY_MIN_AMOUNT, DAILY_BASE_CAP), (500, 1_500))
+        self.assertGreaterEqual(first.amount, DAILY_MIN_AMOUNT)
+        self.assertLessEqual(first.amount, DAILY_BASE_CAP)
         self.assertEqual(
             first.available_at,
             NOW + timedelta(hours=24),
@@ -80,7 +82,7 @@ class EconomyTests(unittest.TestCase):
             now=first.available_at,
             rng=random.Random(4),
         )
-        self.assertGreaterEqual(next_day.amount, 100)
+        self.assertGreaterEqual(next_day.amount, DAILY_MIN_AMOUNT)
 
     def test_daily_upgrades_raise_cap_and_cut_cooldown(self):
         self.set_balance(100_000)
@@ -97,7 +99,7 @@ class EconomyTests(unittest.TestCase):
             now=NOW,
             rng=random.Random(5),
         )
-        self.assertEqual(reward.cap, 400)
+        self.assertEqual(reward.cap, DAILY_BASE_CAP + DAILY_MAX_STEP)
         self.assertEqual(reward.available_at, NOW + timedelta(hours=24) - timedelta(minutes=10))
         self.assertEqual(get_wallet(100, self.database_path)["memilets"], 96_500 + reward.amount)
 
