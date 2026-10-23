@@ -14,7 +14,7 @@ from src.db import DATABASE_PATH, normalize_player_name
 from src.accents import rarity_color
 from src.card_image import render_player_card
 from src.cosmetics import COSMETIC_KINDS, list_owned
-from src.crate_animation import PrizeTile, card_reveal_gif, prize_gif
+from src.crate_animation import PrizeTile, batch_opening_gif, card_reveal_gif, prize_gif
 from src.economy import (
     CRATE_BATCHES,
     CRATE_DOUBLE_CHANCE,
@@ -446,14 +446,77 @@ class EconomyCog(commands.Cog):
         message = await send(embed=waiting)
         prizes = [prize for result in results for prize in result.prizes]
         best = max((result.best_rarity for result in results), key=list(RARITY_LABELS).index)
-        headline = f"{count} caixas abertas" if count > 1 else None
-        reveal = await asyncio.to_thread(
-            prize_gif, best, self.prize_tiles(author.id, prizes), headline=headline
-        )
-        embed = self.crate_result_embed(author, results)
+        if count > 1:
+            # Lote: o GIF só mostra o pacote abrindo e a melhor raridade; os prêmios de
+            # cada caixa vêm em lista no texto.
+            counts: dict[str, int] = {}
+            for result in results:
+                counts[result.best_rarity] = counts.get(result.best_rarity, 0) + 1
+            reveal = await asyncio.to_thread(batch_opening_gif, counts)
+            embed = self.crate_batch_embed(author, results)
+        else:
+            reveal = await asyncio.to_thread(prize_gif, best, self.prize_tiles(author.id, prizes))
+            embed = self.crate_result_embed(author, results)
         embed.set_image(url="attachment://revelacao.gif")
         target = edit if edit is not None else message.edit
         await target(embed=embed, attachments=[discord.File(BytesIO(reveal), "revelacao.gif")])
+
+    def crate_batch_embed(self, author: discord.abc.User, results) -> discord.Embed:
+        """Lote de caixas: totais e destaques no topo, depois caixa por caixa."""
+        order = list(RARITY_LABELS)
+        best = max((result.best_rarity for result in results), key=order.index)
+        emoji, color = RARITY_STYLE[best]
+        prizes = [prize for result in results for prize in result.prizes]
+        coins = sum(prize.amount for prize in prizes if prize.kind == "memilets")
+        rolls = sum(prize.amount for prize in prizes if prize.kind == "instant_rolls")
+        summary = []
+        if coins:
+            summary.append(f"{icons.memilets(coins)} Memilets no total")
+        if rolls:
+            summary.append(f"🎲 **{rolls}** rolls guardados (use quando quiser)")
+        specials = [
+            prize
+            for prize in sorted(prizes, key=lambda item: -order.index(item.rarity))
+            if prize.kind not in {"memilets", "instant_rolls"}
+        ]
+        if specials:
+            summary.append("")
+            summary.append("**Itens:**")
+            summary.extend(
+                f"{RARITY_STYLE[prize.rarity][0]} **{RARITY_LABELS[prize.rarity]}** · "
+                + describe_prize(prize)
+                for prize in specials
+            )
+        if any(result.guaranteed for result in results):
+            summary.append(f"🛡️ **Garantia ativada:** {CRATE_PITY_LIMIT} caixas sem Raro, veio um.")
+        embed = discord.Embed(
+            title=f"{emoji} {len(results)} crates · melhor: {RARITY_LABELS[best]}",
+            description="\n".join(summary),
+            color=color,
+        )
+        for number, result in enumerate(results, 1):
+            lines = []
+            for prize in result.prizes:
+                if prize.kind == "memilets":
+                    lines.append(f"{RARITY_STYLE[prize.rarity][0]} {icons.memilets(prize.amount)}")
+                elif prize.kind == "instant_rolls":
+                    lines.append(f"🎲 {prize.amount} roll{'s' if prize.amount > 1 else ''}")
+                else:
+                    lines.append(f"{RARITY_STYLE[prize.rarity][0]} {describe_prize(prize)}")
+            if result.doubled:
+                lines.append("🎁 em dobro")
+            embed.add_field(
+                name=f"Caixa {number} · {RARITY_LABELS[result.best_rarity]}",
+                value="\n".join(lines)[:1024] or "—",
+                inline=True,
+            )
+        balance = get_wallet(author.id, self.database_path)["memilets"]
+        spent = sum(result.price for result in results)
+        embed.set_footer(
+            text=f"Pagou {spent:,} · saldo {balance:,} Memilets · garantia de Raro "
+            f"{results[-1].pity}/{CRATE_PITY_LIMIT}".replace(",", ".")
+        )
+        return embed
 
     def crate_result_embed(self, author: discord.abc.User, results) -> discord.Embed:
         if not isinstance(results, list):

@@ -183,6 +183,55 @@ class CrateBatchTests(Case):
             open_crates(100, "Pessoa A", 7, self.database_path)
         self.assertLessEqual(get_crate_pity(100, self.database_path), CRATE_PITY_LIMIT)
 
+    def test_batch_lists_every_crate_and_counts_rarities_for_the_gif(self):
+        import asyncio
+        from unittest.mock import AsyncMock, patch
+
+        from src.cogs import economy as cog_module
+        from src.cogs.economy import EconomyCog
+
+        self.add_player("Atacante")
+        self.set_memilets(100, CRATE_PRICE * 10)
+        cog = EconomyCog(SimpleNamespace(database_path=self.database_path))
+        author = SimpleNamespace(id=100, display_name="Pessoa A")
+        seen = {}
+
+        def fake_gif(counts):
+            seen["counts"] = dict(counts)
+            return b"GIF89a"
+
+        edit = AsyncMock()
+        with (
+            patch.object(cog_module, "batch_opening_gif", fake_gif),
+            patch.object(
+                cog_module, "prize_gif", side_effect=AssertionError("lote não usa cartões")
+            ),
+        ):
+            asyncio.run(cog.open_with_animation(author, AsyncMock(), edit, count=10))
+        embed = edit.call_args.kwargs["embed"]
+        self.assertEqual(sum(seen["counts"].values()), 10)
+        caixas = [field for field in embed.fields if field.name.startswith("Caixa ")]
+        self.assertEqual(len(caixas), 10)
+        for rarity, amount in seen["counts"].items():
+            label = cog_module.RARITY_LABELS[rarity]
+            self.assertEqual(sum(field.name.endswith(label) for field in caixas), amount)
+
+    def test_single_crate_gif_shows_exactly_its_prizes(self):
+        from src.cogs.economy import EconomyCog
+
+        self.add_player("Atacante")
+        self.set_memilets(100, CRATE_PRICE)
+        cog = EconomyCog(SimpleNamespace(database_path=self.database_path))
+        (result,) = open_crates(100, "Pessoa A", 1, self.database_path, rng=random.Random(9))
+        tiles = cog.prize_tiles(100, list(result.prizes))
+        coins = sum(prize.amount for prize in result.prizes if prize.kind == "memilets")
+        rolls = sum(prize.amount for prize in result.prizes if prize.kind == "instant_rolls")
+        titles = [tile.title for tile in tiles]
+        if coins:
+            self.assertIn(f"{coins:,}".replace(",", "."), titles)
+        if rolls:
+            self.assertIn(f"{rolls} roll{'s' if rolls > 1 else ''}", titles)
+
     def test_prize_tiles_sum_coins_and_rolls_and_keep_items(self):
         from src.cogs.economy import EconomyCog
 

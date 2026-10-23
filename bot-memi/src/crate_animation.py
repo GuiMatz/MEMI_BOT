@@ -42,6 +42,21 @@ RARITY_TITLES = {
     "lendario": "LENDÁRIO",
 }
 RARITY_POWER = {"basico": 0, "incomum": 1, "raro": 2, "epico": 3, "lendario": 4}
+# Rótulos das fichas do lote ("1 RARA", "2 INCOMUNS"): falam de caixas, no feminino.
+RARITY_SINGULARS = {
+    "basico": "BÁSICA",
+    "incomum": "INCOMUM",
+    "raro": "RARA",
+    "epico": "ÉPICA",
+    "lendario": "LENDÁRIA",
+}
+RARITY_PLURALS = {
+    "basico": "BÁSICAS",
+    "incomum": "INCOMUNS",
+    "raro": "RARAS",
+    "epico": "ÉPICAS",
+    "lendario": "LENDÁRIAS",
+}
 
 
 def _ease_out_cubic(t: float) -> float:
@@ -461,5 +476,105 @@ def card_reveal_gif(card: Image.Image, color, headline: str) -> bytes:
         shine.putalpha(sweep)
         image.alpha_composite(shine, (x, y))
         image.alpha_composite(title)
+        frames.append(image)
+    return _finish_reveal(frames)
+
+
+def batch_opening_gif(counts: dict[str, int]) -> bytes:
+    """Abertura de várias caixas: o pacote abre com a luz da melhor raridade e para no
+    resumo do lote (quantas caixas de cada raridade); os prêmios vêm em lista no texto."""
+    order = list(RARITY_COLORS)
+    present = [rarity for rarity in order if counts.get(rarity)]
+    rarity = present[-1]  # a melhor do lote dá a cor da luz
+    color = RARITY_COLORS[rarity]
+    power = RARITY_POWER[rarity]
+    width, height = PRIZE_SIZE
+    base = Image.new("RGBA", PRIZE_SIZE, (*BACKGROUND, 255))
+    base.alpha_composite(glow(PRIZE_SIZE, (width / 2, height * 0.62), 300, (40, 52, 76), 120))
+    content = Image.new("RGBA", PRIZE_SIZE, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(content)
+    _tracked(
+        draw, (width / 2, 58), f"{sum(counts.values())} CAIXAS ABERTAS", 26, (255, 255, 255, 255), 5
+    )
+    draw.line((width / 2 - 60, 88, width / 2 + 60, 88), fill=(*color, 255), width=3)
+    # Uma ficha por raridade: quantidade grande e o nome na cor da raridade.
+    chip_width, chip_height, gap = 108, 128, 14
+    row = len(present) * chip_width + (len(present) - 1) * gap
+    x = (width - row) / 2
+    top = 124
+    for item in present:
+        tone = RARITY_COLORS[item]
+        draw.rounded_rectangle(
+            (x, top, x + chip_width, top + chip_height), 16, fill=(20, 25, 35, 235)
+        )
+        draw.rounded_rectangle(
+            (x, top, x + chip_width, top + chip_height), 16, outline=(*tone, 255), width=3
+        )
+        draw.text(
+            (x + chip_width / 2, top + 54),
+            str(counts[item]),
+            font=font(52, True),
+            fill="white",
+            anchor="mm",
+        )
+        label = RARITY_SINGULARS[item] if counts[item] == 1 else RARITY_PLURALS[item]
+        draw.text(
+            (x + chip_width / 2, top + 104),
+            label,
+            font=font(14, True),
+            fill=(*tone, 255),
+            anchor="mm",
+        )
+        x += chip_width + gap
+    draw.text(
+        (width / 2, height - 34),
+        "prêmios de cada caixa na lista abaixo",
+        font=font(15),
+        fill=(176, 184, 198),
+        anchor="mm",
+    )
+    generator = random.Random(power + 3)
+    particles = [
+        (
+            generator.uniform(0, width),
+            generator.uniform(0, height),
+            generator.uniform(1.2, 3.0),
+            generator.uniform(0.6, 1.6),
+        )
+        for _ in range(12 + power * 8)
+    ]
+
+    def lit(t: float, alpha: float) -> Image.Image:
+        pulse = 0.5 + 0.5 * math.sin(t * 2 * math.pi)
+        image = base.copy()
+        image.alpha_composite(
+            glow(
+                PRIZE_SIZE,
+                (width / 2, height / 2),
+                220 + 40 * pulse,
+                color,
+                int((50 + 25 * power + 30 * pulse) * alpha),
+            )
+        )
+        dots = Image.new("RGBA", PRIZE_SIZE, (0, 0, 0, 0))
+        dot_draw = ImageDraw.Draw(dots)
+        for px, py, radius, speed in particles:
+            y = (py - t * height * speed * 0.5) % height
+            dot_draw.ellipse(
+                (px - radius, y - radius, px + radius, y + radius),
+                fill=(*mix(color, (255, 255, 255), 0.5), int(150 * alpha)),
+            )
+        image.alpha_composite(dots)
+        return image
+
+    frames = _opening(base, color, power, 220, height - 40)
+    for index in range(REVEAL_FRAMES):
+        t = _ease_out_cubic(index / (REVEAL_FRAMES - 1))
+        image = lit(0, t)
+        image.alpha_composite(_faded_layer(content, t))
+        frames.append(image)
+    for index in range(SHIMMER_FRAMES):
+        image = lit(index / SHIMMER_FRAMES, 1.0)
+        image.alpha_composite(content)
         frames.append(image)
     return _finish_reveal(frames)
