@@ -258,7 +258,7 @@ FUTAE_SECTIONS = (
         "`mm!upgrade` — upgrades permanentes (sempre pede confirmação)\n"
         "`mm!crates [epica] [1|5|10]` — caixas com rolls guardados, cosméticos e bônus\n"
         "`mm!pacote [epico]` — uma carta de jogador livre do mercado (nunca Base)\n"
-        "`mm!allin` — aposta de 50 mil: roleta com 1 em 10 de Ícone ou melhor\n"
+        "`mm!allin` — aposta de 30 mil: roleta com 1 em 10 de Ícone ou melhor\n"
         "`mm!construir [1-12]` / `mm!destruir` — Centro de Treinamento (torre)\n"
         "`mm!renda` · `mm!bilheteria` — dinheiro do estádio e do campeonato\n"
         "`mm!missoes` — missões diárias e semanais · `mm!rt` — zera o claim (upgrade)",

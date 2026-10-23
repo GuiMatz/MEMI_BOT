@@ -6,7 +6,7 @@ sem poder ser doada ou trocada (`src.transactions`). Em média um pacote vende p
 preço: comprar para revender nunca dá lucro.
 Se não houver jogador livre na série sorteada, tenta a série de baixo e depois as de cima.
 
-O **all-in** (`open_all_in`) é a aposta: 50 mil numa roleta com 1 chance em 10 de Ícone
+O **all-in** (`open_all_in`) é a aposta: 30 mil numa roleta com 1 chance em 10 de Ícone
 ou melhor; nas outras fatias, uma carta como a do pacote comum.
 """
 
@@ -28,12 +28,12 @@ PACK_PRICE = 1_500
 # Série de raridade (índice em RARITY_TIERS) → chance. Soma 1.
 PACK_ODDS = {1: 0.40, 2: 0.35, 3: 0.185, 4: 0.05, 5: 0.015}
 # Pacote épico: só Raro ou melhor, com chance pequena de Ícone. É o pacote de quem tem
-# dinheiro sobrando: vendendo na hora rende ~36% do preço.
+# dinheiro sobrando: vendendo na hora rende ~42% do preço.
 EPIC_PACK_PRICE = 10_000
-EPIC_PACK_ODDS = {3: 0.60, 4: 0.28, 5: 0.10, 6: 0.02}
+EPIC_PACK_ODDS = {3: 0.44, 4: 0.40, 5: 0.10, 6: 0.05, 7: 0.01}
 # All-in: uma aposta, não um investimento. A roleta tem 20 fatias iguais e a cor de cada
 # uma é a série que ela dá: 2 douradas (Ícone ou melhor, 1 em 10) e o resto carta comum.
-ALL_IN_PRICE = 50_000
+ALL_IN_PRICE = 30_000
 ALL_IN_WHEEL = (1, 2, 3, 1, 2, 6, 1, 2, 3, 4, 1, 2, 3, 1, 2, 6, 1, 2, 3, 5)
 # Na fatia dourada: qual das séries do topo vem.
 ALL_IN_TOP = {6: 0.75, 7: 0.20, 8: 0.05}

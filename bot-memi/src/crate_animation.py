@@ -573,7 +573,13 @@ def _wheel_face(slices: tuple[int, ...], colors, lit: int | None = None) -> Imag
 
 
 def all_in_wheel_gif(
-    slices: tuple[int, ...], slot: int, colors, labels: dict[int, str], *, top_label: str
+    slices: tuple[int, ...],
+    slot: int,
+    colors,
+    labels: dict[int, str],
+    *,
+    top_label: str,
+    price: str = "",
 ) -> bytes:
     """A roleta girando até parar em `slot`. `colors[série]` pinta as fatias; `labels` dá o
     nome que aparece no fim (as séries do topo usam `top_label`)."""
@@ -609,7 +615,7 @@ def all_in_wheel_gif(
             disc = Image.blend(disc, lit, light)
         image.alpha_composite(disc, left)
         draw = ImageDraw.Draw(image)
-        draw.text(WHEEL_CENTER, "50K", font=font(26, True), fill=(*GOLD, 255), anchor="mm")
+        draw.text(WHEEL_CENTER, price, font=font(26, True), fill=(*GOLD, 255), anchor="mm")
         pointer(draw, (255, 255, 255, 255))
         if text_alpha:
             text = Image.new("RGBA", (width, height), (0, 0, 0, 0))

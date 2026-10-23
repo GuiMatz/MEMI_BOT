@@ -318,7 +318,7 @@ class ShopView(CrateMenuView):
         await interaction.response.send_message(embed=embed, view=view)
 
     async def _all_in(self, interaction: discord.Interaction) -> None:
-        # 50 mil: sempre passa pelo aviso e pela confirmação.
+        # Aposta alta: sempre passa pelo aviso e pela confirmação.
         embed, view = self.cog.all_in_prompt(interaction.user)
         await interaction.response.send_message(embed=embed, view=view)
         view.message = await interaction.original_response()
@@ -854,6 +854,7 @@ class EconomyCog(commands.Cog):
             TIER_COLORS,
             labels,
             top_label="ÍCONE OU MELHOR",
+            price=f"{ALL_IN_PRICE // 1000}K",
         )
         spinning = discord.Embed(
             title="🎰 All-in · girando…", color=discord.Color.from_rgb(230, 181, 74)
