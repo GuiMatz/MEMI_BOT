@@ -3699,7 +3699,8 @@ AJUDA_JOGO = [
             ("mm!left", "jogadores e cosméticos (emblemas, uniformes…) ainda livres"),
             (
                 "mm!elenco [@pessoa] [filtro]",
-                "uma carta por página; filtros: posição, overall, clube",
+                "cartas com ⭐ nos titulares e menu para ordenar; filtros: titulares, reservas, "
+                "posição, overall, clube",
             ),
             ("mm!wish / mm!starwish <jogador>", "adiciona/remove wish; sem jogador, lista"),
             ("mm!wishlist / mm!wl", "suas wishes, com slots usados/máximo no topo"),

@@ -10,7 +10,7 @@ from discord.ext import commands
 
 from src import icons
 from src.cosmetics import COSMETIC_KINDS, LABEL_TO_KIND, free_counts, owners_of
-from src.db import DATABASE_PATH
+from src.db import DATABASE_PATH, normalize_player_name
 from src.economy import get_account_status
 from src.cogs.common import CardPagerView, card_embed, card_file
 from src.game import (
@@ -22,8 +22,54 @@ from src.game import (
     search_catalog,
 )
 from src.roll_images import find_image, image_file
+from src.teams import get_lineup
 
 PAGE_SIZE = 20
+POSITION_ORDER = {
+    position: index
+    for index, position in enumerate(("GOL", "ZAG", "LD", "LE", "MC", "MEI", "PE", "PD", "CA"))
+}
+
+
+def _overall(player: dict) -> int:
+    return int(player.get("overall") or 0)
+
+
+def _name_key(player: dict) -> str:
+    return normalize_player_name(str(player.get("name") or ""))
+
+
+# Ordem do `mm!elenco` (a primeira é a inicial).
+ROSTER_SORTS = {
+    "overall": ("Overall: maior → menor", lambda p: (-_overall(p), _name_key(p)), False),
+    "overall_asc": ("Overall: menor → maior", lambda p: (_overall(p), _name_key(p)), False),
+    "titulares": (
+        "Titulares primeiro (na ordem do campo)",
+        lambda p: (p.get("slot_order") is None, p.get("slot_order") or 0, -_overall(p)),
+        False,
+    ),
+    "posicao": (
+        "Posição (GOL → CA)",
+        lambda p: (POSITION_ORDER.get(p.get("game_position"), 99), -_overall(p)),
+        False,
+    ),
+    "nome": ("Nome (A → Z)", _name_key, False),
+    "recentes": ("Contratados mais recentes", lambda p: str(p.get("acquired_at") or ""), True),
+    "antigos": ("Contratados mais antigos", lambda p: str(p.get("acquired_at") or ""), False),
+}
+
+
+def roster_line(index: int, player: dict) -> str:
+    """`  1. ⭐ 88 — Nome (PE›PD)`: estrela e vaga para os titulares."""
+    natural = player.get("game_position") or "posição pendente"
+    slot = player.get("lineup_position")
+    position = natural if not slot or slot == natural else f"{natural}›{slot}"
+    mark = "⭐" if slot else "▫️"
+    return (
+        f"`{index:>3}.` {mark} **{player.get('overall') or '—'}** — {player['name']} ({position})"
+    )
+
+
 TOP_CATEGORIES = "jogadores, cartola, tecnicos, estadios, ligas, emblemas, uniformes ou mascotes"
 
 
@@ -177,7 +223,8 @@ FUTAE_SECTIONS = (
         "`mm!scout <nome>` — ficha de jogador, técnico, estádio, emblema, uniforme…\n"
         "`mm!top [categoria]` — catálogo por overall ou nome\n"
         "`mm!left` — jogadores e cosméticos ainda livres\n"
-        "`mm!elenco [@pessoa] [filtro]` — uma carta por página, como no Mudae\n"
+        "`mm!elenco [@pessoa] [titulares|reservas|filtro]` — cartas com ⭐ nos titulares "
+        "e menu para ordenar\n"
         "`mm!wish`, `mm!wishlist`/`mm!wl`, `mm!starwish`/`mm!sw` — wishes",
     ),
     (
@@ -369,7 +416,13 @@ class GameCog(commands.Cog):
         filter_text = re.sub(r"<@!?\d+>", "", query or "").strip()
         register_user(target.id, target.display_name, self.database_path)
         filters: dict[str, object] = {}
-        if filter_text:
+        lineup_filter = normalize_player_name(filter_text)
+        if lineup_filter in {"titulares", "titular", "reservas", "reserva"}:
+            filter_text_for_query = ""
+        else:
+            lineup_filter = ""
+            filter_text_for_query = filter_text
+        if filter_text_for_query:
             position = re.fullmatch(r"(?:posicao|posição)\s+([A-Za-z]{2,3})", filter_text, re.I)
             overall = re.fullmatch(
                 r"(?:overall\s*)?(>=|<=|>|<|=)?\s*(\d{1,3})",
@@ -399,8 +452,8 @@ class GameCog(commands.Cog):
                 ] = category.group(2)
             else:
                 await context.reply(
-                    "Filtro inválido. Use `posicao CA`, `overall >= 80`, "
-                    "`clube nome` ou `liga nome`.",
+                    "Filtro inválido. Use `titulares`, `reservas`, `posicao CA`, "
+                    "`overall >= 80`, `clube nome` ou `liga nome`.",
                     mention_author=False,
                 )
                 return
@@ -415,21 +468,25 @@ class GameCog(commands.Cog):
         except ValueError as error:
             await context.reply(str(error), mention_author=False)
             return
+        lineup = {int(player["id"]): player for player in get_lineup(target.id, self.database_path)}
+        for player in players:
+            starter = lineup.get(int(player["id"]))
+            player["lineup_position"] = starter["position"] if starter else None
+            player["slot_order"] = starter["slot_order"] if starter else None
+        if lineup_filter:
+            starters = lineup_filter.startswith("titular")
+            players = [player for player in players if bool(player["lineup_position"]) == starters]
         if not players:
             await context.reply(
                 f"Nenhum jogador encontrado no elenco de {target.display_name}.",
                 mention_author=False,
             )
             return
-        lines = [
-            f"`{index:>3}.` **{player['overall'] or '—'}** — {player['name']} "
-            f"({player['game_position'] or 'posição pendente'})"
-            for index, player in enumerate(players, start=1)
-        ]
-        title = f"Elenco de {target.display_name} ({len(players)})"
+        starters = sum(1 for player in players if player["lineup_position"])
+        title = f"Elenco de {target.display_name} ({len(players)} · ⭐ {starters} titulares)"
         if filter_text:
             title += f" · {filter_text}"
-        view = CardPagerView(players, title=title, list_lines=lines)
+        view = CardPagerView(players, title=title, line_format=roster_line, sorts=ROSTER_SORTS)
         await view.send(lambda **kwargs: context.reply(mention_author=False, **kwargs))
 
     @commands.command(name="carteira", aliases=["saldo", "wallet", "bal"])
