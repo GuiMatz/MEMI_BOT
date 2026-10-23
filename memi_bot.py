@@ -3771,6 +3771,7 @@ AJUDA_JOGO = [
                 "partida narrada, ida e volta e/ou valendo Memilets",
             ),
             ("mm!penaltis @pessoa [aposta]", "disputa de pênaltis: escolha o canto e o pulo"),
+            ("mm!comparar @pessoa", "seu time e o da pessoa lado a lado, com prognóstico"),
             ("mm!desafio", "partidas contra times lendários: escada, chefões e desafio livre"),
             ("mm!campeonato inscrever", "inscreve seu time no campeonato diário"),
             ("mm!campeonato iniciar", "joga o campeonato; o campeão ganha 500 Memilets"),

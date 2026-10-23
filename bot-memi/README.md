@@ -395,6 +395,10 @@ O FUT.AE é um módulo do MeMi BOT, não um bot separado. O menu geral continua 
     cada campanha, vencer a Seleção Mundial), no botão Conquistas.
   - **Desafio livre**: qualquer time lendário; prêmio na primeira vitória do dia contra
     cada um. Empate vai para os pênaltis.
+- `mm!comparar @pessoa` (`vs`, `versus`) põe os dois times lado a lado: imagem com as duas
+  escalações, tabela de força, ataque, defesa, meio, goleiro e elenco (▲ em quem é melhor),
+  melhor jogador, valor do elenco, forma dos últimos 5 jogos, confronto direto e o
+  prognóstico (a partida simulada 500 vezes, com quem pediu em casa).
 - `mm!penaltis @pessoa` é uma disputa de pênaltis interativa: quem bate escolhe o canto e
   quem defende escolhe onde pular, em segredo. Acertar o canto defende 75% das vezes; errar
   ainda pode dar trave (6%). 5 cobranças para cada lado, morte súbita no empate, e quem

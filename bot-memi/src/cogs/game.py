@@ -287,6 +287,7 @@ FUTAE_SECTIONS = (
         "`mm!cassino [valor]` — cara ou coroa, caça-níquel, roleta e minas\n"
         "`mm!amistoso @pessoa [idaevolta] [aposta N]` — partida narrada, ida e volta, apostada\n"
         "`mm!penaltis @pessoa [aposta]` — disputa de pênaltis escolhendo o canto\n"
+        "`mm!comparar @pessoa` — seu time e o da pessoa lado a lado, com prognóstico\n"
         "`mm!desafio` — partidas contra times lendários: escada, chefões e desafio livre\n"
         "`mm!campeonato` — campeonato diário; o campeão leva 500 Memilets\n"
         "`mm!temporada [mês]` — tabela do mês · `mm!temporadas` — campeão de cada mês",
