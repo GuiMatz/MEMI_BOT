@@ -921,6 +921,12 @@ def simulate_match(
     )
 
 
+# Disputa de pênaltis: no futebol real ~70-76% das cobranças entram (abaixo dos ~85% no
+# jogo). Na morte súbita batem os zagueiros e o goleiro, sob mais pressão, e erram mais.
+SHOOTOUT_CONVERSION = 0.72
+SUDDEN_DEATH_PRESSURE = 0.10
+
+
 def penalty_shootout_kicks(
     home_players: Sequence[dict[str, Any]],
     away_players: Sequence[dict[str, Any]],
@@ -933,8 +939,13 @@ def penalty_shootout_kicks(
     generator = rng or random.SystemRandom()
     home_strength = calculate_team_strength(home_players).attack
     away_strength = calculate_team_strength(away_players).attack
-    home_probability = min(0.85, max(0.65, 0.75 + (home_strength - away_strength) * 0.002))
-    away_probability = min(0.85, max(0.65, 0.75 + (away_strength - home_strength) * 0.002))
+    base = SHOOTOUT_CONVERSION
+    home_probability = min(
+        base + 0.10, max(base - 0.10, base + (home_strength - away_strength) * 0.002)
+    )
+    away_probability = min(
+        base + 0.10, max(base - 0.10, base + (away_strength - home_strength) * 0.002)
+    )
     scores = [0, 0]
     kicks: list[PenaltyKick] = []
     kickers = []
@@ -960,7 +971,9 @@ def penalty_shootout_kicks(
 
     def kick(side: int, kicker: dict[str, Any]) -> None:
         probability = home_probability if side == 0 else away_probability
-        probability = min(0.90, max(0.60, probability + (_effective_overall(kicker) - 75) * 0.001))
+        if len(kicks) >= 10:
+            probability -= SUDDEN_DEATH_PRESSURE
+        probability = min(0.90, max(0.50, probability + (_effective_overall(kicker) - 75) * 0.001))
         scored = generator.random() < probability
         if scored:
             scores[side] += 1

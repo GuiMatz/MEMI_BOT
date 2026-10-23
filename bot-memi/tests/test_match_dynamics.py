@@ -4,7 +4,7 @@ from collections import Counter
 from dataclasses import asdict
 
 from src.narration import _line, match_embed
-from src.simulation import simulate_match
+from src.simulation import penalty_shootout_kicks, simulate_match
 from src.teams import FORMATIONS
 
 
@@ -120,6 +120,18 @@ class MatchDynamicsTests(unittest.TestCase):
             self.assertEqual(stats["best"]["rating"], max(ratings))
             self.assertTrue(all(3 <= value <= 10 for value in ratings))
             self.assertEqual(result.events[-1].stats, stats)
+
+
+class ShootoutTests(unittest.TestCase):
+    def test_conversion_is_realistic_and_long_shootouts_are_rare(self):
+        rng = random.Random(5)
+        shootouts = [penalty_shootout_kicks(HOME, AWAY, rng=rng) for _ in range(3000)]
+        kicks = [kick for shootout in shootouts for kick in shootout]
+        conversion = sum(kick.scored for kick in kicks) / len(kicks)
+        self.assertGreater(conversion, 0.68)  # futebol real: ~70-76% nas disputas
+        self.assertLess(conversion, 0.76)
+        long = sum(len(shootout) >= 16 for shootout in shootouts) / len(shootouts)
+        self.assertLess(long, 0.10)  # 8+ cobranças por time
 
 
 class DynamicNarrationTests(unittest.TestCase):
