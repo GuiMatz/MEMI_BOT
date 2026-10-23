@@ -57,6 +57,7 @@ CRATE_MEMILETS = {
 # um Épico. Cada uma tem seu contador; a de Épico vale primeiro.
 CRATE_PITY_LIMIT = 15
 EPIC_PITY_LIMIT = 50
+LEGENDARY_PITY_LIMIT = 200
 CRATE_BATCHES = (1, 5, 10)
 # A cada 10 rolls guardados ativados (`mm!ativar`), 1 contratação extra.
 ROLLS_PER_BONUS_CLAIM = 10
@@ -144,6 +145,8 @@ class CrateResult:
     guaranteed: bool = False
     epic_pity: int = 0
     guaranteed_epic: bool = False
+    legendary_pity: int = 0
+    guaranteed_legendary: bool = False
 
     @property
     def memilets(self) -> int:
@@ -401,6 +404,18 @@ def get_epic_pity(discord_user_id: int | str, database_path: str | Path = DATABA
     return int(row["epic_pity"]) if row else 0
 
 
+def get_legendary_pity(
+    discord_user_id: int | str, database_path: str | Path = DATABASE_PATH
+) -> int:
+    """Caixas seguidas sem Lendário (a garantia vem em `LEGENDARY_PITY_LIMIT`)."""
+    with connect(database_path) as connection:
+        row = connection.execute(
+            "SELECT legendary_pity FROM game_users WHERE discord_user_id = ?",
+            (str(discord_user_id),),
+        ).fetchone()
+    return int(row["legendary_pity"]) if row else 0
+
+
 def open_crates(
     discord_user_id: int | str,
     display_name: str,
@@ -526,13 +541,18 @@ def open_crate(
             (user_id,),
         ).fetchone()
         pity = int(pity_row["crate_pity"]) if pity_row else 0
-        epic_pity = int(
-            connection.execute(
-                "SELECT epic_pity FROM game_users WHERE discord_user_id = ?", (user_id,)
-            ).fetchone()["epic_pity"]
-        )
-        # Duas garantias: Épico em EPIC_PITY_LIMIT caixas sem Épico (ou melhor) e Raro em
-        # CRATE_PITY_LIMIT caixas sem Raro (ou melhor). A de Épico vale primeiro.
+        counters = connection.execute(
+            "SELECT epic_pity, legendary_pity FROM game_users WHERE discord_user_id = ?",
+            (user_id,),
+        ).fetchone()
+        epic_pity = int(counters["epic_pity"])
+        legendary_pity = int(counters["legendary_pity"])
+        # Três garantias: Lendário em LEGENDARY_PITY_LIMIT caixas sem Lendário, Épico em
+        # EPIC_PITY_LIMIT sem Épico (ou melhor) e Raro em CRATE_PITY_LIMIT sem Raro (ou
+        # melhor). A maior vale primeiro.
+        guaranteed_legendary = legendary_pity + 1 >= LEGENDARY_PITY_LIMIT and extra != "lendario"
+        if guaranteed_legendary:
+            extra = "lendario"
         guaranteed_epic = epic_pity + 1 >= EPIC_PITY_LIMIT and extra not in ("epico", "lendario")
         if guaranteed_epic:
             extra = "epico"
@@ -541,8 +561,10 @@ def open_crate(
             extra = "raro"
         pity = 0 if extra in ("raro", "epico", "lendario") else min(CRATE_PITY_LIMIT, pity + 1)
         epic_pity = 0 if extra in ("epico", "lendario") else min(EPIC_PITY_LIMIT, epic_pity + 1)
+        legendary_pity = 0 if extra == "lendario" else min(LEGENDARY_PITY_LIMIT, legendary_pity + 1)
         connection.execute(
-            "UPDATE game_users SET epic_pity = ? WHERE discord_user_id = ?", (epic_pity, user_id)
+            "UPDATE game_users SET epic_pity = ?, legendary_pity = ? WHERE discord_user_id = ?",
+            (epic_pity, legendary_pity, user_id),
         )
         connection.execute(
             """
@@ -592,7 +614,15 @@ def open_crate(
                 (total, user_id),
             )
         return CrateResult(
-            price, tuple(prizes), doubled, pity, guaranteed, epic_pity, guaranteed_epic
+            price,
+            tuple(prizes),
+            doubled,
+            pity,
+            guaranteed,
+            epic_pity,
+            guaranteed_epic,
+            legendary_pity,
+            guaranteed_legendary,
         )
 
 

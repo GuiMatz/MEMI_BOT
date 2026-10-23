@@ -44,7 +44,8 @@ COMMAND_HELP: dict[str, tuple[str, str, tuple[str, ...]]] = {
     "crates": (
         "mm!crates [epica] [1|5|10]",
         "Caixas com rolls guardados, cosméticos, bônus, caixas e pacotes. Garantia: Raro em 15 "
-        "caixas sem Raro, Épico em 50 sem Épico. A caixa épica nunca vem só com o básico.",
+        "caixas sem Raro, Épico em 50 sem Épico e Lendário em 200 sem Lendário. A caixa épica "
+        "nunca vem só com o básico.",
         ("mm!crates", "mm!crates 10", "mm!crates epica 5"),
     ),
     "pacote": (

@@ -22,6 +22,7 @@ from src.economy import (
     CRATE_DOUBLE_CHANCE,
     CRATE_PITY_LIMIT,
     EPIC_PITY_LIMIT,
+    LEGENDARY_PITY_LIMIT,
     CRATE_EXTRA_CHANCES,
     CRATE_MEMILETS,
     EPIC_CRATE_EXTRA_CHANCES,
@@ -39,6 +40,7 @@ from src.economy import (
     get_account_status,
     get_crate_pity,
     get_epic_pity,
+    get_legendary_pity,
     get_crate_price,
     get_upgrade_cost,
     get_upgrade_levels,
@@ -643,6 +645,7 @@ class EconomyCog(commands.Cog):
         price = get_crate_price(author.id, self.database_path)
         pity = get_crate_pity(author.id, self.database_path)
         epic_pity = get_epic_pity(author.id, self.database_path)
+        legendary_pity = get_legendary_pity(author.id, self.database_path)
         embed = intro_embed("📦 Crates", CRATES_INTRO, color=discord.Color.orange())
         lines = [
             f"{RARITY_STYLE['basico'][0]} **Básico** · sempre vem\n"
@@ -666,7 +669,9 @@ class EconomyCog(commands.Cog):
             name="🛡️ Garantias",
             value=(
                 f"Raro **{pity}/{CRATE_PITY_LIMIT}** · faltam {CRATE_PITY_LIMIT - pity}\n"
-                f"Épico **{epic_pity}/{EPIC_PITY_LIMIT}** · faltam {EPIC_PITY_LIMIT - epic_pity}"
+                f"Épico **{epic_pity}/{EPIC_PITY_LIMIT}** · faltam {EPIC_PITY_LIMIT - epic_pity}\n"
+                f"Lendário **{legendary_pity}/{LEGENDARY_PITY_LIMIT}** · "
+                f"faltam {LEGENDARY_PITY_LIMIT - legendary_pity}"
             ),
         )
         epic_odds = " · ".join(
@@ -869,6 +874,11 @@ class EconomyCog(commands.Cog):
             summary.append(
                 f"🛡️ **Garantia de Épico:** {EPIC_PITY_LIMIT} caixas sem Épico, veio um."
             )
+        if any(result.guaranteed_legendary for result in results):
+            summary.append(
+                f"🛡️ **Garantia de Lendário:** {LEGENDARY_PITY_LIMIT} caixas sem Lendário, "
+                "veio um."
+            )
         embed = discord.Embed(
             title=f"{emoji} {len(results)} {_crate_noun(len(results), epic)} · "
             f"melhor: {RARITY_LABELS[best]}",
@@ -935,6 +945,11 @@ class EconomyCog(commands.Cog):
             lines.append(f"🛡️ **Garantia ativada:** {CRATE_PITY_LIMIT} caixas sem Raro, veio um.")
         if any(result.guaranteed_epic for result in results):
             lines.append(f"🛡️ **Garantia de Épico:** {EPIC_PITY_LIMIT} caixas sem Épico, veio um.")
+        if any(result.guaranteed_legendary for result in results):
+            lines.append(
+                f"🛡️ **Garantia de Lendário:** {LEGENDARY_PITY_LIMIT} caixas sem Lendário, "
+                "veio um."
+            )
         count = len(results)
         embed = discord.Embed(
             title=f"{emoji} {count} {_crate_noun(count, epic)} · melhor: {RARITY_LABELS[best]}",
@@ -948,7 +963,8 @@ class EconomyCog(commands.Cog):
         embed.add_field(
             name="🛡️ Garantias",
             value=f"Raro {results[-1].pity}/{CRATE_PITY_LIMIT} · "
-            f"Épico {results[-1].epic_pity}/{EPIC_PITY_LIMIT}",
+            f"Épico {results[-1].epic_pity}/{EPIC_PITY_LIMIT} · "
+            f"Lendário {results[-1].legendary_pity}/{LEGENDARY_PITY_LIMIT}",
         )
         if any(prize.kind.startswith("cosmetic:") for prize in prizes):
             embed.set_footer(

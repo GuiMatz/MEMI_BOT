@@ -292,8 +292,8 @@ O FUT.AE é um módulo do MeMi BOT, não um bot separado. O menu geral continua 
   cada 10 ativados dão **+1 contratação extra** (usada quando o claim do ciclo já foi). A
   sobra conta para a próxima.
 - Garantias das caixas: 15 caixas seguidas sem Raro (ou melhor) e a próxima traz um Raro;
-  50 sem Épico (ou melhor) e a próxima traz um Épico. Os dois contadores aparecem no
-  `mm!crates` e no resultado de cada abertura.
+  50 sem Épico (ou melhor) e a próxima traz um Épico; 200 sem Lendário e a próxima traz um
+  Lendário. Os três contadores aparecem no `mm!crates` e no resultado de cada abertura.
 - As caixas também dão caixas e pacotes: Raro dá +1 caixa ou pacote de jogador; Épico, caixa
   épica ou pacote de jogador; Lendário, pacote épico. Eles vão para o `mm!inventario` (ou
   `mm!inv`, `mm!mochila`), que tem um botão **Abrir** por item, com a animação de sempre e

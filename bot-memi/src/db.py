@@ -594,6 +594,8 @@ def initialize_database(database_path: str | Path = DATABASE_PATH) -> None:
             "activation_carry": "INTEGER NOT NULL DEFAULT 0",
             # Caixas seguidas sem Épico (ou melhor): a garantia de Épico.
             "epic_pity": "INTEGER NOT NULL DEFAULT 0",
+            # Caixas seguidas sem Lendário: a garantia de Lendário.
+            "legendary_pity": "INTEGER NOT NULL DEFAULT 0",
         }
         for column, definition in game_user_migrations.items():
             if column not in game_user_columns:
