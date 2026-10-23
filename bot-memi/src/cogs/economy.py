@@ -33,9 +33,8 @@ from src.economy import (
     reset_claim,
 )
 from src.cogs.common import ConfirmView, PlayerChoiceView, ambiguity_text, intro_embed
-from src.game import find_player, get_wallet, list_owned_players, register_user, resolve_player
+from src.game import find_player, get_wallet, register_user
 from src.perks import UPGRADES
-from src.transactions import TransactionError, dismiss_player
 
 UPGRADES_INTRO = (
     "Aqui você gasta Memilets em melhorias permanentes para o seu clube, como mais rolls, "
@@ -187,45 +186,6 @@ class CrateMenuView(discord.ui.View):
             interaction.response.send_message,
             interaction.edit_original_response,
         )
-
-
-class DismissConfirmationView(discord.ui.View):
-    def __init__(self, user_id: int, player_id: int, database_path, player_name: str):
-        super().__init__(timeout=120)
-        self.user_id = user_id
-        self.player_id = player_id
-        self.database_path = database_path
-        self.player_name = player_name
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != self.user_id:
-            await interaction.response.send_message(
-                "Somente quem iniciou a demissão pode confirmar.", ephemeral=True
-            )
-            return False
-        return True
-
-    @discord.ui.button(label="Confirmar demissão", style=discord.ButtonStyle.danger)
-    async def confirm(self, interaction: discord.Interaction, button) -> None:
-        try:
-            refund = dismiss_player(self.user_id, self.player_id, self.database_path)
-        except TransactionError as error:
-            await interaction.response.edit_message(content=str(error), view=None)
-            self.stop()
-            return
-        await interaction.response.edit_message(
-            content=(
-                f"Jogador **{self.player_name}** liberado. "
-                f"Você recebeu {icons.memilets(refund)} Memilets."
-            ),
-            view=None,
-        )
-        self.stop()
-
-    @discord.ui.button(label="Cancelar", style=discord.ButtonStyle.secondary)
-    async def cancel(self, interaction: discord.Interaction, button) -> None:
-        await interaction.response.edit_message(content="Demissão cancelada.", view=None)
-        self.stop()
 
 
 class EconomyCog(commands.Cog):
@@ -447,33 +407,6 @@ class EconomyCog(commands.Cog):
         await context.reply(
             f"{icons.upgrade('claim_reset')} Claim liberado! Pode contratar agora. "
             f"O `mm!rt` volta <t:{unix}:R>.",
-            mention_author=False,
-        )
-
-    @commands.command(name="demitir")
-    async def dismiss(self, context: commands.Context, *, query: str) -> None:
-        owned = list_owned_players(context.author.id, self.database_path, limit=5000)
-        player, candidates = resolve_player(query, owned)
-
-        async def confirm(send, chosen: dict) -> None:
-            view = DismissConfirmationView(
-                context.author.id, int(chosen["id"]), self.database_path, chosen["name"]
-            )
-            await send(content=f"Confirma a demissão de **{chosen['name']}**?", view=view)
-
-        if player is not None:
-            await confirm(lambda **kwargs: context.reply(mention_author=False, **kwargs), player)
-            return
-        if not candidates:
-            await context.reply(f"Não achei **{query[:60]}** no seu elenco.", mention_author=False)
-            return
-
-        async def chosen(interaction: discord.Interaction, picked: dict) -> None:
-            await confirm(interaction.response.edit_message, picked)
-
-        await context.reply(
-            ambiguity_text(query, candidates),
-            view=PlayerChoiceView(context.author.id, candidates, chosen),
             mention_author=False,
         )
 

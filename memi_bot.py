@@ -3699,7 +3699,8 @@ AJUDA_JOGO = [
             ("mm!left", "jogadores e cosméticos (emblemas, uniformes…) ainda livres"),
             (
                 "mm!elenco [@pessoa] [filtro]",
-                "uma carta por página; filtros: posição, overall, clube",
+                "cartas com ⭐ nos titulares e menu para ordenar; filtros: titulares, reservas, "
+                "posição, overall, clube",
             ),
             ("mm!wish / mm!starwish <jogador>", "adiciona/remove wish; sem jogador, lista"),
             ("mm!wishlist / mm!wl", "suas wishes, com slots usados/máximo no topo"),
@@ -3722,8 +3723,9 @@ AJUDA_JOGO = [
                 "missões que pagam Memilets: 3 por dia e 2 maiores, renovadas toda segunda",
             ),
             ("mm!rt", "zera o claim na hora a cada 12 h (liberado por upgrade)"),
-            ("mm!demitir <nome>", "libera jogador e recebe reembolso"),
-            ("mm!troca @pessoa <seu jogador> por <dela> [moedas]", "propõe troca de jogadores"),
+            ("mm!vender [nome]", "vende jogadores, mostrando o valor antes"),
+            ("mm!troca @pessoa", "monta uma troca de jogadores e Memilets"),
+            ("mm!dar @pessoa <jogador|valor>", "doa um jogador ou Memilets"),
         ],
     ),
     (

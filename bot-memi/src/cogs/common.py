@@ -35,6 +35,10 @@ def card_embed(
         f"**{overall or '—'}** · {player.get('game_position') or '—'} · {rarity_label(overall)}",
         f"🏟️ {player.get('club_name') or 'Passe livre'}",
     ]
+    slot = player.get("lineup_position")
+    if slot:
+        natural = player.get("game_position")
+        lines.insert(1, "✅ Titular" + (f" como {slot}" if natural and slot != natural else ""))
     if player.get("balls"):
         lines.append(f"⚽ {player['balls']}/10 bolas")
     if "owner_name" in player:
@@ -50,29 +54,77 @@ def card_embed(
     return embed
 
 
-class CardPagerView(discord.ui.View):
-    """Uma carta por página, como o `$mm` do Mudae; ◀ ▶ passam para o próximo jogador."""
+# Ordenação: chave → (rótulo do menu, função de ordenação, decrescente?).
+SortOption = tuple[str, Callable[[dict[str, Any]], Any], bool]
 
-    def __init__(self, players: list[dict[str, Any]], *, title: str = "", list_lines=None):
+
+class CardPagerView(discord.ui.View):
+    """Uma carta por página, como o `$mm` do Mudae; ◀ ▶ passam para o próximo jogador.
+
+    `line_format(posição, jogador)` gera as linhas do botão Lista; `sorts` acrescenta um
+    menu "Ordenar por" que reordena as cartas e a lista (a primeira opção é a inicial).
+    """
+
+    def __init__(
+        self,
+        players: list[dict[str, Any]],
+        *,
+        title: str = "",
+        list_lines=None,
+        line_format: Callable[[int, dict[str, Any]], str] | None = None,
+        sorts: dict[str, SortOption] | None = None,
+    ):
         super().__init__(timeout=300)
         self.players = players
         self.title = title
         self.index = 0
         self.list_lines = list_lines
+        self.line_format = line_format
+        self.sorts = sorts or {}
+        self.sort_key = next(iter(self.sorts), None)
         self.message: discord.Message | None = None
+        if self.sort_key:
+            self._apply_sort()
+            self.sort_menu = discord.ui.Select(placeholder="Ordenar por…", row=1)
+            self.sort_menu.callback = self._sorted
+            self.add_item(self.sort_menu)
         self._sync()
+
+    def lines(self) -> list[str]:
+        if self.line_format is not None:
+            return [
+                self.line_format(index, player)
+                for index, player in enumerate(self.players, start=1)
+            ]
+        return self.list_lines or []
+
+    def _apply_sort(self) -> None:
+        _, key, reverse = self.sorts[self.sort_key]
+        self.players = sorted(self.players, key=key, reverse=reverse)
 
     def _sync(self) -> None:
         self.previous.disabled = self.index == 0
         self.next.disabled = self.index >= len(self.players) - 1
-        if self.list_lines is None:
+        if self.list_lines is None and self.line_format is None:
             self.remove_item(self.show_list)
+        if self.sort_key:
+            self.sort_menu.options = [
+                discord.SelectOption(label=label, value=key, default=key == self.sort_key)
+                for key, (label, _, _) in self.sorts.items()
+            ]
+
+    async def _sorted(self, interaction: discord.Interaction) -> None:
+        self.sort_key = interaction.data["values"][0]
+        self._apply_sort()
+        self.index = 0
+        await self._show(interaction)
 
     def page(self) -> discord.Embed:
         player = self.players[self.index]
+        order = f" · {self.sorts[self.sort_key][0]}" if self.sort_key else ""
         return card_embed(
             player,
-            footer=f"{self.title} · {self.index + 1}/{len(self.players)}".strip(" ·"),
+            footer=f"{self.title} · {self.index + 1}/{len(self.players)}{order}".strip(" ·"),
         )
 
     async def send(self, send: Callable[..., Awaitable[discord.Message]]) -> None:
@@ -97,9 +149,9 @@ class CardPagerView(discord.ui.View):
 
     @discord.ui.button(label="Lista", emoji="📋", style=discord.ButtonStyle.primary)
     async def show_list(self, interaction: discord.Interaction, button) -> None:
-        lines = self.list_lines or []
+        lines = self.lines()
         embed = discord.Embed(
-            title=self.title,
+            title=self.title + (f" · {self.sorts[self.sort_key][0]}" if self.sort_key else ""),
             description="\n".join(lines[:40])[:4000]
             + (f"\n… e mais {len(lines) - 40}" if len(lines) > 40 else ""),
             color=discord.Color.green(),
