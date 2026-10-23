@@ -40,6 +40,8 @@ COSMETIC_KINDS: dict[str, tuple[str, str, str, bool]] = {
 
 # Tipos com dono único (um item, uma pessoa), como as cartas.
 UNIQUE_KINDS = frozenset({"uniforme", "estadio", "tecnico", "mascote"})
+# Compensação, em Memilets, de quem perdeu um item repetido quando eles viraram únicos.
+DUPLICATE_REFUND = 2_500
 
 # Como cada tipo aparece nos comandos (`mm!time tecnico X`, `mm!emblema X`…).
 KIND_ALIASES = {
@@ -398,6 +400,49 @@ def refresh_names(database_path: str | Path = DATABASE_PATH) -> int:
                 )
                 changed += cursor.rowcount
     return changed
+
+
+def resolve_unique_duplicates(database_path: str | Path = DATABASE_PATH) -> int:
+    """Itens de dono único que ficaram com mais de um dono (da regra antiga).
+
+    Fica com quem pegou primeiro; os outros perdem o item (desequipa, se estava em uso) e
+    recebem `DUPLICATE_REFUND` Memilets por item. Devolve quantos itens foram tirados.
+    Sem repetidos, não faz nada: dá para rodar toda vez que o bot liga."""
+    removed = 0
+    with connect(database_path) as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        for kind in sorted(UNIQUE_KINDS):
+            _, _, column, stores_path = COSMETIC_KINDS[kind]
+            rows = connection.execute(
+                """
+                SELECT rowid, discord_user_id, item_key, name, image_path FROM user_cosmetics
+                WHERE kind = ? AND item_key IN (
+                    SELECT item_key FROM user_cosmetics WHERE kind = ?
+                    GROUP BY item_key HAVING COUNT(*) > 1
+                )
+                ORDER BY item_key, acquired_at, rowid
+                """,
+                (kind, kind),
+            ).fetchall()
+            first_owner: set[str] = set()
+            for row in rows:
+                if row["item_key"] not in first_owner:
+                    first_owner.add(row["item_key"])  # o mais antigo fica
+                    continue
+                user_id = row["discord_user_id"]
+                connection.execute("DELETE FROM user_cosmetics WHERE rowid = ?", (row["rowid"],))
+                value = row["image_path"] if stores_path else row["name"]
+                connection.execute(
+                    f"UPDATE game_teams SET {column} = NULL "
+                    f"WHERE discord_user_id = ? AND {column} = ?",
+                    (user_id, value),
+                )
+                connection.execute(
+                    "UPDATE game_users SET memilets = memilets + ? WHERE discord_user_id = ?",
+                    (DUPLICATE_REFUND, user_id),
+                )
+                removed += 1
+    return removed
 
 
 def grandfather_equipped(database_path: str | Path = DATABASE_PATH) -> int:

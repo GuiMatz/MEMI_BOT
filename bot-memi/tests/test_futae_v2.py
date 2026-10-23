@@ -196,6 +196,33 @@ class CosmeticTests(Case):
             self.assertNotIn("Telê Santana", coaches)  # some do sorteio da outra pessoa
             self.assertFalse(grant(connection, 200, "tecnico", {"name": "Telê Santana"}, "crate"))
 
+    def test_old_duplicates_stay_with_the_first_owner_and_others_are_refunded(self):
+        from src.cosmetics import DUPLICATE_REFUND, owners_of, resolve_unique_duplicates
+
+        register_user(200, "Outra", self.database_path)
+        ensure_team(200, "Outra", self.database_path)
+        with connect(self.database_path) as connection:
+            for user_id, when in (("100", "2026-01-01 10:00:00"), ("200", "2026-02-01 10:00:00")):
+                for kind, key, name in (
+                    ("tecnico", "tele santana", "Telê Santana"),
+                    ("liga", "premier league", "Premier League"),
+                ):
+                    connection.execute(
+                        "INSERT INTO user_cosmetics (discord_user_id, kind, item_key, name, "
+                        "acquired_at) VALUES (?, ?, ?, ?, ?)",
+                        (user_id, kind, key, name, when),
+                    )
+            connection.execute(
+                "UPDATE game_teams SET coach_name = 'Telê Santana' WHERE discord_user_id = '200'"
+            )
+        before = get_wallet(200, self.database_path)["memilets"]
+        self.assertEqual(resolve_unique_duplicates(self.database_path), 1)
+        self.assertEqual(owners_of("tecnico", "Telê Santana", self.database_path), ["Pessoa"])
+        self.assertEqual(len(owners_of("liga", "Premier League", self.database_path)), 2)
+        self.assertIsNone(get_team(200, self.database_path)["coach_name"])  # desequipou
+        self.assertEqual(get_wallet(200, self.database_path)["memilets"], before + DUPLICATE_REFUND)
+        self.assertEqual(resolve_unique_duplicates(self.database_path), 0)  # nada mais a fazer
+
     def test_crate_never_repeats_a_cosmetic_the_user_already_has(self):
         self.add_catalog()
         for kind, name in (
