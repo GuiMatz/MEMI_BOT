@@ -3762,9 +3762,10 @@ AJUDA_JOGO = [
                 "painel com formação, estilo, capitão e cobradores (também por texto)",
             ),
             (
-                "mm!amistoso @pessoa [idaevolta]",
-                "partida narrada, ou ida e volta (um jogo na casa de cada)",
+                "mm!amistoso @pessoa [idaevolta] [aposta N]",
+                "partida narrada, ida e volta e/ou valendo Memilets",
             ),
+            ("mm!penaltis @pessoa [aposta]", "disputa de pênaltis: escolha o canto e o pulo"),
             ("mm!campeonato inscrever", "inscreve seu time no campeonato diário"),
             ("mm!campeonato iniciar", "joga o campeonato; o campeão ganha 500 Memilets"),
             ("mm!temporada [mês]", "tabela do mês somando todos os campeonatos diários"),

@@ -353,6 +353,14 @@ O FUT.AE é um módulo do MeMi BOT, não um bot separado. O menu geral continua 
   artilheiros e estilos táticos. `mm!amistoso @pessoa idaevolta` joga ida (na casa de quem
   desafiou) e volta (na casa do outro): vale o placar somado e o empate no agregado vai para
   os pênaltis no fim da volta. A renda, se escolhida, é só a do jogo de ida.
+- Apostas entre duas pessoas: `mm!amistoso @pessoa [idaevolta] aposta 1000` e
+  `mm!penaltis @pessoa 1000`. O outro aceita, cada um entra com o valor (ou ninguém, se
+  faltar saldo) e quem vence leva o pote. Amistoso apostado não gera renda; se a partida
+  não acontecer, as apostas voltam.
+- `mm!penaltis @pessoa` é uma disputa de pênaltis interativa: quem bate escolhe o canto e
+  quem defende escolhe onde pular, em segredo. Acertar o canto defende 75% das vezes; errar
+  ainda pode dar trave (6%). 5 cobranças para cada lado, morte súbita no empate, e quem
+  demora mais de 60 s tem o canto sorteado.
 - `mm!campeonato` permite inscrição, início, configuração de canal e agendamento,
   com liga, classificação e final.
 - `mm!admin testeamistoso` e `mm!admin testecampeonato <quantidade>` executam testes

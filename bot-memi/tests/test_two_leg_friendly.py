@@ -75,6 +75,30 @@ class TwoLegFriendlyTests(unittest.TestCase):
         for word in ("idaevolta", "ida", "iv", "2"):
             self.assertIn(word, TWO_LEG_WORDS)
 
+    def test_options_with_wager(self):
+        parse_friendly_options = matches.parse_friendly_options
+        self.assertEqual(parse_friendly_options("idaevolta aposta 1.000"), (True, 1000, []))
+        self.assertEqual(parse_friendly_options("ida e volta"), (True, 0, []))
+        self.assertEqual(parse_friendly_options("aposta 5k"), (False, 5000, []))
+        self.assertEqual(parse_friendly_options("xyz"), (False, 0, ["xyz"]))
+
+    def test_wagered_match_pays_the_pot_or_refunds(self):
+        # Usa o módulo importado no topo: o test_bot recarrega as extensões.
+        cog = MatchesCog.__new__(MatchesCog)
+        cog.database_path = ":memory:"
+        context = SimpleNamespace(
+            author=SimpleNamespace(id=100, display_name="Ana"), send=AsyncMock()
+        )
+        opponent = SimpleNamespace(id=200, display_name="Bia")
+        for winner, expected in ((200, [(200, 2000)]), (None, [(100, 1000), (200, 1000)])):
+            paid = MagicMock()
+            with (
+                patch.object(matches, "pay", paid),
+                patch.object(MatchesCog, "_play_two_legs", AsyncMock(return_value=winner)),
+            ):
+                asyncio.run(cog.play_wagered(context, opponent, 1000, True))
+            self.assertEqual([call.args[:2] for call in paid.call_args_list], expected)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -283,7 +283,8 @@ FUTAE_SECTIONS = (
         "`mm!proteger <nome>` — 🔒 tira o jogador de todas as vendas\n"
         "`mm!troca @pessoa` — monta a troca nos menus · `mm!dar @pessoa <jogador|valor>`\n"
         "`mm!pay @pessoa <quantia>` — manda Memilets para outra pessoa\n"
-        "`mm!amistoso @pessoa [idaevolta]` — partida narrada, ou ida e volta (casa de cada)\n"
+        "`mm!amistoso @pessoa [idaevolta] [aposta N]` — partida narrada, ida e volta, apostada\n"
+        "`mm!penaltis @pessoa [aposta]` — disputa de pênaltis escolhendo o canto\n"
         "`mm!campeonato` — campeonato diário; o campeão leva 500 Memilets\n"
         "`mm!temporada [mês]` — tabela do mês · `mm!temporadas` — campeão de cada mês",
     ),

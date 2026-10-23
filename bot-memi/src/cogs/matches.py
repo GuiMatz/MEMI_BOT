@@ -12,6 +12,8 @@ import discord
 from discord.ext import commands, tasks
 
 from src import icons
+from src.cogs.penalties import PenaltyChallengeView
+from src.wagers import WagerError, check_wager, parse_wager, pay, take_stakes
 from src.championship import (
     CHAMPION_PRIZE,
     CHAMPIONSHIP_TIMEZONE,
@@ -51,6 +53,78 @@ async def score_file(home, away, home_goals, away_goals, goals, **options) -> di
 
 # `mm!amistoso @pessoa idaevolta`: um jogo na casa de cada time, vale o placar somado.
 TWO_LEG_WORDS = {"idaevolta", "ida", "iv", "2", "volta"}
+
+
+def parse_friendly_options(text: str) -> tuple[bool, int, list[str]]:
+    """(ida e volta?, aposta, palavras que não entendi) de "idaevolta aposta 1000"."""
+    two_legs, wager, unknown = False, 0, []
+    for raw in (text or "").split():
+        # O valor vem do texto original ("1.000" não pode virar "1 000").
+        word = normalize_player_name(raw).replace(" ", "")
+        if word in TWO_LEG_WORDS:
+            two_legs = True
+        elif word in {"aposta", "apostado", "bet", "valendo", "e", "volta"}:
+            continue
+        elif (value := parse_wager(raw)) is not None:
+            wager = value
+        else:
+            unknown.append(word)
+    return two_legs, wager, unknown
+
+
+class FriendlyWagerView(discord.ui.View):
+    """Amistoso apostado: o desafiado aceita (as duas apostas saem) e quem vence leva tudo."""
+
+    def __init__(self, cog, context, opponent, wager: int, two_legs: bool):
+        super().__init__(timeout=120)
+        self.cog = cog
+        self.context = context
+        self.opponent = opponent
+        self.wager = wager
+        self.two_legs = two_legs
+        self.message: discord.Message | None = None
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.opponent.id:
+            await interaction.response.send_message(
+                "Só quem foi desafiado responde.", ephemeral=True
+            )
+            return False
+        return True
+
+    @discord.ui.button(label="Aceitar a aposta", emoji="💰", style=discord.ButtonStyle.success)
+    async def accept(self, interaction: discord.Interaction, button) -> None:
+        self.stop()
+        author = self.context.author
+        try:
+            take_stakes(
+                (author.id, author.display_name),
+                (self.opponent.id, self.opponent.display_name),
+                self.wager,
+                self.cog.database_path,
+            )
+        except WagerError as error:
+            await interaction.response.edit_message(content=str(error), view=None)
+            return
+        await interaction.response.edit_message(
+            content=f"💰 Aposta aceita: {self.wager * 2:,} Memilets em jogo!".replace(",", "."),
+            view=None,
+        )
+        await self.cog.play_wagered(self.context, self.opponent, self.wager, self.two_legs)
+
+    @discord.ui.button(label="Recusar", style=discord.ButtonStyle.secondary)
+    async def refuse(self, interaction: discord.Interaction, button) -> None:
+        self.stop()
+        await interaction.response.edit_message(
+            content=f"{self.opponent.display_name} recusou a aposta.", view=None
+        )
+
+    async def on_timeout(self) -> None:
+        if self.message:
+            try:
+                await self.message.edit(content="Desafio apostado expirou.", view=None)
+            except discord.HTTPException:
+                pass
 
 
 class IncomeChoiceView(discord.ui.View):
@@ -309,33 +383,81 @@ class MatchesCog(commands.Cog):
         view = StatsView(context.author.id, target.id, self.database_path)
         view.message = await context.reply(embed=view.embed(), view=view, mention_author=False)
 
+    @commands.command(name="penaltis", aliases=["pênaltis", "penalti", "penaltys", "pk"])
+    async def penalties(
+        self, context: commands.Context, opponent: discord.Member, wager: str | None = None
+    ) -> None:
+        """`mm!penaltis @pessoa [aposta]`: disputa de pênaltis, escolhendo o canto."""
+        if opponent.bot or opponent.id == context.author.id:
+            await context.reply("Desafie outra pessoa.", mention_author=False)
+            return
+        amount = 0
+        if wager:
+            amount = parse_wager(wager) or 0
+            try:
+                check_wager(amount)
+            except WagerError as error:
+                await context.reply(str(error), mention_author=False)
+                return
+        view = PenaltyChallengeView(context.author, opponent, amount, self.database_path)
+        stake = (
+            f" valendo **{amount:,}** Memilets de cada (quem vence leva {amount * 2:,})".replace(
+                ",", "."
+            )
+            if amount
+            else ""
+        )
+        view.message = await context.reply(
+            f"⚽ {opponent.mention}, **{context.author.display_name}** te desafiou para os "
+            f"pênaltis{stake}! São 5 cobranças para cada lado: quem bate escolhe o canto e "
+            "quem defende escolhe onde pular.",
+            view=view,
+            mention_author=False,
+        )
+
     @commands.command(name="amistoso")
     async def friendly(
         self,
         context: commands.Context,
         opponent: discord.Member,
-        mode: str | None = None,
+        *,
+        options: str = "",
     ) -> None:
-        """`mm!amistoso @pessoa` (jogo único) ou `mm!amistoso @pessoa idaevolta`."""
+        """`mm!amistoso @pessoa [idaevolta] [aposta 1000]`."""
         if opponent.bot or opponent.id == context.author.id:
             await context.reply(
                 "Escolha outra pessoa com um time configurado.",
                 mention_author=False,
             )
             return
-        two_legs = normalize_player_name(mode or "").replace(" ", "") in TWO_LEG_WORDS
-        if mode and not two_legs:
+        two_legs, wager, unknown = parse_friendly_options(options)
+        if unknown:
             await context.reply(
-                "Use `mm!amistoso @pessoa` (jogo único) ou `mm!amistoso @pessoa idaevolta` "
-                "(um jogo na casa de cada time).",
+                "Use `mm!amistoso @pessoa` (jogo único), `mm!amistoso @pessoa idaevolta` "
+                "(um jogo na casa de cada time) e, para apostar, `aposta 1000` no fim: "
+                "`mm!amistoso @pessoa idaevolta aposta 1000`.",
                 mention_author=False,
             )
             return
         try:
+            if wager:
+                check_wager(wager)
             get_valid_lineup(context.author.id, self.database_path)
             get_valid_lineup(opponent.id, self.database_path)
-        except TeamError as error:
+        except (TeamError, WagerError) as error:
             await context.reply(str(error), mention_author=False)
+            return
+        if wager:
+            # Apostado: o outro aceita (e as duas apostas saem); não vale renda.
+            view = FriendlyWagerView(self, context, opponent, wager, two_legs)
+            kind = "um ida e volta" if two_legs else "um amistoso"
+            view.message = await context.reply(
+                f"💰 {opponent.mention}, **{context.author.display_name}** te desafiou para "
+                f"{kind} valendo **{wager:,}** Memilets de cada (quem vence leva "
+                f"{wager * 2:,}). Amistoso apostado não gera renda.".replace(",", "."),
+                view=view,
+                mention_author=False,
+            )
             return
 
         async def play(with_income: bool) -> None:
@@ -441,6 +563,7 @@ class MatchesCog(commands.Cog):
         record_event(winner, "friendly_win", self.database_path)
         if with_income:
             await self._collect_income(context, result)
+        return winner
 
     async def _play_two_legs(
         self, context: commands.Context, opponent: discord.Member, with_income: bool
@@ -482,6 +605,22 @@ class MatchesCog(commands.Cog):
             f"🏆 **Agregado:** {ida.home_name} {challenger} × {rival} {ida.away_name}{decided}. "
             f"**{winner.display_name}** venceu o ida e volta!"
         )
+        return winner.id
+
+    async def play_wagered(self, context, opponent, wager: int, two_legs: bool) -> None:
+        """Joga o amistoso apostado e paga o pote; se não der para jogar, devolve as apostas."""
+        if two_legs:
+            winner = await self._play_two_legs(context, opponent, False)
+        else:
+            winner = await self._play_friendly(context, opponent, False)
+        if winner is None:
+            for user_id in (context.author.id, opponent.id):
+                pay(user_id, wager, self.database_path)
+            await context.send("A partida não aconteceu: as apostas voltaram.")
+            return
+        pay(winner, wager * 2, self.database_path)
+        name = context.author.display_name if winner == context.author.id else opponent.display_name
+        await context.send(f"💰 **{name}** levou o pote de {icons.memilets(wager * 2)} Memilets.")
 
     async def _collect_income(self, context: commands.Context, result) -> None:
         try:
