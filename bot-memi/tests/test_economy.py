@@ -59,7 +59,7 @@ class EconomyTests(unittest.TestCase):
             now=NOW,
             rng=random.Random(2),
         )
-        self.assertEqual((DAILY_MIN_AMOUNT, DAILY_BASE_CAP), (500, 1_500))
+        self.assertEqual((DAILY_MIN_AMOUNT, DAILY_BASE_CAP), (400, 1_200))
         self.assertGreaterEqual(first.amount, DAILY_MIN_AMOUNT)
         self.assertLessEqual(first.amount, DAILY_BASE_CAP)
         self.assertEqual(

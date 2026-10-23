@@ -3713,7 +3713,7 @@ AJUDA_JOGO = [
     (
         "🪙 FUT.AE · Economia",
         [
-            ("mm!daily", "500 a 1.500 Memilets; cada cosmético equipado soma +300 ao máximo"),
+            ("mm!daily", "400 a 1.200 Memilets; cada cosmético equipado soma +250 ao máximo"),
             ("mm!carteira", "saldo, rolls, wishes, timers e preço da crate"),
             ("mm!shop / mm!loja", "tudo o que dá para comprar: caixas, pacotes, upgrades e torre"),
             (

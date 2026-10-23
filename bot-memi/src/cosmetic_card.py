@@ -97,6 +97,6 @@ def render_cosmetic_card(
         draw, (WIDTH // 2, 664), f"de {owner}" if owner else "cosmético do clube", 22, False, MUTED
     )
     draw.line((WIDTH // 2 - 60, 698, WIDTH // 2 + 60, 698), fill=(*color, 255), width=2)
-    bonus = "libera a renda do amistoso" if kind == "estadio" else "+300 no máximo do daily"
+    bonus = "libera a renda do amistoso" if kind == "estadio" else "+250 no máximo do daily"
     text_center(draw, (WIDTH // 2, 730), bonus, 20, True, mix(color, (255, 255, 255), 0.35))
     return to_png(image)

@@ -165,7 +165,7 @@ class CosmeticTests(Case):
         with self.assertRaises(TeamError):
             set_team_field(100, "stadium_name", "Maracanã", self.database_path)
 
-    def test_each_equipped_cosmetic_adds_300_to_daily_cap(self):
+    def test_each_equipped_cosmetic_adds_250_to_daily_cap(self):
         self.add_catalog()
         for kind, name in (("tecnico", "Telê Santana"), ("liga", "Premier League")):
             give_item(100, "Pessoa", kind, name, self.database_path)
@@ -173,7 +173,7 @@ class CosmeticTests(Case):
         give_item(100, "Pessoa", "estadio", "Maracanã", self.database_path)
         equip(100, "estadio", "Maracanã", self.database_path)  # estádio não soma no daily
         reward = claim_daily(100, "Pessoa", self.database_path, now=NOW, rng=random.Random(1))
-        self.assertEqual(reward.cap, 1_500 + 2 * 300)
+        self.assertEqual(reward.cap, 1_200 + 2 * 250)
 
     def test_crate_never_repeats_a_cosmetic_the_user_already_has(self):
         self.add_catalog()

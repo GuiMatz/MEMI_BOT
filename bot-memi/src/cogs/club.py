@@ -625,7 +625,7 @@ class ClubCog(commands.Cog):
         extra = (
             " O amistoso em casa agora pode gerar renda (`mm!renda`)."
             if kind == "estadio"
-            else " +300 no máximo do daily."
+            else " +250 no máximo do daily."
         )
         await context.reply(
             f"{emoji} {label} equipado: **{item['name']}**.{extra}", mention_author=False
