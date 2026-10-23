@@ -530,7 +530,7 @@ def seed_cartola_extra(database_path: str | Path = DATABASE_PATH) -> int:
 
 
 def prepare_game_data(database_path: str | Path = DATABASE_PATH) -> dict[str, int]:
-    """Tudo que o bot sincroniza ao iniciar: enciclopédia, lendas, escudos e fotos."""
+    """Tudo que o bot sincroniza ao iniciar: enciclopédia, lendas, craques, escudos e fotos."""
     from src.cosmetics import grandfather_equipped, refresh_names
     from src.game import sync_club_logos
     from src.photos import sync_existing_photos
@@ -538,6 +538,12 @@ def prepare_game_data(database_path: str | Path = DATABASE_PATH) -> dict[str, in
     report = seed_encyclopedia(database_path)
     report.update(seed_club_legends(database_path))
     report["cartola_extra"] = seed_cartola_extra(database_path)
+    # Craques atuais com nota do EA FC 27 (depois das lendas: lenda viva fica 99).
+    from src.overall import apply_current_stars
+
+    stars = apply_current_stars(database_path)
+    report["current_stars"] = stars["applied"]
+    report["current_stars_missing"] = stars["missing"]
     report["cosmetics_grandfathered"] = grandfather_equipped(database_path)
     report["cosmetics_renamed"] = refresh_names(database_path)
     logos = sync_club_logos(database_path)
