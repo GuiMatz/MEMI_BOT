@@ -125,6 +125,18 @@ class ScoreGifTests(unittest.TestCase):
         self.assertNotEqual(friendly, championship)
 
 
+class QuietPlaysTests(unittest.TestCase):
+    def test_yellow_cards_and_misses_show_in_the_live_feed(self):
+        base = {"stoppage": 0, "home_goals": 0, "away_goals": 0, "text": ""}
+        events = [
+            {**base, "minute": 12, "kind": "card", "side": "home", "player": "Volante"},
+            {**base, "minute": 30, "kind": "miss", "side": "away", "player": "Atacante"},
+        ]
+        description = match_embed("A", "B", events).description
+        self.assertIn("Volante leva amarelo", description)
+        self.assertIn("Atacante manda para fora", description)
+
+
 class FeedOrderTests(unittest.TestCase):
     def test_live_feed_runs_top_to_bottom(self):
         events = [

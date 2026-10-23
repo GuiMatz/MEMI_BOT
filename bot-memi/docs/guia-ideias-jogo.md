@@ -171,8 +171,10 @@ As dez formações disponíveis são 4-4-2, 4-3-3, 3-5-2, 4-2-3-1, 5-3-2,
 4-1-4-1, 3-4-3, 4-5-1, 5-4-1 e 4-3-2-1; cada uma define onze posições
 compatíveis com o catálogo atual.
 
-Estilos implementados: equilibrado, ataque total (multiplicadores 1,10 para o
-próprio xG e 1,06 para o xG adversário) e contra-ataque (1,03 e 0,96). Capitão
+Estilos implementados: equilibrado, ataque total, contra-ataque, pressão alta e
+retranca, em ciclo de pedra-papel-tesoura (cada um vence dois e perde para dois;
+quem vence cria 4% mais chances e o outro, 4% menos). A vantagem é leve: muda o
+jogo entre times parecidos, mas não vira partida contra time bem mais forte. Capitão
 e batedor de falta são registrados; não há eventos de falta. O batedor de
 pênalti é priorizado em disputa por pênaltis.
 

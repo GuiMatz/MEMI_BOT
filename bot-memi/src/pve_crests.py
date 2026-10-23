@@ -20,7 +20,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-from src.db import DATABASE_PATH, normalize_player_name
+from src.db import DATABASE_PATH, ROOT, normalize_player_name
 from src.encyclopedia import COUNTRIES_EN
 from src.roll_images import PHOTO_ROOT
 
@@ -28,6 +28,9 @@ LOGGER = logging.getLogger("memi.pve_crests")
 FOLDER = "selecoes"
 CLUB_FOLDER = "lendas_clubes"
 PUBLIC_KEY = "123"
+# Os escudos de todos os times lendários já vêm no repositório (conferidos um a um): o bot
+# não depende de internet nem do TheSportsDB para mostrá-los. A busca fica para times novos.
+BUNDLED = ROOT / "assets" / "escudos"
 # Clube lendário -> nome exato do clube no TheSportsDB (todos conferidos, do Brasil).
 CLUB_SEARCH = {
     "Flamengo": "Flamengo",
@@ -85,7 +88,11 @@ def _sportsdb_badge(name: str, country: str | None = None) -> str | None:
 
 
 def _cached_crest(folder: str, slug: str, name: str, country: str | None) -> str | None:
-    """Escudo já baixado em `folder/slug.*` ou baixado agora; None se não deu."""
+    """Escudo que vem no repositório, já baixado em `folder/slug.*` ou baixado agora.
+
+    None se não deu."""
+    for bundled in sorted((BUNDLED / folder).glob(f"{slug}.*")):
+        return bundled.relative_to(ROOT).as_posix()
     for existing in sorted((PHOTO_ROOT / folder).glob(f"{slug}.*")):
         return (Path(folder) / existing.name).as_posix()
     if f"{folder}/{slug}" in _failed:
@@ -118,6 +125,8 @@ def national_crest(country: str) -> str | None:
 
 def world_crest() -> str:
     """Escudo da Seleção Mundial: globo dourado com estrela, desenhado uma vez."""
+    if (BUNDLED / FOLDER / "selecao-mundial.png").is_file():
+        return (BUNDLED / FOLDER / "selecao-mundial.png").relative_to(ROOT).as_posix()
     relative = Path(FOLDER) / "selecao-mundial.png"
     path = PHOTO_ROOT / relative
     if path.is_file():

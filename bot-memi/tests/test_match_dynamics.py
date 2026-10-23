@@ -4,7 +4,7 @@ from collections import Counter
 from dataclasses import asdict
 
 from src.narration import _line, match_embed
-from src.simulation import simulate_match
+from src.simulation import penalty_shootout_kicks, simulate_match
 from src.teams import FORMATIONS
 
 
@@ -49,14 +49,18 @@ class MatchDynamicsTests(unittest.TestCase):
         self.assertGreater(late, early * 1.3)
 
     def test_a_red_card_hurts_the_team_that_gets_it(self):
+        # Amostra própria e maior: expulsão no 1º tempo é rara, e com poucos jogos o
+        # resultado oscila demais.
+        results = play_many(4000, seed=99, home_advantage=True)
+        overall = sum(r.home_goals - r.away_goals for r in results) / len(results)
         scored_with_ten, games = 0, 0
-        for result in self.results:
+        for result in results:
             reds = [event for event in result.events if event.kind == "red"]
             if reds and reds[0].side == "home" and reds[0].minute <= 45:
                 games += 1
                 scored_with_ten += result.home_goals - result.away_goals
-        self.assertGreater(games, 5)
-        self.assertLess(scored_with_ten / games, 0)
+        self.assertGreater(games, 30)
+        self.assertLess(scored_with_ten / games, overall - 0.3)
 
     def test_sent_off_player_does_not_appear_again(self):
         for result in self.results:
@@ -116,6 +120,18 @@ class MatchDynamicsTests(unittest.TestCase):
             self.assertEqual(stats["best"]["rating"], max(ratings))
             self.assertTrue(all(3 <= value <= 10 for value in ratings))
             self.assertEqual(result.events[-1].stats, stats)
+
+
+class ShootoutTests(unittest.TestCase):
+    def test_conversion_is_realistic_and_long_shootouts_are_rare(self):
+        rng = random.Random(5)
+        shootouts = [penalty_shootout_kicks(HOME, AWAY, rng=rng) for _ in range(3000)]
+        kicks = [kick for shootout in shootouts for kick in shootout]
+        conversion = sum(kick.scored for kick in kicks) / len(kicks)
+        self.assertGreater(conversion, 0.68)  # futebol real: ~70-76% nas disputas
+        self.assertLess(conversion, 0.76)
+        long = sum(len(shootout) >= 16 for shootout in shootouts) / len(shootouts)
+        self.assertLess(long, 0.10)  # 8+ cobranças por time
 
 
 class DynamicNarrationTests(unittest.TestCase):

@@ -267,7 +267,7 @@ CREATE TABLE IF NOT EXISTS team_tactics (
         ON DELETE CASCADE,
     formation TEXT NOT NULL DEFAULT '4-3-3',
     style TEXT NOT NULL DEFAULT 'balanced'
-        CHECK (style IN ('balanced', 'attack', 'counter')),
+        CHECK (style IN ('balanced', 'attack', 'counter', 'press', 'park')),
     captain_player_id INTEGER REFERENCES players(id) ON DELETE SET NULL,
     free_kick_player_id INTEGER REFERENCES players(id) ON DELETE SET NULL,
     penalty_player_id INTEGER REFERENCES players(id) ON DELETE SET NULL
@@ -660,6 +660,7 @@ def initialize_database(database_path: str | Path = DATABASE_PATH) -> None:
                 )
 
         _migrate_roll_cycle_limit(connection)
+        _migrate_team_styles(connection)
         ownership_columns = {
             row["name"] for row in connection.execute("PRAGMA table_info(player_ownership)")
         }
@@ -891,6 +892,38 @@ def _migrate_player_overall_100(connection: sqlite3.Connection) -> None:
     names = ", ".join(transferable)
     connection.execute(f"INSERT INTO players ({names}) SELECT {names} FROM players_v10")
     connection.execute("DROP TABLE players_v10")
+
+
+def _migrate_team_styles(connection: sqlite3.Connection) -> None:
+    """Libera os estilos pressão alta (`press`) e retranca (`park`) em team_tactics.
+
+    O SQLite não muda CHECK: recria a tabela com a regra nova e copia tudo."""
+    row = connection.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'team_tactics'"
+    ).fetchone()
+    if row is None or "'park'" in row["sql"]:
+        return
+    connection.execute("ALTER TABLE team_tactics RENAME TO team_tactics_v_estilos")
+    connection.execute("""
+        CREATE TABLE team_tactics (
+            discord_user_id TEXT PRIMARY KEY REFERENCES game_teams(discord_user_id)
+                ON DELETE CASCADE,
+            formation TEXT NOT NULL DEFAULT '4-3-3',
+            style TEXT NOT NULL DEFAULT 'balanced'
+                CHECK (style IN ('balanced', 'attack', 'counter', 'press', 'park')),
+            captain_player_id INTEGER REFERENCES players(id) ON DELETE SET NULL,
+            free_kick_player_id INTEGER REFERENCES players(id) ON DELETE SET NULL,
+            penalty_player_id INTEGER REFERENCES players(id) ON DELETE SET NULL
+        )
+        """)
+    connection.execute("""
+        INSERT INTO team_tactics (discord_user_id, formation, style, captain_player_id,
+                                  free_kick_player_id, penalty_player_id)
+        SELECT discord_user_id, formation, style, captain_player_id,
+               free_kick_player_id, penalty_player_id
+        FROM team_tactics_v_estilos
+        """)
+    connection.execute("DROP TABLE team_tactics_v_estilos")
 
 
 def _migrate_roll_cycle_limit(connection: sqlite3.Connection) -> None:

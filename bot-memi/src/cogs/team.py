@@ -430,9 +430,11 @@ async def open_customize(owner: discord.abc.User, database_path, send) -> None:
 
 
 STYLE_HINTS = {
-    "balanced": "Sem bônus nem riscos",
-    "attack": "Cria mais chances, mas se expõe atrás",
-    "counter": "Cria menos, converte melhor e cede menos",
+    "balanced": "Organizado · vence contra-ataque e retranca",
+    "attack": "Cria mais e se expõe · vence equilibrado e retranca",
+    "counter": "Espera e sai rápido · vence ataque total e pressão alta",
+    "press": "Rouba a bola no campo deles · vence equilibrado e ataque total",
+    "park": "Fecha tudo atrás · vence contra-ataque e pressão alta",
 }
 ROLE_COLUMNS = {
     "capitao": "captain_player_id",

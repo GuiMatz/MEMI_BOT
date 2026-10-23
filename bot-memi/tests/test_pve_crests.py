@@ -3,8 +3,13 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from PIL import Image
+
 from src import pve_crests
 from src.db import initialize_database
+from src.pve import legend_teams
+from src.roll_images import find_image
+from src.visual import contain
 
 
 class PveCrestTests(unittest.TestCase):
@@ -14,12 +19,18 @@ class PveCrestTests(unittest.TestCase):
         self.photos = root / "photos"
         self.database_path = root / "c.sqlite"
         initialize_database(self.database_path)
-        self.patch = patch.object(pve_crests, "PHOTO_ROOT", self.photos)
-        self.patch.start()
+        # Sem os escudos do repositório, para testar a busca e o cache.
+        self.patches = [
+            patch.object(pve_crests, "PHOTO_ROOT", self.photos),
+            patch.object(pve_crests, "BUNDLED", root / "sem-escudos"),
+        ]
+        for item in self.patches:
+            item.start()
         pve_crests._failed.clear()
 
     def tearDown(self):
-        self.patch.stop()
+        for item in self.patches:
+            item.stop()
         self.tempdir.cleanup()
 
     def test_club_crest_takes_the_exact_brazilian_club(self):
@@ -92,6 +103,28 @@ class PveCrestTests(unittest.TestCase):
         path = pve_crests.crest_for("mundial", self.database_path)
         self.assertEqual(path, "selecoes/selecao-mundial.png")
         self.assertTrue((self.photos / path).is_file())
+
+
+class BundledCrestTests(unittest.TestCase):
+    def test_every_legend_team_has_its_crest_in_the_repo_without_internet(self):
+        with (
+            tempfile.TemporaryDirectory() as folder,
+            patch.object(pve_crests, "PHOTO_ROOT", Path(folder)),
+            patch.object(pve_crests, "_sportsdb_badge", side_effect=AssertionError("rede")),
+        ):
+            for team in legend_teams():
+                path = pve_crests.crest_for(team.key)
+                self.assertTrue(path and path.startswith("assets/escudos/"), team.key)
+                self.assertIsNotNone(find_image(path), team.key)
+
+
+class ContainTests(unittest.TestCase):
+    def test_small_crest_with_empty_border_fills_the_space(self):
+        picture = Image.new("RGBA", (100, 100), (0, 0, 0, 0))
+        picture.paste(Image.new("RGBA", (20, 30), (200, 0, 0, 255)), (40, 35))
+        fitted = contain(picture, (210, 210))
+        self.assertEqual(fitted.size, (210, 210))
+        self.assertEqual(fitted.getchannel("A").getbbox()[1::2], (0, 210))  # altura toda
 
 
 if __name__ == "__main__":
