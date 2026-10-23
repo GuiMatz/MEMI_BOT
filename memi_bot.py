@@ -3722,6 +3722,7 @@ AJUDA_JOGO = [
             ),
             ("mm!crates [epica] [1|5|10]", "caixas: rolls guardados, cosméticos, bônus e upgrades"),
             ("mm!pacote [epico]", "uma carta de jogador livre do mercado (nunca Base)"),
+            ("mm!allin", "aposta de 50 mil: roleta com 1 chance em 10 de Ícone ou melhor"),
             (
                 "mm!construir [1-12] / mm!destruir",
                 "Centro de Treinamento: torre de upgrades eternos",

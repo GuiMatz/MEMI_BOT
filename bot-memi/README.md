@@ -288,7 +288,10 @@ O FUT.AE é um módulo do MeMi BOT, não um bot separado. O menu geral continua 
 - `mm!shop` (ou `mm!loja`) mostra tudo o que dá para comprar, com botões: caixas, pacotes,
   upgrades e torre. As versões épicas custam mais e rendem melhor: a **caixa épica**
   (`mm!crates epica [1|5|10]`, 5× a caixa) sempre traz um item extra, Raro ou melhor em 75%;
-  o **pacote épico** (`mm!pacote epico`, 5.000) só traz Raro ou melhor, com chance de Ícone.
+  o **pacote épico** (`mm!pacote epico`, 10.000) só traz Raro ou melhor, com 2% de Ícone.
+- `mm!allin` é uma aposta de 50.000: uma roleta de 20 fatias gira em GIF e, quando para,
+  vira a carta. 2 fatias douradas dão Ícone ou melhor (1 em 10); as outras, uma carta como
+  a do pacote comum. Sem Ícone livre no mercado, não gira e não cobra.
 - `mm!topi` mostra o top dos jogadores em cartas (◀ ▶ e lista).
 - `mm!semfoto [meus]` mostra os jogadores sem foto, do maior overall para o menor, um
   por vez: **📷 Enviar foto** salva a imagem (já vira a foto da carta) e passa para o

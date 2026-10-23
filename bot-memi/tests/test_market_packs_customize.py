@@ -2,6 +2,7 @@ import random
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
+from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -20,7 +21,17 @@ from src.economy import (
 )
 from src.game import claim_player, get_wallet, register_user
 from src.ratings import game_overall
-from src.packs import EPIC_PACK_ODDS, EPIC_PACK_PRICE, PACK_PRICE, PackError, open_pack
+from src.packs import (
+    ALL_IN_PRICE,
+    ALL_IN_TOP,
+    ALL_IN_WHEEL,
+    EPIC_PACK_ODDS,
+    EPIC_PACK_PRICE,
+    PACK_PRICE,
+    PackError,
+    open_all_in,
+    open_pack,
+)
 from src.teams import ensure_team, get_team, set_lineup_slot
 from src.transactions import (
     PACK_SALE_FACTOR,
@@ -201,6 +212,88 @@ class OpenPackTests(Case):
             values = [sale_value(overall) * PACK_SALE_FACTOR for overall in range(low, high + 1)]
             expected += chance * sum(values) / len(values)
         self.assertLess(expected, EPIC_PACK_PRICE)
+
+
+class FixedWheel(random.Random):
+    """Para a roleta na fatia `slot`; o resto do sorteio pega sempre o primeiro."""
+
+    def __init__(self, slot):
+        super().__init__(0)
+        self.slot = slot
+
+    def randrange(self, n):
+        return self.slot if n == len(ALL_IN_WHEEL) else 0
+
+    def choices(self, population, weights=None, k=1):
+        return [population[0]] * k
+
+
+class AllInTests(Case):
+    def test_wheel_is_one_in_ten_for_icon_or_better(self):
+        gold = sum(1 for tier in ALL_IN_WHEEL if tier in ALL_IN_TOP)
+        self.assertEqual(gold / len(ALL_IN_WHEEL), 0.1)
+        self.assertEqual(min(ALL_IN_TOP), 6)  # 6 = Ícone
+
+    def test_without_a_free_icon_the_wheel_does_not_spin_or_charge(self):
+        self.add_player("Comum", 45)
+        self.set_memilets(100, ALL_IN_PRICE)
+        with self.assertRaises(PackError) as error:
+            open_all_in(100, "Pessoa A", self.database_path, rng=FixedWheel(0))
+        self.assertIn("Nada foi cobrado", str(error.exception))
+        self.assertEqual(self.memilets(100), ALL_IN_PRICE)
+
+    def test_gold_slice_gives_an_icon_and_other_slices_a_common_card(self):
+        common = self.add_player("Comum", 45)
+        icon = self.add_player("Ícone", 96)
+        self.set_memilets(100, ALL_IN_PRICE * 2)
+        gold = ALL_IN_WHEEL.index(6)
+        result = open_all_in(100, "Pessoa A", self.database_path, rng=FixedWheel(gold))
+        self.assertEqual(
+            (result.player["id"], result.slot, result.price), (icon, gold, ALL_IN_PRICE)
+        )
+        self.add_player("Outro Ícone", 95)  # precisa haver Ícone livre para girar
+        result = open_all_in(100, "Pessoa A", self.database_path, rng=FixedWheel(0))
+        self.assertEqual(result.player["id"], common)
+        self.assertEqual(self.memilets(100), 0)
+
+    def test_wheel_gif_spins_and_holds_on_the_last_frame(self):
+        from PIL import Image
+
+        from src.crate_animation import HOLD_MS, all_in_wheel_gif
+        from src.lineup_image import TIER_COLORS
+
+        data = all_in_wheel_gif(
+            ALL_IN_WHEEL, 5, TIER_COLORS, {i: str(i) for i in range(9)}, top_label="ÍCONE"
+        )
+        image = Image.open(BytesIO(data))
+        self.assertGreater(image.n_frames, 30)
+        image.seek(image.n_frames - 1)
+        self.assertGreaterEqual(image.info["duration"], HOLD_MS)  # o Pillow junta quadros iguais
+
+    def test_spin_then_the_message_becomes_the_card(self):
+        import asyncio
+        from unittest.mock import AsyncMock, patch
+
+        import discord
+
+        from src.cogs import economy as cog_module
+        from src.cogs.economy import EconomyCog
+
+        self.add_player("Ícone", 96)
+        self.add_player("Comum", 45)
+        self.set_memilets(100, ALL_IN_PRICE)
+        cog = EconomyCog(SimpleNamespace(database_path=self.database_path))
+        author = SimpleNamespace(id=100, display_name="Pessoa A")
+        card = (discord.Embed(title="carta"), b"GIF89a")
+        send, edit = AsyncMock(), AsyncMock()
+        with (
+            patch.object(cog_module, "all_in_wheel_gif", lambda *a, **k: b"GIF89a"),
+            patch.object(cog_module, "ALL_IN_SPIN_SECONDS", 0),
+            patch.object(EconomyCog, "card_reveal", AsyncMock(return_value=card)),
+        ):
+            asyncio.run(cog.all_in_with_animation(author, send, edit))
+        self.assertEqual(send.call_args.kwargs["file"].filename, "roleta.gif")
+        self.assertEqual(edit.call_args.kwargs["embed"].title, "carta")
 
 
 class CrateBatchTests(Case):

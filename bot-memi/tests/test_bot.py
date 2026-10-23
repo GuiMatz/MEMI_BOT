@@ -39,6 +39,7 @@ class DiscordBotSetupTests(unittest.IsolatedAsyncioTestCase):
                         "troca",
                         "pacote",
                         "shop",
+                        "allin",
                         "time",
                         "personalizar",
                         "escudo",

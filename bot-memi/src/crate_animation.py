@@ -513,3 +513,120 @@ def _rarity_pills(draw, counts: dict[str, int], *, center_x: float, y: float) ->
         draw.rounded_rectangle((x, y - 14, x + width, y + 14), 14, outline=(*color, 255), width=2)
         draw.text((x + width / 2, y + 1), text, font=face, fill=(*color, 255), anchor="mm")
         x += width + gap
+
+
+# --- Roleta do all-in ---------------------------------------------------------------------
+#
+# A roleta gira, desacelera e para com a seta na fatia sorteada; aí a fatia acende na cor
+# da série e o nome dela aparece embaixo. Cada fatia tem a cor da série que dá (as
+# douradas, com estrela, são Ícone ou melhor).
+
+WHEEL_SIZE = (560, 560)
+WHEEL_RADIUS = 200
+WHEEL_CENTER = (280, 300)
+SPIN_FRAMES = 56
+SETTLE_FRAMES = 22
+SPIN_TURNS = 5
+
+
+def _wheel_face(slices: tuple[int, ...], colors, lit: int | None = None) -> Image.Image:
+    """O disco parado, com a fatia 0 começando na seta (em cima), desenhado em 2x.
+
+    Fatias comuns ficam escuras, só com a borda na cor da série; as do topo (Ícone ou
+    melhor) e a fatia `lit` (onde a roleta parou) vêm na cor cheia."""
+    scale = 2
+    size = WHEEL_RADIUS * 2 * scale
+    face = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(face)
+    step = 360 / len(slices)
+    box = (0, 0, size - 1, size - 1)
+    rim = int(size * 0.07)
+    inner = (rim, rim, size - 1 - rim, size - 1 - rim)
+    for index, tier in enumerate(slices):
+        start = -90 + index * step
+        draw.pieslice(box, start, start + step, fill=(*colors[tier], 255))
+        if tier < 6 and index != lit:
+            muted = mix(BACKGROUND, colors[tier], 0.22 if index % 2 else 0.3)
+            draw.pieslice(inner, start, start + step, fill=(*muted, 255))
+    center = size / 2
+    for index in range(len(slices)):
+        angle = math.radians(-90 + index * step)
+        end = (center + center * math.cos(angle), center + center * math.sin(angle))
+        draw.line((center, center, *end), fill=(*BACKGROUND, 255), width=3 * scale)
+    for index, tier in enumerate(slices):
+        if tier >= 6:
+            angle = math.radians(-90 + (index + 0.5) * step)
+            spot = (
+                center + center * 0.74 * math.cos(angle),
+                center + center * 0.74 * math.sin(angle),
+            )
+            draw.polygon(star(*spot, 15 * scale, 6 * scale), fill=(255, 255, 255, 255))
+    draw.ellipse(box, outline=(*BACKGROUND, 255), width=6 * scale)
+    hub = 46 * scale
+    draw.ellipse(
+        (center - hub, center - hub, center + hub, center + hub),
+        fill=(*BACKGROUND, 255),
+        outline=(*GOLD, 255),
+        width=3 * scale,
+    )
+    return face.resize((WHEEL_RADIUS * 2, WHEEL_RADIUS * 2), Image.LANCZOS)
+
+
+def all_in_wheel_gif(
+    slices: tuple[int, ...], slot: int, colors, labels: dict[int, str], *, top_label: str
+) -> bytes:
+    """A roleta girando até parar em `slot`. `colors[série]` pinta as fatias; `labels` dá o
+    nome que aparece no fim (as séries do topo usam `top_label`)."""
+    width, height = WHEEL_SIZE
+    face = _wheel_face(slices, colors)
+    lit_face = _wheel_face(slices, colors, lit=slot)
+    step = 360 / len(slices)
+    # Gira no sentido horário e para com o centro da fatia (com um desvio pequeno) na seta.
+    jitter = (random.Random(slot * 7919).random() - 0.5) * step * 0.6
+    final = SPIN_TURNS * 360 + (-(slot + 0.5) * step) % 360 + jitter
+    tier = slices[slot]
+    color = colors[tier]
+    label = top_label if tier >= 6 else labels[tier]
+
+    base = Image.new("RGBA", (width, height), (*BACKGROUND, 255))
+    _tracked(ImageDraw.Draw(base), (width / 2, 34), "ALL-IN", 24, (*GOLD, 255), 8)
+    left = (WHEEL_CENTER[0] - WHEEL_RADIUS, WHEEL_CENTER[1] - WHEEL_RADIUS)
+
+    def pointer(draw, fill) -> None:
+        tip_y = WHEEL_CENTER[1] - WHEEL_RADIUS + 18
+        draw.polygon(
+            [(width / 2 - 16, tip_y - 34), (width / 2 + 16, tip_y - 34), (width / 2, tip_y)],
+            fill=fill,
+            outline=(*BACKGROUND, 255),
+        )
+
+    def frame(angle: float, light: float, text_alpha: float) -> Image.Image:
+        image = base.copy()
+        disc = face.rotate(-angle, Image.BICUBIC)
+        if light:
+            # A fatia sorteada acende, pulsando entre a cor cheia e o disco normal.
+            lit = lit_face.rotate(-angle, Image.BICUBIC)
+            disc = Image.blend(disc, lit, light)
+        image.alpha_composite(disc, left)
+        draw = ImageDraw.Draw(image)
+        draw.text(WHEEL_CENTER, "50K", font=font(26, True), fill=(*GOLD, 255), anchor="mm")
+        pointer(draw, (255, 255, 255, 255))
+        if text_alpha:
+            text = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+            _tracked(ImageDraw.Draw(text), (width / 2, height - 30), label, 24, (*color, 255), 6)
+            image.alpha_composite(_faded_layer(text, text_alpha))
+        return image
+
+    frames, durations = [], []
+    for index in range(SPIN_FRAMES):
+        t = index / (SPIN_FRAMES - 1)
+        eased = 1 - (1 - t) ** 4  # começa rápido e para devagar
+        frames.append(frame(final * eased, 0.0, 0.0))
+        durations.append(40 + int(70 * t**3))
+    for index in range(SETTLE_FRAMES):
+        t = index / (SETTLE_FRAMES - 1)
+        pulse = 0.55 + 0.45 * math.cos(t * 4 * math.pi)  # pisca 2 vezes e fica acesa
+        frames.append(frame(final, pulse, min(1.0, t * 3)))
+        durations.append(70)
+    durations[-1] = HOLD_MS
+    return _gif([image.convert("RGB") for image in frames], durations, loop=False)

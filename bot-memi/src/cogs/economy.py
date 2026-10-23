@@ -14,7 +14,8 @@ from src.db import DATABASE_PATH, normalize_player_name
 from src.accents import rarity_color
 from src.card_image import render_player_card
 from src.cosmetics import COSMETIC_KINDS, list_owned
-from src.crate_animation import PrizeTile, card_reveal_gif, prize_gif
+from src.crate_animation import PrizeTile, all_in_wheel_gif, card_reveal_gif, prize_gif
+from src.lineup_image import TIER_COLORS
 from src.economy import (
     CRATE_BATCHES,
     CRATE_DOUBLE_CHANCE,
@@ -40,8 +41,18 @@ from src.economy import (
     open_crates,
     reset_claim,
 )
-from src.packs import EPIC_PACK_PRICE, PACK_PRICE, PackError, open_pack, pack_odds_text
-from src.ratings import rarity_label
+from src.packs import (
+    ALL_IN_PRICE,
+    ALL_IN_TOP,
+    ALL_IN_WHEEL,
+    EPIC_PACK_PRICE,
+    PACK_PRICE,
+    PackError,
+    open_all_in,
+    open_pack,
+    pack_odds_text,
+)
+from src.ratings import RARITY_TIERS, rarity_label
 from src.transactions import PACK_LOCK, PACK_SALE_FACTOR
 from src.cogs.common import ConfirmView, PlayerChoiceView, ambiguity_text, intro_embed
 from src.game import find_player, get_wallet, register_user
@@ -110,6 +121,14 @@ EPIC_PACK_INTRO = (
     "Como no pacote comum, a carta pode ser vendida na hora por {factor}% do valor e fica "
     "{days} dias sem poder ser doada ou trocada."
 )
+ALL_IN_INTRO = (
+    "**Uma aposta, não um investimento.** A roleta tem {top} de chance de parar numa "
+    "fatia dourada e dar um **Ícone ou melhor**. Nas outras, sai uma carta como a do "
+    "pacote comum. Se não houver nenhum Ícone livre no mercado, a roleta não gira e nada "
+    "é cobrado. A carta vem marcada como de pacote (vende na hora por 50%)."
+)
+# Tempo da roleta no GIF (giro + a fatia piscando) antes de a mensagem virar a carta.
+ALL_IN_SPIN_SECONDS = 6
 PACK_INTRO = (
     "O pacote traz **uma carta de jogador** livre do mercado, direto para o seu elenco. "
     "Nunca vem Base. A carta de pacote pode ser vendida na hora, por {factor}% do valor, e "
@@ -277,6 +296,14 @@ class ShopView(CrateMenuView):
         )
         upgrades.callback = self._upgrades
         self.add_item(upgrades)
+        all_in = discord.ui.Button(
+            label=f"All-in ({_thousands(ALL_IN_PRICE)})",
+            emoji="🎰",
+            style=discord.ButtonStyle.danger,
+            row=2,
+        )
+        all_in.callback = self._all_in
+        self.add_item(all_in)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.author.id:
@@ -289,6 +316,12 @@ class ShopView(CrateMenuView):
     async def _upgrades(self, interaction: discord.Interaction) -> None:
         embed, view = self.cog.upgrade_menu(interaction.user)
         await interaction.response.send_message(embed=embed, view=view)
+
+    async def _all_in(self, interaction: discord.Interaction) -> None:
+        # 50 mil: sempre passa pelo aviso e pela confirmação.
+        embed, view = self.cog.all_in_prompt(interaction.user)
+        await interaction.response.send_message(embed=embed, view=view)
+        view.message = await interaction.original_response()
 
 
 class EconomyCog(commands.Cog):
@@ -410,6 +443,11 @@ class EconomyCog(commands.Cog):
         )
         levels = get_upgrade_levels(author.id, self.database_path)
         open_upgrades = sum(1 for key, spec in UPGRADES.items() if levels[key] < spec.limit)
+        embed.add_field(
+            name=f"🎰 All-in · {icons.memilets(ALL_IN_PRICE)}",
+            value="Uma aposta: roleta com 1 chance em 10 de Ícone ou melhor · `mm!allin`",
+            inline=False,
+        )
         embed.add_field(
             name="🛒 Upgrades",
             value=(
@@ -720,20 +758,26 @@ class EconomyCog(commands.Cog):
         except PackError as error:
             await send(embed=discord.Embed(description=str(error), color=discord.Color.red()))
             return
-        player = result.player
-        overall = int(player["effective_overall"] or 0)
         waiting = discord.Embed(
             title=f"🃏 Abrindo o pacote{' épico' if epic else ''}…",
             color=discord.Color.from_rgb(230, 181, 74),
         )
         message = await send(embed=waiting)
+        embed, reveal = await self.card_reveal(author, result, "PACOTE ÉPICO" if epic else "PACOTE")
+        target = edit if edit is not None else message.edit
+        await target(embed=embed, attachments=[discord.File(BytesIO(reveal), "pacote.gif")])
+
+    async def card_reveal(self, author, result, headline: str) -> tuple[discord.Embed, bytes]:
+        """Embed e GIF da carta que saiu num pacote ou no all-in."""
+        player = result.player
+        overall = int(player["effective_overall"] or 0)
         label = rarity_label(overall)
         card = await asyncio.to_thread(render_player_card, {**player, "effective_overall": overall})
         reveal = await asyncio.to_thread(
             card_reveal_gif,
             Image.open(card),
             rarity_color(overall).to_rgb(),
-            f"PACOTE{' ÉPICO' if epic else ''} · {label.split(' ', 1)[-1].upper()}",
+            f"{headline} · {label.split(' ', 1)[-1].upper()}",
         )
         name = player.get("display_name") or player["name"]
         embed = discord.Embed(
@@ -751,8 +795,81 @@ class EconomyCog(commands.Cog):
         embed.add_field(name="Pagou", value=f"{icons.memilets(result.price)}")
         embed.add_field(name="Saldo", value=f"{icons.memilets(balance)} Memilets")
         embed.set_image(url="attachment://pacote.gif")
+        return embed, reveal
+
+    def all_in_prompt(self, author: discord.abc.User) -> tuple[discord.Embed, ConfirmView]:
+        """Aviso do all-in (é uma aposta) com o botão de girar."""
+        top = sum(1 for tier in ALL_IN_WHEEL if tier in ALL_IN_TOP) / len(ALL_IN_WHEEL)
+        lines = [ALL_IN_INTRO.format(top=_percent(top)), ""]
+        for tier in sorted(set(ALL_IN_WHEEL)):
+            if tier in ALL_IN_TOP:
+                continue
+            chance = ALL_IN_WHEEL.count(tier) / len(ALL_IN_WHEEL)
+            lines.append(
+                f"{RARITY_TIERS[tier][1]} **{RARITY_TIERS[tier][0]}** · {_percent(chance)}"
+            )
+        lines.append(
+            f"⭐ **Ícone ou melhor** · {_percent(top)} ("
+            + ", ".join(
+                f"{RARITY_TIERS[tier][0]} {_percent(top * w)}" for tier, w in ALL_IN_TOP.items()
+            )
+            + ")"
+        )
+        embed = intro_embed(
+            "🎰 All-in", "\n".join(lines), color=discord.Color.from_rgb(230, 181, 74)
+        )
+        balance = get_wallet(author.id, self.database_path)["memilets"]
+        embed.add_field(name="Preço", value=f"{icons.memilets(ALL_IN_PRICE)}")
+        embed.add_field(name="Saldo", value=f"{icons.memilets(balance)} Memilets")
+
+        async def spin(interaction: discord.Interaction) -> None:
+            await self.all_in_with_animation(
+                interaction.user,
+                interaction.response.send_message,
+                interaction.edit_original_response,
+            )
+
+        view = ConfirmView(
+            author.id,
+            spin,
+            confirm_label=f"Girar ({_thousands(ALL_IN_PRICE)})",
+            cancel_text="All-in cancelado.",
+        )
+        return embed, view
+
+    async def all_in_with_animation(self, author, send, edit) -> None:
+        """A roleta gira e, quando para, a mensagem vira a revelação da carta."""
+        try:
+            result = await asyncio.to_thread(
+                open_all_in, author.id, author.display_name, self.database_path
+            )
+        except PackError as error:
+            await send(embed=discord.Embed(description=str(error), color=discord.Color.red()))
+            return
+        labels = {index: tier[0].upper() for index, tier in enumerate(RARITY_TIERS)}
+        wheel = await asyncio.to_thread(
+            all_in_wheel_gif,
+            ALL_IN_WHEEL,
+            result.slot,
+            TIER_COLORS,
+            labels,
+            top_label="ÍCONE OU MELHOR",
+        )
+        spinning = discord.Embed(
+            title="🎰 All-in · girando…", color=discord.Color.from_rgb(230, 181, 74)
+        )
+        spinning.set_image(url="attachment://roleta.gif")
+        message = await send(embed=spinning, file=discord.File(BytesIO(wheel), "roleta.gif"))
+        embed, reveal = await self.card_reveal(author, result, "ALL-IN")
+        await asyncio.sleep(ALL_IN_SPIN_SECONDS)
         target = edit if edit is not None else message.edit
         await target(embed=embed, attachments=[discord.File(BytesIO(reveal), "pacote.gif")])
+
+    @commands.command(name="allin", aliases=["all-in", "aposta"])
+    async def all_in(self, context: commands.Context) -> None:
+        register_user(context.author.id, context.author.display_name, self.database_path)
+        embed, view = self.all_in_prompt(context.author)
+        view.message = await context.reply(embed=embed, view=view, mention_author=False)
 
     @commands.command(name="crates", aliases=["crate", "caixa", "caixas"])
     async def crates(
