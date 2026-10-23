@@ -314,6 +314,27 @@ class CrateBatchTests(Case):
             open_crates(100, "Pessoa A", 7, self.database_path)
         self.assertLessEqual(get_crate_pity(100, self.database_path), CRATE_PITY_LIMIT)
 
+    def test_raro_every_15_and_epico_every_50_without_luck(self):
+        from src.economy import EPIC_PITY_LIMIT, get_epic_pity, open_crate
+
+        class Unlucky(random.Random):
+            def random(self):
+                return 0.99  # nunca sai item extra por sorte
+
+        self.add_player("Atacante")
+        self.assertEqual((CRATE_PITY_LIMIT, EPIC_PITY_LIMIT), (15, 50))
+        self.set_memilets(100, CRATE_PRICE * EPIC_PITY_LIMIT)
+        results = [
+            open_crate(100, "Pessoa A", self.database_path, rng=Unlucky(1))
+            for _ in range(EPIC_PITY_LIMIT)
+        ]
+        raro = [index + 1 for index, result in enumerate(results) if result.guaranteed]
+        self.assertEqual(raro, [15, 30, 45])
+        self.assertTrue(results[-1].guaranteed_epic)
+        self.assertEqual(results[-1].best_rarity, "epico")
+        self.assertEqual(results[-2].epic_pity, EPIC_PITY_LIMIT - 1)
+        self.assertEqual(get_epic_pity(100, self.database_path), 0)
+
     def test_batch_lists_every_crate_and_counts_rarities_for_the_gif(self):
         import asyncio
         from unittest.mock import AsyncMock, patch

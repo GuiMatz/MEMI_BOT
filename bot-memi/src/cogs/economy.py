@@ -21,6 +21,7 @@ from src.economy import (
     CRATE_BATCHES,
     CRATE_DOUBLE_CHANCE,
     CRATE_PITY_LIMIT,
+    EPIC_PITY_LIMIT,
     CRATE_EXTRA_CHANCES,
     CRATE_MEMILETS,
     EPIC_CRATE_EXTRA_CHANCES,
@@ -37,6 +38,7 @@ from src.economy import (
     describe_prize,
     get_account_status,
     get_crate_pity,
+    get_epic_pity,
     get_crate_price,
     get_upgrade_cost,
     get_upgrade_levels,
@@ -562,6 +564,7 @@ class EconomyCog(commands.Cog):
     def crate_menu(self, author: discord.abc.User) -> tuple[discord.Embed, CrateMenuView]:
         price = get_crate_price(author.id, self.database_path)
         pity = get_crate_pity(author.id, self.database_path)
+        epic_pity = get_epic_pity(author.id, self.database_path)
         embed = intro_embed("📦 Crates", CRATES_INTRO, color=discord.Color.orange())
         lines = [
             f"{RARITY_STYLE['basico'][0]} **Básico** · sempre vem\n"
@@ -582,8 +585,11 @@ class EconomyCog(commands.Cog):
         embed.add_field(name="Preço", value=f"{icons.memilets(price)} por caixa")
         embed.add_field(name="Saldo", value=f"{icons.memilets(balance)} Memilets")
         embed.add_field(
-            name="🛡️ Garantia de Raro",
-            value=f"**{pity}/{CRATE_PITY_LIMIT}** · faltam {CRATE_PITY_LIMIT - pity} caixas",
+            name="🛡️ Garantias",
+            value=(
+                f"Raro **{pity}/{CRATE_PITY_LIMIT}** · faltam {CRATE_PITY_LIMIT - pity}\n"
+                f"Épico **{epic_pity}/{EPIC_PITY_LIMIT}** · faltam {EPIC_PITY_LIMIT - epic_pity}"
+            ),
         )
         epic_odds = " · ".join(
             f"{RARITY_STYLE[rarity][0]} {_percent(EPIC_CRATE_EXTRA_CHANCES[rarity])}"
@@ -746,6 +752,10 @@ class EconomyCog(commands.Cog):
             )
         if any(result.guaranteed for result in results):
             summary.append(f"🛡️ **Garantia ativada:** {CRATE_PITY_LIMIT} caixas sem Raro, veio um.")
+        if any(result.guaranteed_epic for result in results):
+            summary.append(
+                f"🛡️ **Garantia de Épico:** {EPIC_PITY_LIMIT} caixas sem Épico, veio um."
+            )
         embed = discord.Embed(
             title=f"{emoji} {len(results)} {_crate_noun(len(results), epic)} · "
             f"melhor: {RARITY_LABELS[best]}",
@@ -772,7 +782,8 @@ class EconomyCog(commands.Cog):
         spent = sum(result.price for result in results)
         embed.set_footer(
             text=f"Pagou {spent:,} · saldo {balance:,} Memilets · garantia de Raro "
-            f"{results[-1].pity}/{CRATE_PITY_LIMIT}".replace(",", ".")
+            f"{results[-1].pity}/{CRATE_PITY_LIMIT} · de Épico "
+            f"{results[-1].epic_pity}/{EPIC_PITY_LIMIT}".replace(",", ".")
         )
         return embed
 
@@ -809,6 +820,8 @@ class EconomyCog(commands.Cog):
             )
         if any(result.guaranteed for result in results):
             lines.append(f"🛡️ **Garantia ativada:** {CRATE_PITY_LIMIT} caixas sem Raro, veio um.")
+        if any(result.guaranteed_epic for result in results):
+            lines.append(f"🛡️ **Garantia de Épico:** {EPIC_PITY_LIMIT} caixas sem Épico, veio um.")
         count = len(results)
         embed = discord.Embed(
             title=f"{emoji} {count} {_crate_noun(count, epic)} · melhor: {RARITY_LABELS[best]}",
@@ -820,7 +833,9 @@ class EconomyCog(commands.Cog):
         embed.add_field(name="Pagou", value=f"{icons.memilets(spent)}")
         embed.add_field(name="Saldo", value=f"{icons.memilets(balance)} Memilets")
         embed.add_field(
-            name="🛡️ Garantia de Raro", value=f"{results[-1].pity}/{CRATE_PITY_LIMIT} caixas"
+            name="🛡️ Garantias",
+            value=f"Raro {results[-1].pity}/{CRATE_PITY_LIMIT} · "
+            f"Épico {results[-1].epic_pity}/{EPIC_PITY_LIMIT}",
         )
         if any(prize.kind.startswith("cosmetic:") for prize in prizes):
             embed.set_footer(
