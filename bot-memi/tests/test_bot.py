@@ -36,6 +36,7 @@ class DiscordBotSetupTests(unittest.IsolatedAsyncioTestCase):
                         "vender",
                         "proteger",
                         "dar",
+                        "play",
                         "troca",
                         "pacote",
                         "shop",
@@ -72,5 +73,13 @@ class DiscordBotSetupTests(unittest.IsolatedAsyncioTestCase):
                     },
                 )
                 self.assertIs(bot.get_command("ajudajogo"), bot.get_command("futae"))
+                # mm!ajuda <comando>: aceita alias e mostra uso e exemplos.
+                from src.command_help import COMMAND_HELP, command_help_embed
+
+                embed = command_help_embed(bot, "sw")
+                self.assertEqual(embed.title, "❔ mm!starwish")
+                self.assertIsNone(command_help_embed(bot, "naoexiste"))
+                for name in COMMAND_HELP:  # todo detalhe aponta para um comando de verdade
+                    self.assertIsNotNone(bot.get_command(name), name)
             finally:
                 await bot.close()

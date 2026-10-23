@@ -11,7 +11,8 @@ from discord.ext import commands
 from src import icons
 from src.cosmetics import COSMETIC_KINDS, LABEL_TO_KIND, free_counts, owners_of
 from src.db import DATABASE_PATH, normalize_player_name
-from src.economy import get_account_status
+from src.command_help import command_help_embed
+from src.economy import EconomyError, activate_rolls, get_account_status
 from src.cogs.common import (
     CardPagerView,
     PlayerChoiceView,
@@ -280,6 +281,7 @@ FUTAE_SECTIONS = (
         "`mm!vender` — painel de venda com filtros, seleção em massa e 🔒 (ou `mm!vender <nome>`)\n"
         "`mm!proteger <nome>` — 🔒 tira o jogador de todas as vendas\n"
         "`mm!troca @pessoa` — monta a troca nos menus · `mm!dar @pessoa <jogador|valor>`\n"
+        "`mm!play @pessoa <quantia>` — manda Memilets para outra pessoa\n"
         "`mm!amistoso @pessoa` — partida narrada; o 1º do dia em casa rende renda\n"
         "`mm!campeonato` — campeonato diário; o campeão leva 500 Memilets\n"
         "`mm!temporada [mês]` — tabela do mês · `mm!temporadas` — campeão de cada mês",
@@ -611,6 +613,86 @@ def top_line(index: int, player: dict) -> str:
     return (
         f"`{index:>3}.` **{player['overall']}** — {name} ({player['game_position'] or '—'}){owner}"
     )
+
+
+class AccountHubView(discord.ui.View):
+    """Atalhos do `mm!tu` e da `mm!carteira`: rolar, daily, missões, ativar e inventário.
+
+    Cada botão chama o mesmo código do comando (no cog dele), sem digitar nada."""
+
+    def __init__(self, bot: commands.Bot, owner, status):
+        super().__init__(timeout=300)
+        self.bot = bot
+        self.owner = owner
+        self.stored = status.roll_tokens
+        self._add("Rolar", "🎲", discord.ButtonStyle.success, self._roll)
+        self._add(
+            "Daily",
+            "🎁",
+            discord.ButtonStyle.primary,
+            self._daily,
+            disabled=status.daily_available_at is not None,
+        )
+        self._add("Missões", "🎯", discord.ButtonStyle.secondary, self._missions)
+        if self.stored:
+            self._add(
+                f"Ativar {min(self.stored, 10)} rolls",
+                "📦",
+                discord.ButtonStyle.secondary,
+                self._activate,
+            )
+        self._add("Inventário", "🎒", discord.ButtonStyle.secondary, self._inventory)
+
+    def _add(self, label, emoji, style, callback, *, disabled=False) -> None:
+        button = discord.ui.Button(label=label, emoji=emoji, style=style, disabled=disabled)
+        button.callback = callback
+        self.add_item(button)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner.id:
+            await interaction.response.send_message(
+                "Esses atalhos são de quem abriu. Use `mm!tu` para os seus.", ephemeral=True
+            )
+            return False
+        return True
+
+    async def _roll(self, interaction: discord.Interaction) -> None:
+        await self.bot.get_cog("RollsCog").roll_from_button(interaction)
+
+    async def _daily(self, interaction: discord.Interaction) -> None:
+        content, view = self.bot.get_cog("EconomyCog").daily_reply(interaction.user)
+        await interaction.response.send_message(content, **({"view": view} if view else {}))
+
+    async def _missions(self, interaction: discord.Interaction) -> None:
+        from src.cogs.club import MissionsView
+
+        club = self.bot.get_cog("ClubCog")
+        await interaction.response.defer(thinking=True)
+        embed, file = await club.missions_message(interaction.user)
+        await interaction.followup.send(
+            embed=embed, file=file, view=MissionsView(club, interaction.user)
+        )
+
+    async def _activate(self, interaction: discord.Interaction) -> None:
+        economy = self.bot.get_cog("EconomyCog")
+        try:
+            result = activate_rolls(
+                interaction.user.id,
+                interaction.user.display_name,
+                economy.database_path,
+                min(self.stored, 10),
+            )
+        except EconomyError as error:
+            await interaction.response.send_message(str(error), ephemeral=True)
+            return
+        text = f"🎲 {result.activated} rolls ativados (agora {result.active_rolls} ativos)."
+        if result.claims_gained:
+            text += f" ✅ +{result.claims_gained} contratação extra."
+        await interaction.response.send_message(text)
+
+    async def _inventory(self, interaction: discord.Interaction) -> None:
+        embed, view = self.bot.get_cog("EconomyCog").inventory_menu(interaction.user)
+        await interaction.response.send_message(embed=embed, view=view)
 
 
 class GameCog(commands.Cog):
@@ -1010,7 +1092,9 @@ class GameCog(commands.Cog):
                 name="🛡️ Proteção de wish", value=f"{status.wish_protection} s", inline=True
             )
         embed.set_footer(text="mm!upgrade e mm!construir para evoluir · mm!tu para ver os timers")
-        await context.reply(embed=embed, mention_author=False)
+        await context.reply(
+            embed=embed, view=AccountHubView(self.bot, context.author, status), mention_author=False
+        )
 
     @commands.command(name="tu", aliases=["timers", "timer"])
     async def timers(self, context: commands.Context) -> None:
@@ -1037,7 +1121,9 @@ class GameCog(commands.Cog):
             description="\n".join(lines),
             color=discord.Color.blurple(),
         )
-        await context.reply(embed=embed, mention_author=False)
+        await context.reply(
+            embed=embed, view=AccountHubView(self.bot, context.author, status), mention_author=False
+        )
 
 
 class StandaloneHelpCog(commands.Cog):
@@ -1047,12 +1133,20 @@ class StandaloneHelpCog(commands.Cog):
         self.bot = bot
 
     @commands.command(name="help", aliases=["ajuda", "comandos"])
-    async def general_help(self, context: commands.Context) -> None:
+    async def general_help(self, context: commands.Context, command: str = "") -> None:
+        if command:
+            embed = command_help_embed(self.bot, command)
+            await context.reply(
+                embed=embed,
+                content=None if embed else f"Não achei o comando `{command[:30]}`.",
+                mention_author=False,
+            )
+            return
         view = PagedView(
             "MeMi BOT — ajuda",
             [],
             color=discord.Color.blurple(),
-            footer="Use os botões para navegar entre MeMi BOT e FUT.AE.",
+            footer="Use os botões para navegar · mm!ajuda <comando> mostra o detalhe.",
         )
         view.pages = [[page] for page in GENERAL_HELP_PAGES]
         view.index = 0

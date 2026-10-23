@@ -529,8 +529,30 @@ class InventoryTests(Case, unittest.IsolatedAsyncioTestCase):
         self.assertIn("Caixa épica** × 2", embed.description)
         self.assertEqual(
             [item.label for item in view.children],
-            ["Abrir caixa épica (2)", "Abrir pacote de jogador (1)"],
+            ["Abrir caixa épica (2)", "Abrir pacote de jogador (1)", "Abrir todas as caixas (2)"],
         )
+
+    async def test_open_all_inventory_crates_in_one_batch(self):
+        from unittest.mock import AsyncMock, patch
+
+        from src.cogs import economy as cog_module
+        from src.cogs.economy import EconomyCog
+        from src.inventory import get_inventory
+
+        self.add_player("Atacante")
+        self.give("caixa", 3)
+        self.give("caixa_epica", 2)
+        self.give("pacote")
+        cog = EconomyCog(SimpleNamespace(database_path=self.database_path))
+        author = SimpleNamespace(id=100, display_name="Pessoa A")
+        edit = AsyncMock()
+        with patch.object(cog_module, "prize_gif", lambda *a, **k: b"GIF89a"):
+            await cog.open_all_inventory_crates(author, AsyncMock(), edit)
+        fields = [f for f in edit.call_args.kwargs["embed"].fields if f.name.startswith("Caixa ")]
+        self.assertEqual(len(fields), 5)
+        # O pacote fica (e uma caixa pode ter dado outro pacote de prêmio).
+        self.assertGreaterEqual(get_inventory(100, self.database_path).get("pacote", 0), 1)
+        self.assertNotIn("caixa", get_inventory(100, self.database_path))
 
 
 class ShopTests(Case, unittest.IsolatedAsyncioTestCase):
@@ -542,7 +564,16 @@ class ShopTests(Case, unittest.IsolatedAsyncioTestCase):
 
         cog = EconomyCog(SimpleNamespace(database_path=self.database_path))
         author = SimpleNamespace(id=100, display_name="Pessoa A")
+        # Sem saldo: tudo cinza, dizendo quanto falta.
+        self.set_memilets(100, 0)
+        _, view = cog.shop_menu(author)
+        buy = [item for item in view.children if "(" in (item.label or "")]
+        self.assertTrue(buy and all(item.disabled and "faltam" in item.label for item in buy))
+        self.set_memilets(100, 1_000_000)
         embed, view = cog.shop_menu(author)
+        self.assertIn(
+            f"Abrir 1 ({CRATE_PRICE}) · Raro 0/{CRATE_PITY_LIMIT}", [i.label for i in view.children]
+        )
         names = [field.name for field in embed.fields]
         for section in ("📦 Caixas", "🃏 Pacotes de jogador", "🛒 Upgrades", "🏗️ Torre"):
             self.assertIn(section, names)

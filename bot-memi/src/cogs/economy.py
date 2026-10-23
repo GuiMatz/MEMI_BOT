@@ -61,8 +61,9 @@ from src.ratings import RARITY_TIERS, rarity_label
 from src.transactions import PACK_LOCK, PACK_SALE_FACTOR
 from src.cogs.common import ConfirmView, PlayerChoiceView, ambiguity_text, intro_embed
 from src.game import find_player, get_wallet, register_user
+from src.missions import board, claim_rewards
 from src.inventory import INVENTORY_ITEMS, get_inventory
-from src.perks import TOWER_FIRST_PRICE, UPGRADES
+from src.perks import DAILY_MIN_AMOUNT, TOWER_FIRST_PRICE, UPGRADES
 
 UPGRADES_INTRO = (
     "Aqui você gasta Memilets em melhorias permanentes para o seu clube, como mais rolls, "
@@ -152,6 +153,8 @@ RARITY_ITEMS_TEXT = {
 
 
 EPIC_WORDS = {"epica", "epico", "epic"}
+# "Abrir todas" do inventário abre no máximo isso por vez (o texto lista caixa por caixa).
+INVENTORY_BATCH_LIMIT = 20
 
 
 def _crate_noun(count: int, epic: bool) -> str:
@@ -240,36 +243,57 @@ class CrateMenuView(discord.ui.View):
         super().__init__(timeout=300)
         self.cog = cog
         self.author = author
+        self.balance = get_wallet(author.id, cog.database_path)["memilets"]
+        pity = get_crate_pity(author.id, cog.database_path)
         for count in CRATE_BATCHES:
-            button = discord.ui.Button(
-                label=f"Abrir {count} ({_thousands(price * count)})",
-                emoji="📦",
-                style=discord.ButtonStyle.success if count == 1 else discord.ButtonStyle.primary,
-                row=0,
+            # A caixa avulsa mostra quanto falta para a garantia de Raro.
+            extra = f" · Raro {pity}/{CRATE_PITY_LIMIT}" if count == 1 else ""
+            self._buy_button(
+                f"Abrir {count}",
+                price * count,
+                "📦",
+                discord.ButtonStyle.success if count == 1 else discord.ButtonStyle.primary,
+                0,
+                self._opener(count),
+                extra,
             )
-            button.callback = self._opener(count)
-            self.add_item(button)
-        epic = discord.ui.Button(
-            label=f"Caixa épica ({_thousands(price * EPIC_CRATE_MULTIPLIER)})",
-            emoji="🟠",
-            style=discord.ButtonStyle.secondary,
-            row=1,
+        self._buy_button(
+            "Caixa épica",
+            price * EPIC_CRATE_MULTIPLIER,
+            "🟠",
+            discord.ButtonStyle.secondary,
+            1,
+            self._opener(1, epic=True),
         )
-        epic.callback = self._opener(1, epic=True)
-        self.add_item(epic)
-        for is_epic in (False, True):
-            pack = discord.ui.Button(
-                label=(
-                    f"Pacote épico ({_thousands(EPIC_PACK_PRICE)})"
-                    if is_epic
-                    else f"Pacote de jogador ({_thousands(PACK_PRICE)})"
-                ),
-                emoji="🃏",
-                style=discord.ButtonStyle.secondary,
-                row=1,
-            )
-            pack.callback = self._pack(is_epic)
-            self.add_item(pack)
+        self._buy_button(
+            "Pacote de jogador",
+            PACK_PRICE,
+            "🃏",
+            discord.ButtonStyle.secondary,
+            1,
+            self._pack(False),
+        )
+        self._buy_button(
+            "Pacote épico",
+            EPIC_PACK_PRICE,
+            "🃏",
+            discord.ButtonStyle.secondary,
+            1,
+            self._pack(True),
+        )
+
+    def _buy_button(self, name, cost, emoji, style, row, callback, extra="") -> discord.ui.Button:
+        """Botão de compra; sem saldo, fica cinza e diz quanto falta."""
+        missing = cost - self.balance
+        label = f"{name} ({_thousands(cost)})" + (
+            f" · faltam {_thousands(missing)}" if missing > 0 else extra
+        )
+        button = discord.ui.Button(
+            label=label[:80], emoji=emoji, style=style, row=row, disabled=missing > 0
+        )
+        button.callback = callback
+        self.add_item(button)
+        return button
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.author.id:
@@ -303,6 +327,35 @@ class CrateMenuView(discord.ui.View):
         return open_pack_button
 
 
+class DailyMissionsView(discord.ui.View):
+    """No daily: resgata as missões prontas sem precisar abrir o `mm!missoes`."""
+
+    def __init__(self, cog: "EconomyCog", owner, ready: int):
+        super().__init__(timeout=300)
+        self.cog = cog
+        self.owner = owner
+        button = discord.ui.Button(
+            label=f"Resgatar missões ({ready})", emoji="🎁", style=discord.ButtonStyle.success
+        )
+        button.callback = self._collect
+        self.add_item(button)
+
+    async def _collect(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != self.owner.id:
+            await interaction.response.send_message(
+                "Use `mm!daily` ou `mm!missoes` para as suas.", ephemeral=True
+            )
+            return
+        total, count = claim_rewards(self.owner.id, self.cog.database_path)
+        notice = (
+            f"🎁 {count} missão(ões) resgatada(s): +{icons.memilets(total)} Memilets."
+            if count
+            else "Nenhuma missão pronta para resgatar agora."
+        )
+        content = (interaction.message.content if interaction.message else "") + "\n\n" + notice
+        await interaction.response.edit_message(content=content[:2000], view=None)
+
+
 class InventoryView(discord.ui.View):
     """Um botão "Abrir" por item do inventário; abre com a animação de sempre, sem cobrar."""
 
@@ -319,6 +372,17 @@ class InventoryView(discord.ui.View):
             )
             button.callback = self._opener(item)
             self.add_item(button)
+        crates = items.get("caixa", 0) + items.get("caixa_epica", 0)
+        if crates > 1:
+            batch = min(crates, INVENTORY_BATCH_LIMIT)
+            everything = discord.ui.Button(
+                label=f"Abrir todas as caixas ({batch})",
+                emoji="📦",
+                style=discord.ButtonStyle.primary,
+                row=1,
+            )
+            everything.callback = self._open_all
+            self.add_item(everything)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.author.id:
@@ -327,6 +391,11 @@ class InventoryView(discord.ui.View):
             )
             return False
         return True
+
+    async def _open_all(self, interaction: discord.Interaction) -> None:
+        await self.cog.open_all_inventory_crates(
+            interaction.user, interaction.response.send_message, interaction.edit_original_response
+        )
 
     def _opener(self, item: str):
         async def open_item(interaction: discord.Interaction) -> None:
@@ -350,14 +419,7 @@ class ShopView(CrateMenuView):
         )
         upgrades.callback = self._upgrades
         self.add_item(upgrades)
-        all_in = discord.ui.Button(
-            label=f"All-in ({_thousands(ALL_IN_PRICE)})",
-            emoji="🎰",
-            style=discord.ButtonStyle.danger,
-            row=2,
-        )
-        all_in.callback = self._all_in
-        self.add_item(all_in)
+        self._buy_button("All-in", ALL_IN_PRICE, "🎰", discord.ButtonStyle.danger, 2, self._all_in)
         inventory = discord.ui.Button(
             label="Inventário", emoji="🎒", style=discord.ButtonStyle.secondary, row=2
         )
@@ -394,25 +456,35 @@ class EconomyCog(commands.Cog):
 
     @commands.command(name="daily")
     async def daily(self, context: commands.Context) -> None:
+        content, view = self.daily_reply(context.author)
+        await context.reply(content, view=view, mention_author=False)
+
+    def daily_reply(self, user) -> tuple[str, discord.ui.View | None]:
+        """Resgata o daily e mostra as missões do dia, com o botão de resgatar as prontas."""
         try:
-            reward = claim_daily(
-                context.author.id,
-                context.author.display_name,
-                self.database_path,
-            )
+            reward = claim_daily(user.id, user.display_name, self.database_path)
         except DailyCooldown as error:
             unix = int(error.available_at.timestamp())
-            await context.reply(
-                f"Você já resgatou seu daily. O próximo libera <t:{unix}:R> (<t:{unix}:t>).",
-                mention_author=False,
+            text = f"Você já resgatou seu daily. O próximo libera <t:{unix}:R> (<t:{unix}:t>)."
+        else:
+            unix = int(reward.available_at.timestamp())
+            text = (
+                f"🎁 Você recebeu {icons.memilets(reward.amount)} Memilets "
+                f"(entre {_thousands(DAILY_MIN_AMOUNT)} e {_thousands(reward.cap)}). "
+                f"Próximo daily <t:{unix}:R>."
             )
-            return
-        unix = int(reward.available_at.timestamp())
-        await context.reply(
-            f"🎁 Você recebeu {icons.memilets(reward.amount)} Memilets "
-            f"(entre 100 e {_thousands(reward.cap)}). Próximo daily <t:{unix}:R>.",
-            mention_author=False,
-        )
+        rows = board(user.id, self.database_path)
+        ready = sum(1 for row in rows if row["progress"] >= row["goal"] and not row["claimed"])
+        lines = [text, "", "**🎯 Missões**"]
+        for row in rows:
+            done = row["progress"] >= row["goal"]
+            mark = "✅" if row["claimed"] else ("🎁" if done else "⬜")
+            lines.append(
+                f"{mark} {row['text']} · {min(row['progress'], row['goal'])}/{row['goal']} · "
+                f"+{_thousands(row['reward'])}"
+            )
+        view = DailyMissionsView(self, user, ready) if ready else None
+        return "\n".join(lines), view
 
     def upgrade_menu(self, author: discord.abc.User) -> tuple[discord.Embed, UpgradeShopView]:
         levels = get_upgrade_levels(author.id, self.database_path)
@@ -697,6 +769,41 @@ class EconomyCog(commands.Cog):
         except InsufficientFunds as error:
             await send(embed=discord.Embed(description=str(error), color=discord.Color.red()))
             return
+        await self.reveal_crates(author, results, send, edit, epic=epic)
+
+    async def open_all_inventory_crates(self, author, send, edit) -> None:
+        """ "Abrir todas" do inventário: caixas e caixas épicas num lote só (até 20)."""
+        items = get_inventory(author.id, self.database_path)
+        normal = min(items.get("caixa", 0), INVENTORY_BATCH_LIMIT)
+        epic = min(items.get("caixa_epica", 0), INVENTORY_BATCH_LIMIT - normal)
+        results = []
+        try:
+            for amount, is_epic in ((normal, False), (epic, True)):
+                if amount:
+                    results += open_crates(
+                        author.id,
+                        author.display_name,
+                        amount,
+                        self.database_path,
+                        epic=is_epic,
+                        from_inventory=True,
+                    )
+        except InsufficientFunds as error:
+            if not results:
+                await send(embed=discord.Embed(description=str(error), color=discord.Color.red()))
+                return
+        if not results:
+            await send(
+                embed=discord.Embed(
+                    description="Não há caixas no inventário.", color=discord.Color.red()
+                )
+            )
+            return
+        await self.reveal_crates(author, results, send, edit, epic=normal == 0)
+
+    async def reveal_crates(self, author, results, send, edit, *, epic: bool = False) -> None:
+        """Manda "Abrindo…" e troca pela revelação (GIF + texto) das caixas já abertas."""
+        count = len(results)
         # Resposta rápida em texto; a revelação (com o pacote abrindo) entra no lugar dela.
         waiting = discord.Embed(
             title=f"📦 Abrindo {count} {_crate_noun(count, epic)}…",

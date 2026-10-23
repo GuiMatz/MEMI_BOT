@@ -3694,6 +3694,7 @@ AJUDA_JOGO = [
         [
             ("mm!roll", "rola um jogador; 10 rolls a cada 30 min (hora cheia e meia hora)"),
             ("mm!tu", "mostra rolls restantes, claim (a cada 30 min) e daily com horário"),
+            ("mm!ajuda <comando>", "explica um comando com exemplos: mm!ajuda crates"),
             ("mm!scout <nome>", "ficha de jogador, técnico, estádio, emblema, uniforme ou mascote"),
             ("mm!top [categoria]", "catálogo: jogadores, cartola, técnicos, emblemas, mascotes…"),
             ("mm!left", "jogadores e cosméticos (emblemas, uniformes…) ainda livres"),
@@ -3739,6 +3740,7 @@ AJUDA_JOGO = [
             ("mm!proteger <nome>", "🔒 tira o jogador de todas as vendas"),
             ("mm!troca @pessoa", "monta uma troca de jogadores e Memilets"),
             ("mm!dar @pessoa <jogador|valor>", "doa um jogador ou Memilets"),
+            ("mm!play @pessoa <quantia>", "manda Memilets para outra pessoa"),
         ],
     ),
     (
@@ -3863,7 +3865,17 @@ class AjudaView(discord.ui.View):
 
 class Ajuda(commands.Cog):
     @commands.command(name="help", aliases=["ajuda", "comandos"])
-    async def ajuda(self, ctx):
+    async def ajuda(self, ctx, comando: str = ""):
+        if comando:
+            # `mm!ajuda roll`: o detalhe de um comando do FUT.AE (uso e exemplos).
+            from src.command_help import command_help_embed
+
+            embed = command_help_embed(self.bot, comando)
+            if embed is None:
+                await responder(ctx, "aviso", f"Não achei o comando `{comando[:30]}`.")
+                return
+            await ctx.send(embed=embed)
+            return
         view = AjudaView([AJUDA, AJUDA_JOGO])
         embed = view.paginas[0]
         musicas = self.bot.get_cog("Musicas") if self.bot else None

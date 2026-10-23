@@ -413,21 +413,30 @@ def open_crates(
 ) -> list[CrateResult]:
     """Abre `count` caixas seguidas; confere antes se o saldo paga todas.
 
-    `from_inventory=True`: uma caixa ganha, do inventário (sem cobrar)."""
-    if count not in CRATE_BATCHES:
-        raise ValueError("Quantidade de caixas inválida.")
+    `from_inventory=True`: caixas ganhas, do inventário (sem cobrar, qualquer quantidade);
+    para quando acabam."""
     register_user(discord_user_id, display_name, database_path)
     if from_inventory:
-        return [
-            open_crate(
-                discord_user_id,
-                display_name,
-                database_path,
-                rng=rng,
-                epic=epic,
-                from_inventory=True,
-            )
-        ]
+        results = []
+        for _ in range(count):
+            try:
+                results.append(
+                    open_crate(
+                        discord_user_id,
+                        display_name,
+                        database_path,
+                        rng=rng,
+                        epic=epic,
+                        from_inventory=True,
+                    )
+                )
+            except InsufficientFunds:
+                if not results:
+                    raise
+                break
+        return results
+    if count not in CRATE_BATCHES:
+        raise ValueError("Quantidade de caixas inválida.")
     price = get_crate_price(discord_user_id, database_path) * (EPIC_CRATE_MULTIPLIER if epic else 1)
     with connect(database_path) as connection:
         balance = connection.execute(

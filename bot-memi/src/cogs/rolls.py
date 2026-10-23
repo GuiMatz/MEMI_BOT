@@ -18,9 +18,9 @@ from discord.ext import commands
 from src import icons
 from src.accents import rarity_color
 from src.clock import brasilia_time
-from src.cogs.common import card_file
+from src.cogs.common import card_file, followup_sender
 from src.db import DATABASE_PATH
-from src.economy import get_account_status
+from src.economy import EconomyError, ROLLS_PER_BONUS_CLAIM, activate_rolls, get_account_status
 from src.game import register_user
 from src.rolls import (
     NoEligiblePlayers,
@@ -76,9 +76,20 @@ class RollLayout(discord.ui.LayoutView):
         overall: int,
         image_name: str,
         database_path: str | Path,
+        roller_id: int | None = None,
+        reroll=None,
     ):
         super().__init__(timeout=300)
         self.result = result
+        self.roller_id = roller_id
+        self.reroll_button: discord.ui.Button | None = None
+        if reroll is not None:
+            # Rolar de novo sem digitar `mm!roll` (só quem rolou).
+            self.reroll_button = discord.ui.Button(
+                label="Rolar de novo", emoji="🎲", style=discord.ButtonStyle.secondary
+            )
+            self.reroll_button.callback = self._reroll
+            self._reroll_callback = reroll
         self.overall = overall
         self.image_name = image_name
         self.database_path = database_path
@@ -113,10 +124,13 @@ class RollLayout(discord.ui.LayoutView):
         items.append(
             discord.ui.MediaGallery(discord.MediaGalleryItem(f"attachment://{self.image_name}"))
         )
+        buttons = [self.button] if self.button is not None and not self.status else []
+        if self.reroll_button is not None:
+            buttons.append(self.reroll_button)
         if self.status:
             items.append(discord.ui.TextDisplay(self.status))
-        elif self.button is not None:
-            items.append(discord.ui.ActionRow(self.button))
+        if buttons:
+            items.append(discord.ui.ActionRow(*buttons))
         items.append(
             discord.ui.TextDisplay(
                 rolls_line(self.result.rolls_remaining, self.result.cycle_resets_at)
@@ -161,15 +175,65 @@ class RollLayout(discord.ui.LayoutView):
             message = CLAIM_ERRORS.get(outcome.status, "Não foi possível concluir o claim.")
         await interaction.response.send_message(message, ephemeral=True)
 
-    async def on_timeout(self) -> None:
-        if self.message is None or self.status or self.button is None:
+    async def _reroll(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != self.roller_id:
+            await interaction.response.send_message(
+                "Esse botão é de quem rolou. Use `mm!roll` para rolar.", ephemeral=True
+            )
             return
-        self.status = "-# ⌛ Tempo de claim encerrado."
+        await self._reroll_callback(interaction)
+
+    async def on_timeout(self) -> None:
+        if self.message is None or (self.reroll_button is None and self.button is None):
+            return
+        # Os botões param de funcionar: some o de rolar de novo e o claim encerra.
+        self.reroll_button = None
+        if self.button is not None and not self.status:
+            self.status = "-# ⌛ Tempo de claim encerrado."
         self._build()
         try:
             await self.message.edit(view=self)
         except discord.HTTPException:
             pass
+
+
+class ActivateRollsView(discord.ui.View):
+    """No aviso de fim dos rolls: ativa os guardados e já rola de novo."""
+
+    def __init__(self, cog: "RollsCog", owner, stored: int):
+        super().__init__(timeout=300)
+        self.cog = cog
+        self.owner = owner
+        self.amount = min(stored, ROLLS_PER_BONUS_CLAIM)
+        button = discord.ui.Button(
+            label=f"Ativar {self.amount} e rolar",
+            emoji="🎲",
+            style=discord.ButtonStyle.success,
+        )
+        button.callback = self._activate
+        self.add_item(button)
+
+    async def _activate(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != self.owner.id:
+            await interaction.response.send_message(
+                "Esse botão é de quem rolou. Use `mm!ativar <quantidade>`.", ephemeral=True
+            )
+            return
+        try:
+            result = activate_rolls(
+                interaction.user.id,
+                interaction.user.display_name,
+                self.cog.database_path,
+                self.amount,
+            )
+        except EconomyError as error:
+            await interaction.response.send_message(str(error), ephemeral=True)
+            return
+        text = f"🎲 {result.activated} rolls ativados."
+        if result.claims_gained:
+            text += f" ✅ +{result.claims_gained} contratação extra."
+        await interaction.response.edit_message(content=text, view=None)
+        await self.cog.send_roll(interaction.user, followup_sender(interaction))
 
 
 class RollsCog(commands.Cog):
@@ -179,35 +243,43 @@ class RollsCog(commands.Cog):
 
     @commands.command(name="roll")
     async def roll(self, context: commands.Context) -> None:
+        await self.send_roll(
+            context.author, lambda **kwargs: context.reply(mention_author=False, **kwargs)
+        )
+
+    async def roll_from_button(self, interaction: discord.Interaction) -> None:
+        """Botões "Rolar" (no roll e no `mm!tu`): a resposta vem como mensagem nova."""
+        await interaction.response.defer(thinking=True)
+        await self.send_roll(interaction.user, followup_sender(interaction))
+
+    async def send_roll(self, user, send) -> None:
+        """Rola para `user` e manda o resultado com `send(**kwargs)` (devolve a mensagem)."""
         try:
             # Fora do loop principal: o roll não trava os outros comandos enquanto roda.
             result = await asyncio.to_thread(
                 roll_player,
-                context.author.id,
-                context.author.display_name,
+                user.id,
+                user.display_name,
                 self.database_path,
             )
         except RollLimitReached as error:
-            stored = get_account_status(
-                context.author.id, context.author.display_name, self.database_path
-            ).roll_tokens
-            await context.reply(
-                f"Você usou os {error.capacity} rolls deste ciclo. "
+            stored = get_account_status(user.id, user.display_name, self.database_path).roll_tokens
+            view = ActivateRollsView(self, user, stored) if stored else None
+            await send(
+                content=f"Você usou os {error.capacity} rolls deste ciclo. "
                 "Eles renovam às "
                 f"**{brasilia_time(error.reset_at)}**."
                 + (
-                    f"\n📦 Você tem **{stored}** rolls guardados: ative com `mm!ativar <quantidade>`."
+                    f"\n📦 Você tem **{stored}** rolls guardados: ative com "
+                    "`mm!ativar <quantidade>` ou no botão."
                     if stored
                     else ""
                 ),
-                mention_author=False,
+                **({"view": view} if view else {}),
             )
             return
         except NoEligiblePlayers:
-            await context.reply(
-                "Não há jogadores elegíveis na roleta neste momento.",
-                mention_author=False,
-            )
+            await send(content="Não há jogadores elegíveis na roleta neste momento.")
             return
 
         if (
@@ -225,11 +297,17 @@ class RollsCog(commands.Cog):
             raise RuntimeError("Roll livre sem oferta de claim.")
         overall = result.effective_overall or result.player["overall"]
         image = await card_file({**result.player, "effective_overall": overall})
-        layout = RollLayout(result, overall, image.filename, self.database_path)
-        layout.message = await context.reply(
+        layout = RollLayout(
+            result,
+            overall,
+            image.filename,
+            self.database_path,
+            roller_id=user.id,
+            reroll=self.roll_from_button,
+        )
+        layout.message = await send(
             view=layout,
             file=image,
-            mention_author=False,
             allowed_mentions=discord.AllowedMentions(users=True, replied_user=False),
         )
 

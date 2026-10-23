@@ -14,6 +14,22 @@ from src.card_image import animated_photo, render_player_card, render_player_car
 from src.ratings import rarity_label
 
 
+def followup_sender(interaction: discord.Interaction) -> Callable[..., Awaitable[Any]]:
+    """`send(**kwargs)` para um botão que faz trabalho demorado (roll, imagem): segura a
+    interação ("pensando…") e manda a resposta como mensagem nova, devolvendo a mensagem.
+
+    Aceita os mesmos argumentos do `context.reply` usado nos comandos (`mention_author` é
+    ignorado), para o mesmo código servir aos dois."""
+
+    async def send(**kwargs: Any) -> Any:
+        kwargs.pop("mention_author", None)
+        if not interaction.response.is_done():
+            await interaction.response.defer(thinking=True)
+        return await interaction.followup.send(wait=True, **kwargs)
+
+    return send
+
+
 def player_label(player: dict[str, Any]) -> str:
     return str(player.get("display_name") or player.get("name") or "—")
 
