@@ -49,14 +49,18 @@ class MatchDynamicsTests(unittest.TestCase):
         self.assertGreater(late, early * 1.3)
 
     def test_a_red_card_hurts_the_team_that_gets_it(self):
+        # Amostra própria e maior: expulsão no 1º tempo é rara, e com poucos jogos o
+        # resultado oscila demais.
+        results = play_many(4000, seed=99, home_advantage=True)
+        overall = sum(r.home_goals - r.away_goals for r in results) / len(results)
         scored_with_ten, games = 0, 0
-        for result in self.results:
+        for result in results:
             reds = [event for event in result.events if event.kind == "red"]
             if reds and reds[0].side == "home" and reds[0].minute <= 45:
                 games += 1
                 scored_with_ten += result.home_goals - result.away_goals
-        self.assertGreater(games, 5)
-        self.assertLess(scored_with_ten / games, 0)
+        self.assertGreater(games, 30)
+        self.assertLess(scored_with_ten / games, overall - 0.3)
 
     def test_sent_off_player_does_not_appear_again(self):
         for result in self.results:

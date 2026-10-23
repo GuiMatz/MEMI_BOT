@@ -783,8 +783,18 @@ def simulate_match(
                     if score[other] <= score[side] and generator.random() < 0.4:
                         start_pressure(other, step, minute, stoppage)
                 else:
-                    # Goleiro bom defende mais; o resto vai na trave ou para fora.
-                    save = min(0.75, max(0.3, 0.5 + 0.012 * (keeper_rating - 75)))
+                    # Goleiro bom defende mais; finalizador bom é menos defendido (quando não é
+                    # gol, vai mais na trave ou para fora). Só muda o tipo de lance: a chance de
+                    # gol já foi decidida acima.
+                    save = min(
+                        0.75,
+                        max(
+                            0.2,
+                            0.5
+                            + 0.012 * (keeper_rating - 75)
+                            - 0.006 * (profile.ratings[id(shooter)] - 75),
+                        ),
+                    )
                     outcome = generator.random()
                     if outcome < save:
                         kind = (
