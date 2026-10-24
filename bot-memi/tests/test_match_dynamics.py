@@ -4,7 +4,13 @@ from collections import Counter
 from dataclasses import asdict
 
 from src.narration import _line, match_embed
-from src.simulation import penalty_shootout_kicks, simulate_match
+from src.simulation import (
+    PENALTY_PLAYS,
+    PenaltyKick,
+    penalty_events,
+    penalty_shootout_kicks,
+    simulate_match,
+)
 from src.teams import FORMATIONS
 
 
@@ -132,6 +138,32 @@ class ShootoutTests(unittest.TestCase):
         self.assertLess(conversion, 0.76)
         long = sum(len(shootout) >= 16 for shootout in shootouts) / len(shootouts)
         self.assertLess(long, 0.10)  # 8+ cobranças por time
+        misses = [kick for kick in kicks if not kick.scored]
+        saved = sum(kick.play in {"defendeu", "milagre"} for kick in misses) / len(misses)
+        self.assertGreater(saved, 0.65)  # futebol real: ~3/4 dos erros são defesas
+        self.assertLess(saved, 0.85)
+        for kick in kicks:
+            self.assertIn(kick.play, PENALTY_PLAYS[kick.scored])
+
+    def test_shootout_lines_say_how_the_kick_went(self):
+        kicks = [
+            PenaltyKick("home", "Messi", True, 1, 0, "angulo", "Dida"),
+            PenaltyKick("away", "Kaká", False, 1, 0, "milagre", "Taffarel"),
+            {
+                "side": "home",
+                "kicker_name": "Velho",
+                "scored": False,
+                "home_score": 1,
+                "away_score": 0,
+            },  # gravado antes do "como foi"
+        ]
+        lines = [
+            _line(event, {"home": "🔴", "away": "🔵"})
+            for event in penalty_events(kicks, "A", "B")[1:]
+        ]
+        self.assertIn("Messi acerta o ângulo", lines[0])
+        self.assertIn("defesa inacreditável de Taffarel", lines[1])
+        self.assertIn("Velho perde a cobrança", lines[2])
 
 
 class DynamicNarrationTests(unittest.TestCase):

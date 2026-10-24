@@ -165,6 +165,8 @@ class MatchEvent:
     play: str | None = None
     # Só no apito final: posse, chutes, notas e melhor em campo (`_match_stats`).
     stats: dict[str, Any] | None = None
+    # Pênalti no jogo: como foi a cobrança ("angulo", "isolou"… veja `PENALTY_PLAYS`).
+    shot: str | None = None
 
     @property
     def clock(self) -> str:
@@ -199,6 +201,18 @@ class PenaltyKick:
     scored: bool
     home_score: int
     away_score: int
+    play: str | None = None  # como foi: "angulo", "isolou", "milagre"... (veja PENALTY_PLAYS)
+    keeper_name: str | None = None
+
+
+# Como cada cobrança acontece, com o peso de cada jeito, seguindo estudos de pênaltis na
+# Champions/Liga Europa e na Dinamarca: ~1/4 dos gols vai no alto, a maioria rasteiro no
+# canto, poucos no meio e cavadinha é rara. Dos erros, ~3/4 são defesas; o resto sai, quase
+# sempre por cima (isolou), ou bate na trave.
+PENALTY_PLAYS = {
+    True: {"angulo": 22, "canto": 38, "deslocou": 24, "meio": 14, "cavadinha": 2},
+    False: {"defendeu": 60, "milagre": 14, "isolou": 12, "trave": 6, "fora": 8},
+}
 
 
 def _effective_overall(player: dict[str, Any]) -> int:
@@ -435,10 +449,18 @@ OWN_GOAL_CHANCE = 0.025  # das chances de jogada que viram gol
 OFFSIDE_CHANCE = 0.05  # gols anulados por impedimento
 MIRACLE_THRESHOLD = 0.3  # defesa de chance clara (conversão acima disso) pode ser milagre
 MIRACLE_SHARE = 0.25
+PENALTY_SAVE_SHARE = 0.74  # pênalti perdido no jogo: ~3/4 são defesas
 SECOND_YELLOW_CHANCE = 0.15  # quem já tem amarelo se cuida; nem toda falta vira o segundo
 
 # Dinâmica do jogo.
 HOME_ADVANTAGE = (1.07, 0.95)  # chances do mandante e do visitante
+# Aos 70' o técnico de quem perde se lança: ataque total até o fim. Quem ganha não troca
+# (já administra, `LEADING_DAMPING`): com retranca automática o fim do jogo esfriava e as
+# reações caíam. Assim saem mais gols depois dos 70' e um pouco mais de viradas e empates.
+TACTICAL_SWITCH_MINUTE = 70
+TACTIC_LINES = {
+    "attack": "🔄 **Mudança tática!** O {team} vai para o tudo ou nada: ataque total.",
+}
 TRAILING_BOOST = (1.0, 1.12, 1.22)  # por gols atrás (0, 1, 2+)
 LEADING_DAMPING = 0.92  # quem está na frente administra
 EXPOSED_BOOST = 1.06  # e cede espaço quando o adversário se lança
@@ -607,11 +629,15 @@ def simulate_match(
     styles = {"home": STYLES[home_style], "away": STYLES[away_style]}
     style_names = {"home": home_style, "away": away_style}
     chances: dict[str, float] = {}
-    for side, other in (("home", "away"), ("away", "home")):
-        created = expected_chances(profiles[side], profiles[other])
-        created *= styles[side][0] * styles[other][1]
-        created *= style_matchup(style_names[side], style_names[other])
-        chances[side] = min(MAX_CHANCES, max(MIN_CHANCES, created))
+
+    def set_chances() -> None:
+        for side, other in (("home", "away"), ("away", "home")):
+            created = expected_chances(profiles[side], profiles[other])
+            created *= styles[side][0] * styles[other][1]
+            created *= style_matchup(style_names[side], style_names[other])
+            chances[side] = min(MAX_CHANCES, max(MIN_CHANCES, created))
+
+    set_chances()
     expected = {
         side: _expected_goals(
             lineups[side],
@@ -636,7 +662,9 @@ def simulate_match(
     pressure_until = {"home": -1, "away": -1}
     last_pressure = {"home": -PRESSURE_COOLDOWN, "away": -PRESSURE_COOLDOWN}
 
-    def add(minute, stoppage, kind, text, side=None, player=None, detail=None, play=None):
+    def add(
+        minute, stoppage, kind, text, side=None, player=None, detail=None, play=None, shot=None
+    ):
         events.append(
             MatchEvent(
                 minute,
@@ -649,6 +677,7 @@ def simulate_match(
                 player,
                 detail,
                 play,
+                shot=shot,
             )
         )
 
@@ -698,6 +727,16 @@ def simulate_match(
         sent_off[side] += 1
         add(minute, stoppage, "red", text, side, _name(player))
 
+    def switch_tactics(minute: int) -> None:
+        """Aos 70', quem está perdendo vai para o ataque total."""
+        for side, other in (("home", "away"), ("away", "home")):
+            if score[side] >= score[other] or style_names[side] == "attack":
+                continue
+            style_names[side], styles[side] = "attack", STYLES["attack"]
+            text = TACTIC_LINES["attack"].format(team=names[side])
+            add(minute, 0, "tactic", text, side, None, None, "attack")
+            set_chances()
+
     add(1, 0, "kickoff", f"🟢 Rola a bola! {home_name} × {away_name}.")
     first_stoppage = generator.randint(1, 3)
     second_stoppage = generator.randint(2, 5)
@@ -718,6 +757,8 @@ def simulate_match(
             )
             add(HALF_LENGTH + 1, 0, "second_half", "🔁 Bola rolando para o segundo tempo!")
             continue
+        if minute == TACTICAL_SWITCH_MINUTE and not stoppage:
+            switch_tactics(minute)
         for side, other in (("home", "away"), ("away", "home")):
             team_name = names[side]
             squad = on_pitch[side]
@@ -789,8 +830,15 @@ def simulate_match(
                         if play not in {"penalti", "falta", "contra", "rebote"}
                         else None
                     )
-                    template = PLAY_GOAL_LINES.get(play) or generator.choice(GOAL_LINES)
-                    text = template.format(team=team_name, scorer=_name(shooter))
+                    shot = _penalty_shot(True, generator) if play == "penalti" else None
+                    if shot:
+                        text = (
+                            f"⚽ **GOL DE PÊNALTI!** {_name(shooter)} "
+                            f"{penalty_phrase(True, shot)}. Gol do {team_name}!"
+                        )
+                    else:
+                        template = PLAY_GOAL_LINES.get(play) or generator.choice(GOAL_LINES)
+                        text = template.format(team=team_name, scorer=_name(shooter))
                     if assistant is not None:
                         text += f" Assistência de {_name(assistant)}."
                     if minute >= 88:
@@ -804,6 +852,7 @@ def simulate_match(
                         _name(shooter),
                         _name(assistant) if assistant is not None else None,
                         play,
+                        shot,
                     )
                     celebrate(side, other, shooter, play, minute, stoppage, level_before)
                     # Quem sofre o gol tenta reagir na hora.
@@ -812,12 +861,13 @@ def simulate_match(
                 else:
                     # Goleiro bom defende mais; finalizador bom é menos defendido (quando não é
                     # gol, vai mais na trave ou para fora). Só muda o tipo de lance: a chance de
-                    # gol já foi decidida acima.
+                    # gol já foi decidida acima. Pênalti perdido é quase sempre defesa (~3/4).
+                    penalty = play == "penalti"
                     save = min(
-                        0.75,
+                        0.9 if penalty else 0.75,
                         max(
                             0.2,
-                            0.5
+                            (PENALTY_SAVE_SHARE if penalty else 0.5)
                             + 0.012 * (keeper_rating - 75)
                             - 0.006 * (profile.ratings[id(shooter)] - 75),
                         ),
@@ -831,22 +881,34 @@ def simulate_match(
                             else "save"
                         )
                         lines = MIRACLE_LINES if kind == "miracle" else SAVE_LINES
-                    elif outcome < save + 0.12:
+                    elif outcome < save + (0.06 if penalty else 0.12):
                         kind, lines = "post", POST_LINES
                     else:
                         kind, lines = "miss", MISS_LINES
                     keeper = _name(keeper_player)
+                    shot = None
+                    if penalty:
+                        shot = {"save": "defendeu", "miracle": "milagre", "post": "trave"}.get(
+                            kind
+                        ) or generator.choices(("isolou", "fora"), weights=(12, 8))[0]
+                        text = (
+                            f"❌ **Pênalti perdido!** {_name(shooter)} "
+                            f"{penalty_phrase(False, shot, keeper)}."
+                        )
+                    else:
+                        text = generator.choice(lines).format(
+                            shooter=_name(shooter), keeper=keeper, team=team_name
+                        )
                     add(
                         minute,
                         stoppage,
                         kind,
-                        generator.choice(lines).format(
-                            shooter=_name(shooter), keeper=keeper, team=team_name
-                        ),
+                        text,
                         side,
                         _name(shooter),
                         keeper if kind in {"save", "miracle"} else None,
                         play,
+                        shot,
                     )
                     if kind in {"post", "miracle"} and generator.random() < 0.35:
                         start_pressure(side, step, minute, stoppage)
@@ -968,6 +1030,10 @@ def penalty_shootout_kicks(
                     player for player in sorted_players if player["id"] != taker_id
                 ]
         kickers.append(sorted_players)
+    keepers = [
+        next((_name(p) for p in players if p.get("position") == "GOL"), None)
+        for players in (home_players, away_players)
+    ]
 
     def kick(side: int, kicker: dict[str, Any]) -> None:
         probability = home_probability if side == 0 else away_probability
@@ -977,9 +1043,16 @@ def penalty_shootout_kicks(
         scored = generator.random() < probability
         if scored:
             scores[side] += 1
+        play = _penalty_shot(scored, generator)
         kicks.append(
             PenaltyKick(
-                "home" if side == 0 else "away", _name(kicker), scored, scores[0], scores[1]
+                "home" if side == 0 else "away",
+                _name(kicker),
+                scored,
+                scores[0],
+                scores[1],
+                play,
+                keepers[1 - side],
             )
         )
 
@@ -1016,6 +1089,31 @@ def penalty_shootout(
     return kicks[-1].home_score, kicks[-1].away_score
 
 
+def _penalty_shot(scored: bool, generator) -> str:
+    """Sorteia como foi a cobrança (`PENALTY_PLAYS`)."""
+    plays = PENALTY_PLAYS[scored]
+    return generator.choices(list(plays), weights=list(plays.values()))[0]
+
+
+def penalty_phrase(scored: bool, play: str | None, keeper: str | None = None) -> str:
+    """O que aconteceu na cobrança, para vir depois do nome de quem bateu."""
+    goalkeeper = keeper or "o goleiro"
+    phrases = {
+        "angulo": "acerta o ângulo 🎯",
+        "deslocou": "desloca o goleiro e converte",
+        "canto": "bate rasteiro no canto",
+        "meio": "enche o pé no meio do gol",
+        "cavadinha": "converte de cavadinha 😎",
+        "defendeu": f"para em {goalkeeper} 🧤",
+        "milagre": f"para em defesa inacreditável de {goalkeeper}! 🧤",
+        "isolou": "isola por cima do gol 🚀",
+        "trave": "carimba a trave 🥅",
+        "fora": "bate para fora",
+    }
+    # Cobranças gravadas antes de terem o "como foi".
+    return phrases.get(play or "", "converte" if scored else "perde a cobrança")
+
+
 def penalty_events(
     kicks: Sequence[PenaltyKick | dict[str, Any]],
     home_name: str,
@@ -1036,11 +1134,9 @@ def penalty_events(
     for kick in kicks:
         data = asdict(kick) if isinstance(kick, PenaltyKick) else kick
         team = home_name if data["side"] == "home" else away_name
-        text = (
-            f"✅ {data['kicker_name']} ({team}) converte!"
-            if data["scored"]
-            else f"❌ {data['kicker_name']} ({team}) perde a cobrança!"
-        )
+        phrase = penalty_phrase(data["scored"], data.get("play"), data.get("keeper_name"))
+        mark = "✅" if data["scored"] else "❌"
+        text = f"{mark} {data['kicker_name']} ({team}) {phrase}!"
         events.append(
             {
                 "minute": 90,
@@ -1049,6 +1145,8 @@ def penalty_events(
                 "side": data["side"],
                 "player": data["kicker_name"],
                 "scored": data["scored"],
+                "play": data.get("play"),
+                "detail": data.get("keeper_name"),
                 "home_goals": data["home_score"],
                 "away_goals": data["away_score"],
                 "text": f"{text} Pênaltis: {data['home_score']} × {data['away_score']}",

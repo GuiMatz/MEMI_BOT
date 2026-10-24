@@ -112,6 +112,37 @@ def _ball(draw: ImageDraw.ImageDraw, x: float, y: float, radius: float) -> None:
     draw.regular_polygon((x, y, radius * 0.42), 5, fill=(30, 30, 35))
 
 
+def _kick_rows(kicks: Iterable[Any]) -> dict[str, list[bool]]:
+    """Cobranças de cada lado, na ordem: True entrou, False perdeu."""
+    rows: dict[str, list[bool]] = {"home": [], "away": []}
+    for kick in kicks or ():
+        data = kick if isinstance(kick, dict) else vars(kick)
+        rows[data["side"]].append(bool(data["scored"]))
+    return rows
+
+
+def _draw_kicks(draw: ImageDraw.ImageDraw, kicks: Iterable[Any], home_color, away_color) -> None:
+    """A sequência da disputa abaixo do placar, como na TV: ● entrou, ○ perdeu.
+
+    Uma linha por time, com um traço na cor dele; cobranças demais encolhem as bolinhas."""
+    rows = _kick_rows(kicks)
+    longest = max(len(rows["home"]), len(rows["away"]))
+    if not longest:
+        return
+    step = min(30, 200 / longest)
+    radius = min(11, step * 0.4)
+    for (side, color), y in zip((("home", home_color), ("away", away_color)), (400, 434)):
+        start = WIDTH // 2 - step * (longest - 1) / 2
+        draw.rounded_rectangle((start - 34, y - 4, start - 18, y + 4), 4, fill=color)
+        for index, scored in enumerate(rows[side]):
+            x = start + index * step
+            box = (x - radius, y - radius, x + radius, y + radius)
+            if scored:
+                draw.ellipse(box, fill="white")
+            else:
+                draw.ellipse(box, outline=(225, 80, 80), width=max(3, round(radius * 0.4)))
+
+
 def render_score_card(
     home: dict[str, Any],
     away: dict[str, Any],
@@ -122,6 +153,7 @@ def render_score_card(
     title: str = "Amistoso",
     venue: str | None = None,
     penalties: tuple[int, int] | None = None,
+    kicks: Iterable[Any] = (),
 ) -> BytesIO:
     home_color = rgb(home.get("color") or "#2E8B57")
     away_color = rgb(away.get("color") or "#3B6FD8")
@@ -185,6 +217,7 @@ def render_score_card(
         text_center(
             draw, (WIDTH // 2, 355), f"pênaltis {penalties[0]} × {penalties[1]}", 32, True, accent
         )
+        _draw_kicks(draw, kicks, home_color, away_color)
     else:
         text_center(draw, (WIDTH // 2, 355), "FIM DE JOGO", 28, True, MUTED)
 
@@ -319,6 +352,7 @@ def render_score_gif(
     title: str = "Amistoso",
     venue: str | None = None,
     penalties: tuple[int, int] | None = None,
+    kicks: Iterable[Any] = (),
 ) -> BytesIO:
     """O placar final animado. Campeonato (título com "final" ou "campeonato") é dourado."""
     folded = title.casefold()
@@ -351,6 +385,7 @@ def render_score_gif(
             True,
             accent,
         )
+        _draw_kicks(ImageDraw.Draw(status), kicks, home_color, away_color)
     else:
         text_center(ImageDraw.Draw(status), (WIDTH // 2, 355), "FIM DE JOGO", 28, True, MUTED)
     dash = _layer()

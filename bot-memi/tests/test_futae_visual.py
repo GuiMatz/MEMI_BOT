@@ -10,9 +10,8 @@ from unittest.mock import patch
 
 from PIL import Image, ImageStat
 
-from src.boards_image import render_missions, render_season
+from src.boards_image import render_league_table, render_missions
 from src.card_image import render_player_card
-from src.championship import play_championship, register_team
 from src.club_card import render_club_card
 from src.cosmetic_card import render_cosmetic_card
 from src.crate_animation import PrizeTile, card_reveal_gif, prize_gif
@@ -31,7 +30,6 @@ from src.game import claim_player, register_user
 from src.missions import DAILY, WEEKLY, assigned, board, claim_rewards, periods, record_event
 from src.rolls import claim_roll_offer, roll_player
 from src.score_image import render_score_card
-from src.season import parse_month, season_history, season_table
 from src.teams import FORMATIONS, ensure_team, scale_player
 from src.tower import TowerStatus
 from src.tower_image import render_tower
@@ -109,7 +107,7 @@ class ImageTests(unittest.TestCase):
         for kind in ("emblema", "uniforme", "estadio", "tecnico", "liga", "mascote"):
             self.assertTrue(is_png(render_cosmetic_card({"kind": kind, "name": "Item"})))
         self.assertTrue(is_png(render_missions([], "Pessoa")))
-        self.assertTrue(is_png(render_season([], "Outubro de 2026")))
+        self.assertTrue(is_png(render_league_table([], "PINTOS CORRIDOS", "Edição 1")))
 
     def test_squad_image_is_vertical_for_every_formation(self):
         from src.squad_image import render_squad, squad_coordinates
@@ -253,24 +251,6 @@ class SeasonTests(Case):
             player = self.add_player(f"J{user_id}-{index}", position, overall)
             claim_player(player, user_id, self.database_path)
             scale_player(user_id, player, self.database_path)
-
-    def test_month_table_sums_championships(self):
-        self.full_team(100, 90)
-        self.full_team(200, 60)
-        for day in (NOW, NOW + timedelta(days=1)):
-            for user_id in (100, 200):
-                register_team(555, user_id, now=day, database_path=self.database_path)
-            play_championship(555, now=day, rng=random.Random(4), database_path=self.database_path)
-        table = season_table(555, "2026-10", self.database_path)
-        self.assertEqual(len(table), 2)
-        self.assertEqual(sum(team["titles"] for team in table), 2)
-        self.assertEqual(sum(team["played"] for team in table), 8)  # 2 jogos por dia, por time
-        self.assertEqual(season_table(555, "2026-09", self.database_path), [])
-        history = season_history(555, self.database_path)
-        self.assertEqual([entry["month"] for entry in history], ["2026-10"])
-        self.assertEqual(history[0]["leader"]["team_name"], table[0]["team_name"])
-        self.assertEqual(parse_month("10/2026"), "2026-10")
-        self.assertEqual(parse_month("outubro", NOW), "2026-10")
 
 
 class CartolaTests(Case):

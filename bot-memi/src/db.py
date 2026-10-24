@@ -538,6 +538,64 @@ CREATE TABLE IF NOT EXISTS championship_settings (
     enabled INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0, 1)),
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Edições do Pintos Corridos + Copa IOS (`src.league`). As tabelas `championship*` acima
+-- ficam só com o histórico do antigo campeonato diário.
+CREATE TABLE IF NOT EXISTS league_editions (
+    id INTEGER PRIMARY KEY,
+    guild_id TEXT NOT NULL,
+    number INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'registration'
+        CHECK (status IN ('registration', 'playing', 'completed')),
+    opens_on TEXT NOT NULL,
+    start_date TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    completed_at TEXT,
+    UNIQUE (guild_id, number)
+);
+
+CREATE TABLE IF NOT EXISTS league_entries (
+    edition_id INTEGER NOT NULL REFERENCES league_editions(id) ON DELETE CASCADE,
+    discord_user_id TEXT NOT NULL REFERENCES game_users(discord_user_id) ON DELETE CASCADE,
+    team_name TEXT NOT NULL,
+    seed INTEGER NOT NULL,
+    waitlisted INTEGER NOT NULL DEFAULT 0 CHECK (waitlisted IN (0, 1)),
+    PRIMARY KEY (edition_id, discord_user_id)
+);
+
+CREATE TABLE IF NOT EXISTS league_fixtures (
+    id INTEGER PRIMARY KEY,
+    edition_id INTEGER NOT NULL REFERENCES league_editions(id) ON DELETE CASCADE,
+    competition TEXT NOT NULL CHECK (competition IN ('pintos', 'copa')),
+    stage TEXT NOT NULL,
+    day INTEGER NOT NULL,
+    slot INTEGER NOT NULL,
+    home_user_id TEXT,
+    away_user_id TEXT,
+    home_goals INTEGER,
+    away_goals INTEGER,
+    home_penalties INTEGER,
+    away_penalties INTEGER,
+    winner_user_id TEXT,
+    walkover TEXT,
+    events_json TEXT,
+    played_at TEXT,
+    UNIQUE (edition_id, competition, stage, slot)
+);
+
+CREATE INDEX IF NOT EXISTS idx_league_fixtures_day ON league_fixtures(edition_id, day);
+CREATE INDEX IF NOT EXISTS idx_league_fixtures_home ON league_fixtures(home_user_id);
+CREATE INDEX IF NOT EXISTS idx_league_fixtures_away ON league_fixtures(away_user_id);
+
+CREATE TABLE IF NOT EXISTS league_prizes (
+    edition_id INTEGER NOT NULL REFERENCES league_editions(id) ON DELETE CASCADE,
+    competition TEXT NOT NULL,
+    discord_user_id TEXT NOT NULL,
+    place TEXT NOT NULL,
+    memilets INTEGER NOT NULL,
+    items TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (edition_id, competition, discord_user_id)
+);
 """
 
 

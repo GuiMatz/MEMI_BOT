@@ -1,6 +1,7 @@
 """Estatísticas dos times (`mm!stats`), juntando campeonato e amistosos.
 
-O campeonato já guarda cada jogo em `championship_fixtures`. Os amistosos passam a ser
+O campeonato guarda cada jogo em `league_fixtures` (Pintos Corridos e Copa IOS; o antigo
+campeonato diário, em `championship_fixtures`). Os amistosos passam a ser
 guardados em `friendly_matches` (`record_friendly`) a partir desta versão; os jogados
 antes não têm registro. Os filtros são por tipo (campeonato/amistoso), período e
 adversário (confronto direto).
@@ -135,6 +136,15 @@ def match_records(
             "SELECT * FROM friendly_matches WHERE home_user_id = ? OR away_user_id = ?",
             (user_id, user_id),
         ).fetchall()
+        # Pintos Corridos e Copa IOS (sem as folgas da Copa, que não têm adversário).
+        league_games = connection.execute(
+            """
+            SELECT * FROM league_fixtures
+            WHERE (home_user_id = ? OR away_user_id = ?) AND played_at IS NOT NULL
+              AND home_user_id IS NOT NULL AND away_user_id IS NOT NULL
+            """,
+            (user_id, user_id),
+        ).fetchall()
     for row in fixtures:
         home = row["home_user_id"] == user_id
         own, other = (row["home_goals"], row["away_goals"])[:: 1 if home else -1]
@@ -193,6 +203,39 @@ def match_records(
                 outcome,
                 tuple(penalties) if penalties else None,
                 False,
+                scorers,
+                highlights,
+            )
+        )
+    for row in league_games:
+        home = row["home_user_id"] == user_id
+        own, other = (row["home_goals"], row["away_goals"])[:: 1 if home else -1]
+        penalties = None
+        if row["home_penalties"] is not None:
+            penalties = (row["home_penalties"], row["away_penalties"])[:: 1 if home else -1]
+        if row["walkover"] == "ambos":
+            outcome = "D"
+        elif row["winner_user_id"]:  # mata-mata e W.O.
+            outcome = "V" if row["winner_user_id"] == user_id else "D"
+        else:
+            outcome = "V" if own > other else "D" if own < other else "E"
+        events = json.loads(row["events_json"] or "{}")
+        scorers, highlights = _side_details(
+            events.get("goals", []),
+            (events.get("stats") or {}).get("highlights", []),
+            "home" if home else "away",
+            team_name,
+        )
+        records.append(
+            MatchRecord(
+                "championship",
+                _moment(row["played_at"]),
+                row["away_user_id"] if home else row["home_user_id"],
+                int(own),
+                int(other),
+                outcome,
+                tuple(penalties) if penalties else None,
+                row["stage"] == "final",
                 scorers,
                 highlights,
             )
@@ -269,3 +312,52 @@ def compute_stats(records: list[MatchRecord]) -> TeamStats:
         stats.streak = (first, length)
     stats.top_scorers = sorted(scorers.items(), key=lambda item: (-item[1], item[0]))[:5]
     return stats
+
+
+@dataclass(frozen=True)
+class Rivalry:
+    """Confronto direto entre dois times (campeonato e amistosos), do mais antigo ao mais
+    recente. `outcomes` é do ponto de vista do primeiro time: "V", "E" ou "D"."""
+
+    outcomes: tuple[str, ...] = ()
+
+    @property
+    def games(self) -> int:
+        return len(self.outcomes)
+
+    @property
+    def wins(self) -> int:
+        return self.outcomes.count("V")
+
+    @property
+    def draws(self) -> int:
+        return self.outcomes.count("E")
+
+    @property
+    def losses(self) -> int:
+        return self.outcomes.count("D")
+
+    def flipped(self) -> "Rivalry":
+        """O mesmo confronto do ponto de vista do outro time."""
+        swap = {"V": "D", "D": "V", "E": "E"}
+        return Rivalry(tuple(swap[outcome] for outcome in self.outcomes))
+
+    def run(self, outcome: str = "V", skip_last: bool = False) -> int:
+        """Quantos jogos seguidos, contando do fim, deram `outcome`."""
+        outcomes = self.outcomes[:-1] if skip_last else self.outcomes
+        count = 0
+        for item in reversed(outcomes):
+            if item != outcome:
+                break
+            count += 1
+        return count
+
+
+def rivalry(
+    first_user_id: int | str, second_user_id: int | str, database_path: str | Path = DATABASE_PATH
+) -> Rivalry:
+    """O confronto direto do primeiro time contra o segundo."""
+    other = str(second_user_id)
+    records = [r for r in match_records(first_user_id, database_path) if r.opponent_id == other]
+    records.sort(key=lambda record: record.played_at)
+    return Rivalry(tuple(record.outcome for record in records))

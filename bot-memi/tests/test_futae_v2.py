@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-from src.championship import CHAMPION_PRIZE, play_championship, register_team
+from src import league
 from src.cosmetics import (
     CosmeticError,
     equip,
@@ -470,22 +470,22 @@ class IncomeTests(Case):
 
 
 class ChampionshipRewardTests(Case):
-    def test_champion_prize_and_box_office(self):
+    def test_league_games_fill_the_box_office(self):
         self.full_team(100, overall=90)
-        self.full_team(200, overall=60)
+        for user_id in (200, 300, 400):
+            self.full_team(user_id, overall=60)
         self.give(10_000, 100)
         build_floor(100, "Pessoa", 5, self.database_path)
-        for user_id in (100, 200):
-            register_team(555, user_id, now=NOW, database_path=self.database_path)
-        before = {user_id: self.wallet(user_id) for user_id in (100, 200)}
-        table = play_championship(
-            555, now=NOW, rng=random.Random(3), database_path=self.database_path
+        edition = league.start_edition(
+            555,
+            league.eligible_users(self.database_path),
+            self.database_path,
+            now=NOW,
         )
-        winner = int(table["winner_user_id"])
-        self.assertEqual(table["prize"], CHAMPION_PRIZE)
-        self.assertEqual(self.wallet(winner), before[winner] + CHAMPION_PRIZE)
+        for fixture in league.due_fixtures(edition, NOW, self.database_path):
+            league.play_fixture(fixture, random.Random(3), self.database_path)
         box = box_office_status(100, self.database_path)
-        self.assertGreaterEqual(box.reserve, 100)
+        self.assertGreaterEqual(box.reserve, 50)  # rodada 1 do Pintos
         self.assertEqual(box_office_status(200, self.database_path).reserve, 0)
         collected = collect_box_office(100, self.database_path)
         self.assertEqual(collected, box.reserve)

@@ -1,0 +1,215 @@
+import random
+import unittest
+from dataclasses import asdict
+
+from src.commentary import (
+    PHRASES,
+    RIVALRY,
+    STARS,
+    _situation,
+    match_commentary,
+    pick,
+    rivalry_intro,
+    rivalry_line,
+    star_lines,
+)
+from src.team_stats import Rivalry
+from src.narration import _line, match_embed
+from src.pve import LEGEND_STYLES, legend_teams
+from src.score_image import _kick_rows
+from src.simulation import STYLES, PenaltyKick, simulate_match
+from tests.test_match_dynamics import AWAY, HOME, make_team
+
+DOTS = {"home": "🔴", "away": "🔵"}
+
+
+def event(kind, minute=10, side="home", home=0, away=0, **extra):
+    data = {"minute": minute, "stoppage": 0, "kind": kind, "text": "", "side": side}
+    return {**data, "home_goals": home, "away_goals": away, **extra}
+
+
+def goal(minute, side, home, away, player="Fulano", **extra):
+    return event("goal", minute, side, home, away, player=player, **extra)
+
+
+def fulltime(home, away, stats=None):
+    return event("fulltime", 90, None, home, away, stats=stats)
+
+
+class LegendStyleTests(unittest.TestCase):
+    def test_every_legend_has_a_style_and_bosses_keep_it(self):
+        teams = legend_teams()
+        self.assertEqual({team.key for team in teams}, set(LEGEND_STYLES))
+        self.assertTrue(set(LEGEND_STYLES.values()) <= set(STYLES))
+        italy = next(team for team in teams if team.key == "selecao:itália")
+        boss = italy.as_boss(0.01, "2026-W43")
+        self.assertEqual(boss.style, "park")
+        self.assertEqual(boss.as_team()["style"], "park")
+        self.assertIn("retranca", boss.power)
+
+
+class LateTacticTests(unittest.TestCase):
+    def test_team_losing_at_70_goes_all_out_and_says_so(self):
+        rng = random.Random(1)
+        switched = 0
+        for _ in range(300):
+            result = simulate_match("A", HOME, "B", AWAY, rng=rng)
+            for item in result.events:
+                if item.kind != "tactic":
+                    continue
+                switched += 1
+                self.assertEqual(item.minute, 70)
+                losing = item.home_goals < item.away_goals
+                self.assertEqual(item.side, "home" if losing else "away")
+                self.assertIn("ataque total", _line(asdict(item), DOTS))
+        self.assertGreater(switched, 50)
+
+
+class MatchPenaltyTests(unittest.TestCase):
+    def test_penalties_in_the_match_say_how_they_went(self):
+        rng = random.Random(4)
+        shots = []
+        for _ in range(800):
+            result = simulate_match("A", HOME, "B", AWAY, rng=rng)
+            shots += [item for item in result.events if item.play == "penalti"]
+        self.assertTrue(all(item.shot for item in shots))
+        missed = [item for item in shots if item.kind != "goal"]
+        saved = sum(item.kind in {"save", "miracle"} for item in missed) / len(missed)
+        self.assertGreater(saved, 0.6)  # pênalti perdido é quase sempre defesa
+        line = _line(asdict(next(item for item in shots if item.kind == "goal")), DOTS)
+        self.assertIn("GOL DE PÊNALTI", line)
+        line = _line(asdict(missed[0]), DOTS)
+        self.assertIn("Pênalti perdido", line)
+
+
+class KickRowTests(unittest.TestCase):
+    def test_kicks_are_split_by_team_in_order(self):
+        kicks = [
+            PenaltyKick("home", "A", True, 1, 0),
+            {"side": "away", "kicker_name": "B", "scored": False},
+            PenaltyKick("home", "C", False, 1, 0),
+        ]
+        self.assertEqual(_kick_rows(kicks), {"home": [True, False], "away": [False]})
+        self.assertEqual(_kick_rows(None), {"home": [], "away": []})
+
+
+class CommentaryTests(unittest.TestCase):
+    def test_situations(self):
+        cases = {
+            "zero_a_zero": [fulltime(0, 0)],
+            "virada": [
+                goal(10, "away", 0, 1),
+                goal(50, "home", 1, 1),
+                goal(80, "home", 2, 1),
+                fulltime(2, 1),
+            ],
+            "virada_insana": [
+                goal(10, "away", 0, 1),
+                goal(20, "away", 0, 2),
+                goal(50, "home", 1, 2),
+                goal(60, "home", 2, 2),
+                goal(80, "home", 3, 2),
+                fulltime(3, 2),
+            ],
+            "hattrick": [goal(m, "home", i + 1, 0, "Zé") for i, m in enumerate((5, 30, 60))]
+            + [fulltime(3, 0)],
+            "goleada": [goal(10 * i, "home", i, 0, f"P{i}") for i in range(1, 6)]
+            + [fulltime(5, 0)],
+            "gol_no_fim": [goal(89, "away", 0, 1), fulltime(0, 1)],
+            "penaltis": [fulltime(1, 1), event("penalty", 90, "away", 3, 4)],
+        }
+        for expected, events in cases.items():
+            with self.subTest(expected):
+                self.assertEqual(_situation(events)[0], expected)
+                text = match_commentary(events, "Casa", "Fora")
+                self.assertTrue(text)
+                self.assertNotIn("{", text)
+
+    def test_every_phrase_fills_its_blanks(self):
+        values = dict.fromkeys(
+            ("winner", "loser", "team", "other", "home", "away", "player", "goals", "keeper"), "X"
+        )
+        for phrases in PHRASES.values():
+            for phrase in phrases:
+                phrase.format(score="1 × 0", **values)
+        for _, _, phrases in STARS:
+            self.assertGreaterEqual(len(phrases), 8)
+            self.assertEqual(len(set(phrases)), len(phrases))
+            self.assertFalse(any("{" in phrase for phrase in phrases))
+
+    def test_same_match_same_phrase_and_it_shows_in_the_final_embed(self):
+        events = [goal(10, "home", 1, 0), goal(50, "home", 2, 0), fulltime(2, 0)]
+        first = match_commentary(events, "Casa", "Fora")
+        self.assertEqual(first, match_commentary(events, "Casa", "Fora"))
+        embed = match_embed("Casa", "Fora", events, finished=True)
+        fields = {field.name: field.value for field in embed.fields}
+        self.assertIn(first, fields["🎙️ Análise"])
+
+    def test_recent_phrases_are_not_repeated(self):
+        phrases = PHRASES["jogo_dificil"]
+        chosen = [pick("teste", f"partida {n}", phrases) for n in range(len(phrases) * 3 // 4 + 1)]
+        self.assertEqual(len(set(chosen)), len(chosen))
+        self.assertEqual(pick("teste", "partida 0", phrases), chosen[0])  # mesma partida
+        common = ("jogo_dificil", "vitoria_facil", "penaltis", "virada", "dominio")
+        self.assertTrue(all(len(PHRASES[key]) >= 10 for key in common))
+        self.assertTrue(all(len(phrases) >= 4 for phrases in PHRASES.values()))
+
+    def test_scoreless_draw_beats_the_keeper_story(self):
+        saves = [event("save", 10 * n, "away", detail="Dida", player="X") for n in range(1, 5)]
+        events = saves + [fulltime(0, 0, {"best": {"rating": 9}, "shots": (1, 5)})]
+        self.assertEqual(_situation(events)[0], "zero_a_zero")
+
+    def test_star_players_get_their_line(self):
+        events = [
+            goal(10, "home", 1, 0, "Cristiano Ronaldo"),
+            goal(20, "home", 2, 0, "Cristiano Ronaldo"),
+            goal(30, "away", 2, 1, "Abédi Pelé"),
+            goal(40, "away", 2, 2, "Lionel Messi"),
+            fulltime(2, 2),
+        ]
+        lines = star_lines(events)
+        self.assertEqual(len(lines), 2)
+        self.assertIn("Cristiano", lines[0])
+        self.assertIn("Messi", lines[1])
+
+    def test_real_matches_always_get_a_commentary(self):
+        rng = random.Random(9)
+        for strength in (70, 80, 90):
+            home = make_team("Casa", strength)
+            for _ in range(60):
+                result = simulate_match("A", home, "B", AWAY, rng=rng)
+                self.assertTrue(match_commentary([asdict(e) for e in result.events], "A", "B"))
+
+
+def duel(outcomes: str) -> Rivalry:
+    return Rivalry(tuple(outcomes))
+
+
+class RivalryTextTests(unittest.TestCase):
+    def line(self, outcomes):
+        return rivalry_line(duel(outcomes), "Ana FC", "Beto FC")
+
+    def test_intro_shows_record_classic_and_streak(self):
+        self.assertIn("Primeiro confronto", rivalry_intro(duel(""), "Ana FC", "Beto FC"))
+        intro = rivalry_intro(duel("DVEVV"), "Ana FC", "Beto FC")
+        self.assertIn("Clássico", intro)
+        self.assertIn("**Ana FC** 3 × 1 **Beto FC** · 1 empate", intro)
+        self.assertIn("Ana FC venceu os últimos 2", intro)
+        self.assertNotIn("Clássico", rivalry_intro(duel("VD"), "Ana FC", "Beto FC"))
+
+    def test_lines_after_the_match(self):
+        self.assertIn("Ana FC", self.line("V"))
+        self.assertIn("3", self.line("DVVV"))  # freguesia
+        self.assertIn("Beto FC", self.line("VVVD"))  # fim do jejum do visitante
+        self.assertIn("3 × 2", self.line("VDDVV"))  # passou à frente
+        self.assertIn("2 × 2", self.line("VVDD"))  # igualou
+        self.assertIn("10", self.line("VDVDVDVDEE"))  # marco
+        self.assertIsNone(self.line("VVDV"))  # nada de novo: sem frase
+        self.assertIsNone(self.line(""))
+        for phrases in RIVALRY.values():
+            for phrase in phrases:
+                phrase.format(winner="W", loser="L", home="H", away="A", n=3, record="W 1 × 0 L")
+
+
+if __name__ == "__main__":
+    unittest.main()

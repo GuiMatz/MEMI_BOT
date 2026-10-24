@@ -1,4 +1,4 @@
-"""Quadros em imagem: missões (`mm!missoes`) e temporada mensal (`mm!temporada`).
+"""Quadros em imagem: missões (`mm!missoes`) e tabela do Pintos Corridos (`mm!tabela`).
 
 O Discord mostra a imagem do embed com ~450 px de largura: o texto aqui é grande (26 px
 ou mais nas linhas) para continuar legível nesse tamanho.
@@ -127,72 +127,55 @@ def render_missions(rows: list[dict[str, Any]], owner: str) -> BytesIO:
     return to_png(image)
 
 
-def render_season(table: list[dict[str, Any]], title: str) -> BytesIO:
+FINALIST = (88, 196, 132)
+
+
+def render_league_table(table: list[dict[str, Any]], title: str, subtitle: str) -> BytesIO:
+    """Tabela do Pintos Corridos: todos os times (até 16), os dois primeiros em verde
+    (vão para a final), com jogos, V-E-D, saldo, pontos e os últimos resultados."""
     width = 1000
-    shown = table[:8]
-    row_height = 70
-    height = 600 + row_height * max(1, len(shown)) + 30
+    row_height = 60
+    height = 160 + 40 + row_height * max(1, len(table)) + 30
     image = Image.new("RGBA", (width, height), (*BACKGROUND, 255))
-    image.alpha_composite(glow(image.size, (width / 2, 320), 300, GOLD, 45))
-    _header(image, "TEMPORADA", title, "temporada", GOLD)
+    image.alpha_composite(glow(image.size, (width - 140, 40), 260, GOLD, 40))
+    _header(image, title, subtitle, "temporada", GOLD)
     draw = ImageDraw.Draw(image)
-    if not shown:
-        text_center(draw, (width / 2, 340), "Nenhum campeonato terminado ainda.", 30, False, MUTED)
-        return to_png(image)
-
-    # Pódio: 2º, 1º e 3º.
-    slots = (
-        (1, width / 2 - 300, 170, SILVER),
-        (0, width / 2, 210, GOLD),
-        (2, width / 2 + 300, 150, BRONZE),
-    )
-    for index, center, size, medal_color in slots:
-        if index >= len(shown):
-            continue
-        team = shown[index]
-        badge = emblem(team, size)
-        top = 410 - badge.height
-        image.alpha_composite(badge, (int(center - badge.width / 2), int(top)))
-        draw.ellipse((center - 22, top - 14, center + 22, top + 30), fill=medal_color)
-        text_center(draw, (center, top + 8), str(index + 1), 26, True, BACKGROUND)
-        name = fit(draw, team["team_name"], font(32, True), 280)
-        text_center(draw, (center, 450), name, 32)
-        text_center(draw, (center, 492), f"{team['points']} pts", 28, True, medal_color)
-
-    y = 556
-    columns = ((640, "V-E-D"), (770, "SG"), (850, "TÍT"), (935, "PTS"))
+    y = 168
+    columns = ((560, "J"), (650, "V-E-D"), (760, "SG"), (850, "ÚLT."), (940, "PTS"))
     for x, label in columns:
         text_center(draw, (x, y), label, 20, True, MUTED)
-    y += 28
-    for rank, team in enumerate(shown, start=1):
-        if rank % 2:
+    y += 26
+    form_colors = {"V": (88, 196, 132), "E": (150, 158, 172), "D": (220, 90, 90)}
+    for rank, team in enumerate(table, start=1):
+        finalist = rank <= 2
+        if finalist:
+            draw.rounded_rectangle(
+                (26, y, width - 26, y + row_height - 6), 12, fill=mix(FINALIST, BACKGROUND, 0.82)
+            )
+        elif rank % 2:
             draw.rounded_rectangle((26, y, width - 26, y + row_height - 6), 12, fill=CARD)
         middle = y + (row_height - 6) / 2
-        text_center(draw, (62, middle), str(rank), 28, True, GOLD if rank == 1 else MUTED)
-        mini = emblem(team, 48)
-        image.alpha_composite(mini, (96, int(middle - 24)))
+        text_center(draw, (60, middle), str(rank), 26, True, FINALIST if finalist else MUTED)
+        mini = emblem(team, 40)
+        image.alpha_composite(mini, (92, int(middle - 20)))
         draw.text(
-            (160, middle),
-            fit(draw, team["team_name"], font(28, True), 380),
-            font=font(28, True),
+            (146, middle),
+            fit(draw, team["team_name"], font(26, True), 360),
+            font=font(26, True),
             fill="white",
             anchor="lm",
         )
         values = (
+            str(team["played"]),
             f"{team['wins']}-{team['draws']}-{team['losses']}",
             f"{team['gf'] - team['ga']:+d}",
-            str(team["titles"]),
-            str(team["points"]),
         )
-        for (x, label), value in zip(columns, values):
-            text_center(
-                draw,
-                (x, middle),
-                value,
-                32 if label == "PTS" else 26,
-                True,
-                "white" if label == "PTS" else (205, 212, 222),
-            )
+        for (x, _), value in zip(columns, values):
+            text_center(draw, (x, middle), value, 24, True, (205, 212, 222))
+        for index, outcome in enumerate(team.get("form", [])[-3:]):
+            x = 826 + index * 24
+            draw.ellipse((x - 8, middle - 8, x + 8, middle + 8), fill=form_colors[outcome])
+        text_center(draw, (940, middle), str(team["points"]), 30, True, "white")
         y += row_height
     draw.rectangle((0, height - 8, width, height), fill=mix(GOLD, BACKGROUND, 0.3))
     return to_png(image)

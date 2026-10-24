@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from src.cogs import matches
+from src.team_stats import Rivalry
 from src.cogs.matches import TWO_LEG_WORDS, MatchesCog
 
 
@@ -40,6 +41,7 @@ class TwoLegFriendlyTests(unittest.TestCase):
             patch.object(matches, "penalty_shootout_kicks", return_value=[kick]),
             patch.object(matches, "penalty_events", return_value=[]),
             patch.object(matches, "record_friendly") as record_friendly,
+            patch.object(matches, "rivalry", return_value=Rivalry()),
             patch.object(matches, "record_event", events),
             patch.object(matches, "narrate", AsyncMock()),
             patch.object(matches, "score_file", AsyncMock(return_value=None)),
