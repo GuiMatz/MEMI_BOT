@@ -187,9 +187,21 @@ PHRASES: dict[str, tuple[str, ...]] = {
 }
 
 # Craques marcantes: quando um deles faz gol, o comentarista lembra a marca registrada dele
-# (comemoração, apelido, narração famosa); não são citações inventadas. Cada entrada:
+# (comemoração, apelido, jeito de jogar); não são citações inventadas. Cada entrada:
 # palavras do nome (todas precisam estar no nome do jogador), se o nome tem de ser exato
-# (Pelé não é o Abédi Pelé; Ronaldo Fenômeno não é o Cristiano Ronaldo) e as frases.
+# (Pelé não é o Abédi Pelé; Ronaldo Fenômeno não é o Cristiano Ronaldo) e as frases. Quem
+# tem um craque desses faz gol quase todo jogo: são 8 frases por craque, e a escolha evita
+# as 6 usadas por último (`src.commentary.pick`).
+VINI = (
+    "Baila, Vini! Vini Jr. marcou e dançou na beira do campo.",
+    "Vini partiu para cima, deixou o marcador no chão e marcou.",
+    "Vini Jr. desequilibrou de novo. Dança garantida na comemoração.",
+    "Arrancada pela esquerda, drible curto e chute cruzado. Gol do Vini!",
+    "Vini Jr. recebeu, encarou e venceu. O lateral ainda está procurando a bola.",
+    "Velocidade e ousadia: Vini Jr. resolveu mais uma vez.",
+    "O menino de São Gonçalo fez de novo. Gol de Vini Jr.!",
+    "Quando a bola chega no Vini, a arquibancada já levanta.",
+)
 STARS: tuple[tuple[tuple[str, ...], bool, tuple[str, ...]], ...] = (
     (
         ("cristiano", "ronaldo"),
@@ -199,6 +211,10 @@ STARS: tuple[tuple[tuple[str, ...], bool, tuple[str, ...]], ...] = (
             "Cristiano Ronaldo subiu, marcou e girou no ar: SIUUU!",
             "CR7 não perdoa. Gol, salto e a torcida inteira gritando SIUUU.",
             "Cristiano Ronaldo apareceu na hora certa, como sempre. Máquina de fazer gols.",
+            "Cabeçada no terceiro andar. Cristiano Ronaldo subiu mais alto que todo mundo.",
+            "Pernas abertas na cobrança, respiração fundo... e gol. Cristiano é Cristiano.",
+            "O homem dos recordes ampliou a conta. Mais um de Cristiano Ronaldo!",
+            "Cristiano Ronaldo pediu calma com as mãos depois do gol. Ele resolve.",
         ),
     ),
     (
@@ -209,6 +225,10 @@ STARS: tuple[tuple[tuple[str, ...], bool, tuple[str, ...]], ...] = (
             "Gol de Messi, dedos para o céu. O GOAT não tira folga.",
             "A bola parece colada no pé dele. Messi marcou e fez parecer fácil.",
             "Messi caminhou o jogo todo e decidiu em um lance. Gênio é assim.",
+            "Arrancada pela direita, corte para a canhota e bola no ângulo. Assinatura de Messi.",
+            "Messi deixou três marcadores para trás como se fossem cones.",
+            "La Pulga fez mais uma. Até a torcida adversária aplaude.",
+            "Marcação dupla, tripla, não adianta: Messi encontra o caminho.",
         ),
     ),
     (
@@ -218,6 +238,11 @@ STARS: tuple[tuple[tuple[str, ...], bool, tuple[str, ...]], ...] = (
             "Ousadia e alegria! Neymar deixou a sua marca.",
             "Neymar marcou e fez questão de sorrir para a câmera. Moleque Ney!",
             "Drible, finta e gol. Neymar jogou como se estivesse no quintal de casa.",
+            "Caneta, chapéu e bola na rede. Neymar deu show.",
+            "Neymar parou, olhou o goleiro e tocou no cantinho. Frieza total.",
+            "O menino da Vila cresceu e continua fazendo arte. Gol de Neymar!",
+            "Neymar dançou na comemoração, e a torcida foi junto.",
+            "Quando Neymar está inspirado, não tem lateral que aguente.",
         ),
     ),
     (
@@ -227,6 +252,11 @@ STARS: tuple[tuple[tuple[str, ...], bool, tuple[str, ...]], ...] = (
             "Mbappé ligou o turbo, marcou e cruzou os braços na comemoração.",
             "Ninguém alcança Mbappé em velocidade. Arrancou e guardou.",
             "Mbappé apareceu em velocidade de foguete e a bola foi parar na rede.",
+            "A defesa piscou e Mbappé já estava na cara do gol. Gol!",
+            "Mbappé finalizou com a frieza de quem já ganhou Copa do Mundo.",
+            "Contra-ataque com Mbappé é meio gol. Hoje foi o gol inteiro.",
+            "Mbappé recebeu na esquerda, cortou para dentro e bateu no canto. Clássico.",
+            "Velocidade, técnica e frieza. Mbappé tem tudo, e mostrou.",
         ),
     ),
     (
@@ -236,26 +266,15 @@ STARS: tuple[tuple[tuple[str, ...], bool, tuple[str, ...]], ...] = (
             "Haaland marcou e sentou para meditar. O robô não erra.",
             "Bola na área, Haaland na rede. Simples assim.",
             "O ciborgue norueguês fez mais um. Haaland é gol.",
+            "Haaland pegou a sobra e fuzilou. A rede quase rasgou.",
+            "Força bruta e faro de gol: mais um do Haaland.",
+            "Quase dois metros de centroavante e um pé calibrado. Haaland marcou.",
+            "Haaland toca pouco na bola, mas quando toca... é gol.",
+            "A defesa sabia que a bola ia para o Haaland. Não adiantou.",
         ),
     ),
-    (
-        ("vinicius", "junior"),
-        False,
-        (
-            "Baila, Vini! Vinícius Júnior marcou e dançou na beira do campo.",
-            "Vinícius Júnior partiu para cima, deixou o marcador no chão e marcou.",
-            "Vini Jr. desequilibrou de novo. Dança garantida na comemoração.",
-        ),
-    ),
-    (
-        ("vini", "jr"),
-        False,
-        (
-            "Baila, Vini! Vini Jr. marcou e dançou na beira do campo.",
-            "Vini Jr. partiu para cima, deixou o marcador no chão e marcou.",
-            "Vini Jr. desequilibrou de novo. Dança garantida na comemoração.",
-        ),
-    ),
+    (("vinicius", "junior"), False, VINI),
+    (("vini", "jr"), False, VINI),
     (
         ("salah",),
         False,
@@ -263,6 +282,11 @@ STARS: tuple[tuple[tuple[str, ...], bool, tuple[str, ...]], ...] = (
             "Salah marcou e se ajoelhou em agradecimento. O Rei do Egito.",
             "Corte para a perna esquerda e bola no canto: assinatura de Salah.",
             "O Faraó fez mais um. Salah é decisivo.",
+            "Salah apareceu pela direita e finalizou de canhota. Indefensável.",
+            "Mo Salah fez a festa da torcida mais uma vez.",
+            "Rápido, frio e certeiro: gol de Salah.",
+            "Salah encontrou o espaço que não existia e marcou.",
+            "Mais um gol do egípcio. Salah não para.",
         ),
     ),
     (
@@ -272,6 +296,11 @@ STARS: tuple[tuple[tuple[str, ...], bool, tuple[str, ...]], ...] = (
             "Zlatan não pede licença: marca e lembra a todos quem é o Zlatan.",
             "Ibrahimović marcou com a marra de sempre. Ninguém comemora como ele.",
             "Gol acrobático? Com Ibrahimović, nada é impossível.",
+            "Voleio de taekwondo e bola na rede. Zlatan sendo Zlatan.",
+            "Ibrahimović dominou no peito, girou e bateu. Facilidade absurda.",
+            "Zlatan marcou e abriu os braços. Ele sabe que é o centro das atenções.",
+            "Quase dois metros de talento e marra: Ibrahimović decidiu.",
+            "Ibra fez mais um e não demonstrou nenhuma surpresa.",
         ),
     ),
     (
@@ -281,6 +310,11 @@ STARS: tuple[tuple[tuple[str, ...], bool, tuple[str, ...]], ...] = (
             "Ronaldinho marcou com aquele sorriso no rosto. Joga bonito!",
             "Elástico, chapéu e gol. Ronaldinho Gaúcho fazendo arte.",
             "Ronaldinho olhou para um lado e tocou para o outro. Magia pura.",
+            "Gol de Ronaldinho, e o sorriso mais famoso do futebol.",
+            "Ronaldinho fez a bola dançar antes de mandar para a rede.",
+            "Falta de Ronaldinho é perigo: a bola fez a curva e entrou.",
+            "Bruxaria! Ronaldinho Gaúcho inventou um gol do nada.",
+            "Ronaldinho comemorou com o hang loose, e a torcida foi ao delírio.",
         ),
     ),
     (
@@ -290,6 +324,11 @@ STARS: tuple[tuple[tuple[str, ...], bool, tuple[str, ...]], ...] = (
             "O Rei marcou! Soco no ar, como só Pelé sabia comemorar.",
             "Pelé fez mais um. Mil e tantos gols e ainda com fome.",
             "Majestade em campo. Gol do Rei Pelé!",
+            "Chapéu no zagueiro e voleio. Coisa de Rei.",
+            "Pelé subiu como se tivesse mola. Cabeçada certeira.",
+            "O Atleta do Século mostrou por que tem esse título.",
+            "Gol de Pelé! O resto do mundo só pode assistir.",
+            "Três vezes campeão do mundo e com o mesmo apetite. Pelé marcou.",
         ),
     ),
     (
@@ -299,6 +338,11 @@ STARS: tuple[tuple[tuple[str, ...], bool, tuple[str, ...]], ...] = (
             "Romário na área é gol. O Baixinho não perdoa.",
             "Um toque, uma finta, um gol. Romário, o rei da pequena área.",
             "O Baixinho resolveu com a calma de sempre. Gol de Romário!",
+            "Romário recebeu de costas, girou e tocou na saída do goleiro.",
+            "Romário não corre muito; não precisa. Bastou uma bola.",
+            "Romário dentro da área: sentença de gol.",
+            "O Baixinho deixou o zagueiro na saudade e marcou.",
+            "Gol de Romário! Faro de artilheiro não se ensina.",
         ),
     ),
     (
@@ -308,6 +352,11 @@ STARS: tuple[tuple[tuple[str, ...], bool, tuple[str, ...]], ...] = (
             "O Fenômeno arrancou e ninguém segurou. Gol de Ronaldo!",
             "Pedalada, arrancada e gol. Ronaldo Fenômeno em estado puro.",
             "Ronaldo Fenômeno deixou o goleiro sentado e tocou para a rede.",
+            "O Fenômeno apareceu entre os zagueiros e finalizou de primeira.",
+            "Ronaldo comemorou balançando o dedo. Clássico!",
+            "Velocidade e potência: Ronaldo Fenômeno atropelou a defesa.",
+            "Ronaldo driblou o goleiro e entrou com bola e tudo.",
+            "Fenômeno é pouco. Ronaldo fez mais um.",
         ),
     ),
     (
@@ -317,6 +366,11 @@ STARS: tuple[tuple[tuple[str, ...], bool, tuple[str, ...]], ...] = (
             "Barrilete cósmico! De que planeta viniste? Gol de Maradona!",
             "Diego pegou a bola e ninguém mais tocou nela até a rede. El Pibe de Oro!",
             "Maradona driblou meio time e marcou. Gênio do futebol.",
+            "Canhota mágica: Maradona colocou a bola onde quis.",
+            "Dieeego! Maradona fez a torcida cantar o nome dele.",
+            "Maradona saiu driblando do meio de campo. A defesa ainda está tonta.",
+            "Gol de Maradona com a mão? Não, dessa vez foi com o pé mesmo.",
+            "El Diez fez mais um. Arte em forma de gol.",
         ),
     ),
     (
@@ -326,6 +380,11 @@ STARS: tuple[tuple[tuple[str, ...], bool, tuple[str, ...]], ...] = (
             "Garrincha deixou mais um João no chão. Alegria do povo!",
             "Drible para a direita, sempre para a direita, e ninguém segura. Gol de Garrincha!",
             "Mané Garrincha fez a festa da arquibancada mais uma vez.",
+            "Todo mundo sabe para onde Garrincha vai. Ninguém consegue impedir.",
+            "Garrincha driblou o lateral duas vezes, só por diversão, e marcou.",
+            "O Anjo de Pernas Tortas voou mais uma vez.",
+            "Garrincha entortou a defesa e mandou para a rede. Que alegria!",
+            "Mané fez mais um, e a torcida riu junto com ele.",
         ),
     ),
     (
@@ -335,6 +394,11 @@ STARS: tuple[tuple[tuple[str, ...], bool, tuple[str, ...]], ...] = (
             "Zidane marcou com a elegância de sempre. Classe pura.",
             "Roleta, toque de calcanhar e gol. Zizou é arte.",
             "Zidane jogou de terno e gravata e ainda marcou.",
+            "Voleio de canhota, no ângulo. Zidane fez parecer simples.",
+            "Zizou dominou no peito e bateu sem deixar cair. Que categoria.",
+            "Zidane parecia jogar em câmera lenta, mas sempre um passo à frente. Gol!",
+            "Zidane decidiu com a frieza de quem já ganhou tudo.",
+            "Gol de Zidane, aplaudido até pelos adversários.",
         ),
     ),
     (
@@ -344,6 +408,11 @@ STARS: tuple[tuple[tuple[str, ...], bool, tuple[str, ...]], ...] = (
             "Galinho de Quintino! Zico marcou e a torcida foi à loucura.",
             "Falta perto da área? É do Zico. E foi gol.",
             "Zico fez mais um. O Galinho é sinônimo de gol.",
+            "Zico colocou a bola por cima da barreira, no ângulo. Perfeito.",
+            "Passe, tabela e gol: Zico jogou e fez jogar.",
+            "O camisa 10 apareceu na hora certa. Gol de Zico!",
+            "Zico bateu colocado, sem chance para o goleiro.",
+            "Gol do Galinho! Zico decidiu com classe.",
         ),
     ),
     (
@@ -353,6 +422,11 @@ STARS: tuple[tuple[tuple[str, ...], bool, tuple[str, ...]], ...] = (
             "Bellingham marcou e abriu os braços no meio da festa. Hey Jude!",
             "Bellingham chegou de trás e finalizou como atacante. Que jogador!",
             "Jude Bellingham decidiu de novo. Braços abertos e torcida em êxtase.",
+            "Meia que faz gol de centroavante: Bellingham apareceu na área.",
+            "Bellingham dominou, protegeu e bateu. Maturidade de veterano.",
+            "Bellingham comemorou de braços abertos, e a torcida cantou junto.",
+            "Chegada surpresa de Bellingham e bola na rede.",
+            "Jovem e decisivo: mais um de Jude Bellingham.",
         ),
     ),
     (
@@ -362,6 +436,11 @@ STARS: tuple[tuple[tuple[str, ...], bool, tuple[str, ...]], ...] = (
             "Lewandowski na área é gol certo. Máquina polonesa.",
             "Um toque de Lewandowski e a bola na rede. Matador.",
             "Lewandowski não precisa de muito: uma chance, um gol.",
+            "Posicionamento perfeito, finalização perfeita. Lewandowski.",
+            "Lewandowski girou em cima do zagueiro e bateu no canto.",
+            "Centroavante de manual: Lewandowski estava no lugar certo.",
+            "Mais um para a conta de Lewandowski. O polonês não cansa.",
+            "Lewandowski cabeceou firme, sem chance para o goleiro.",
         ),
     ),
 )

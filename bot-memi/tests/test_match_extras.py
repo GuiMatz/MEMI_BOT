@@ -133,7 +133,8 @@ class CommentaryTests(unittest.TestCase):
             for phrase in phrases:
                 phrase.format(score="1 × 0", **values)
         for _, _, phrases in STARS:
-            self.assertGreaterEqual(len(phrases), 3)
+            self.assertGreaterEqual(len(phrases), 8)
+            self.assertEqual(len(set(phrases)), len(phrases))
             self.assertFalse(any("{" in phrase for phrase in phrases))
 
     def test_same_match_same_phrase_and_it_shows_in_the_final_embed(self):
@@ -146,7 +147,7 @@ class CommentaryTests(unittest.TestCase):
 
     def test_recent_phrases_are_not_repeated(self):
         phrases = PHRASES["jogo_dificil"]
-        chosen = [pick("teste", f"partida {n}", phrases) for n in range(len(phrases) // 2 + 1)]
+        chosen = [pick("teste", f"partida {n}", phrases) for n in range(len(phrases) * 3 // 4 + 1)]
         self.assertEqual(len(set(chosen)), len(chosen))
         self.assertEqual(pick("teste", "partida 0", phrases), chosen[0])  # mesma partida
         common = ("jogo_dificil", "vitoria_facil", "penaltis", "virada", "dominio")

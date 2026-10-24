@@ -17,7 +17,7 @@ from src.commentary_phrases import PHRASES, RIVALRY, STARS
 from src.db import normalize_player_name
 from src.team_stats import Rivalry
 
-# Frases usadas há pouco, por situação: a próxima evita repetir (metade das opções fica de
+# Frases usadas há pouco, por situação: a próxima evita repetir (3/4 das opções ficam de
 # fora). E a frase de cada partida fica guardada: o embed final pode ser montado mais de
 # uma vez e tem de mostrar sempre a mesma. Tudo em memória; recomeça quando o bot reinicia.
 _RECENT: dict[str, deque[int]] = {}
@@ -31,7 +31,7 @@ def pick(group: str, seed: str, phrases: Sequence[str]) -> str:
     if key in _CHOSEN:
         _CHOSEN.move_to_end(key)
         return phrases[_CHOSEN[key]]
-    recent = _RECENT.setdefault(group, deque(maxlen=max(1, len(phrases) // 2)))
+    recent = _RECENT.setdefault(group, deque(maxlen=max(1, len(phrases) * 3 // 4)))
     options = [index for index in range(len(phrases)) if index not in recent]
     index = random.Random(seed).choice(options or range(len(phrases)))
     recent.append(index)
