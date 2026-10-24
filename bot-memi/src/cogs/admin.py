@@ -3,19 +3,18 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import random
 from io import BytesIO
 
 import discord
 from discord.ext import commands
 
+from src.admins import is_admin
 from src.db import DATABASE_PATH
 from src.dedupe import find_duplicates, remove_duplicates
 from src.narration import narrate
 from src.simulation import penalty_events, penalty_shootout_kicks, simulate_match
 
-DEFAULT_OWNER_ID = 277898482960826369
 TEST_RATINGS = [80, 75, 90, 77, 60, 50]
 
 
@@ -140,11 +139,10 @@ class ConfirmDedupeView(discord.ui.View):
 class AdminCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.owner_id = int(os.getenv("MEMI_OWNER_ID", DEFAULT_OWNER_ID))
         self.database_path = getattr(bot, "database_path", DATABASE_PATH)
 
     async def cog_check(self, context: commands.Context) -> bool:
-        if context.author.id != self.owner_id:
+        if not is_admin(context.author.id):
             await context.reply(
                 "Este comando é exclusivo da conta administrativa do MEMI.", mention_author=False
             )

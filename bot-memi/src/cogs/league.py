@@ -21,6 +21,7 @@ import discord
 from discord.ext import commands, tasks
 
 from src import league
+from src.admins import is_admin
 from src.boards_image import render_league_table
 from src.clock import BRASILIA
 from src.cogs.matches import score_file
@@ -705,7 +706,10 @@ class LeagueCog(commands.Cog):
         await self._open(context, "campeoes")
 
     def _is_admin(self, context: commands.Context) -> bool:
-        return bool(context.guild) and context.author.guild_permissions.manage_guild
+        """Admin do bot (`src.admins`) ou quem tem Gerenciar servidor."""
+        if context.guild is None:
+            return False
+        return is_admin(context.author.id) or context.author.guild_permissions.manage_guild
 
     @championship.command(name="canal")
     async def channel(
@@ -713,7 +717,8 @@ class LeagueCog(commands.Cog):
     ) -> None:
         if not self._is_admin(context):
             await context.reply(
-                "É preciso ter a permissão Gerenciar servidor.", mention_author=False
+                "É preciso ser admin do bot ou ter a permissão Gerenciar servidor.",
+                mention_author=False,
             )
             return
         target = channel or context.channel
@@ -740,7 +745,8 @@ class LeagueCog(commands.Cog):
     async def enable(self, context: commands.Context) -> None:
         if not self._is_admin(context):
             await context.reply(
-                "É preciso ter a permissão Gerenciar servidor.", mention_author=False
+                "É preciso ser admin do bot ou ter a permissão Gerenciar servidor.",
+                mention_author=False,
             )
             return
         if not self.scheduler_enabled:
@@ -771,7 +777,8 @@ class LeagueCog(commands.Cog):
         """Admin: começa a edição agora (se estiver esperando) e joga os jogos de hoje."""
         if not self._is_admin(context):
             await context.reply(
-                "É preciso ter a permissão Gerenciar servidor.", mention_author=False
+                "É preciso ser admin do bot ou ter a permissão Gerenciar servidor.",
+                mention_author=False,
             )
             return
         await self.run_day(context.guild, lambda **kwargs: context.send(**kwargs), manual=True)
@@ -781,7 +788,8 @@ class LeagueCog(commands.Cog):
         """Admin: joga agora a próxima rodada (ou fase da Copa) e adianta o calendário."""
         if not self._is_admin(context):
             await context.reply(
-                "É preciso ter a permissão Gerenciar servidor.", mention_author=False
+                "É preciso ser admin do bot ou ter a permissão Gerenciar servidor.",
+                mention_author=False,
             )
             return
         edition = league.ensure_edition(context.guild.id, self.database_path)
