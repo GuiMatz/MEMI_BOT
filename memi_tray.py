@@ -8,8 +8,12 @@ Instalar as dependências (uma vez):
 
 Comandos:
     python memi_tray.py                -> roda agora (com ícone na bandeja)
+    python memi_tray.py --reiniciar    -> reinicia o bot que está rodando (ou só abre)
     python memi_tray.py --instalar     -> passa a abrir sozinho quando o Windows ligar
     python memi_tray.py --desinstalar  -> deixa de abrir sozinho
+
+Para reiniciar: "Reiniciar" no menu do ícone, `mm!reiniciar` no Discord (só o dono) ou dois
+cliques no reiniciar.bat.
 
 Sem janela de console: o log é o mesmo do memi_bot.py, o arquivo memi_bot.log
 (menu do ícone -> "Ver log"). O tray e o `python memi_bot.py` usam a mesma trava, então
@@ -55,10 +59,12 @@ def desinstalar():
         print("Não estava instalado.")
 
 
-if len(sys.argv) > 1:
-    if sys.argv[1] in ("--instalar", "--install"):
+# --reiniciar e --reiniciando (a cópia aberta pelo reinício) rodam o bot normalmente.
+COMANDOS = [a for a in sys.argv[1:] if a not in ("--reiniciar", "--reiniciando")]
+if COMANDOS:
+    if COMANDOS[0] in ("--instalar", "--install"):
         instalar()
-    elif sys.argv[1] in ("--desinstalar", "--uninstall"):
+    elif COMANDOS[0] in ("--desinstalar", "--uninstall"):
         desinstalar()
     else:
         print(__doc__)
@@ -97,7 +103,9 @@ def rodar_bot():
             logging.exception("O bot não pôde continuar.")
 
     asyncio.run(principal())
-    if estado["icone"]:  # o bot parou sozinho (ex.: token errado): fecha o ícone também
+    # O bot parou (Sair, reinício ou erro, como token errado): fecha o ícone também; o
+    # main() abre a cópia nova se foi um reinício.
+    if estado["icone"]:
         estado["icone"].stop()
 
 
@@ -109,6 +117,10 @@ def sair(icone, item):
         except Exception:  # noqa: BLE001
             pass
     icone.stop()
+
+
+def reiniciar(icone, item):
+    memi_bot.pedir_reinicio()  # o bot fecha, o ícone some e o main() abre de novo
 
 
 def abrir_pasta(icone, item):
@@ -124,20 +136,26 @@ def main():
         logging.error("Falta o token.txt na pasta do bot.")
         return
 
-    trava = memi_bot.travar_instancia()  # mantida viva até o fim do main()
+    if "--reiniciar" in sys.argv and memi_bot.mandar_reinicio():
+        return  # o bot que já está rodando reinicia sozinho
+
+    trava = memi_bot.travar_instancia(espera=memi_bot.espera_trava())  # viva até o fim
     if trava is None:
         logging.error("O MeMi BOT já está rodando.")
         return
+    memi_bot.ouvir_pedidos(trava)
 
     threading.Thread(target=rodar_bot, daemon=True).start()
 
     menu = pystray.Menu(
         pystray.MenuItem("Abrir pasta do bot", abrir_pasta),
         pystray.MenuItem("Ver log", ver_log),
+        pystray.MenuItem("Reiniciar", reiniciar),
         pystray.MenuItem("Sair", sair),
     )
     estado["icone"] = pystray.Icon("memibot", criar_imagem(), "MeMi BOT", menu)
-    estado["icone"].run()  # fica aqui até clicar em "Sair"
+    estado["icone"].run()  # fica aqui até clicar em "Sair" (ou o bot parar)
+    memi_bot.reabrir_se_pedido(trava)
 
 
 if __name__ == "__main__":
