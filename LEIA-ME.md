@@ -126,17 +126,30 @@ pelo sistema; não há arquivo para apagar.
 
 ### Ícone na bandeja do Windows
 
-`memi_tray.py` roda o mesmo bot com um ícone na bandeja (abrir a pasta, ver o log, sair) e
-pode iniciar junto com o Windows:
+`memi_tray.py` roda o mesmo bot com um ícone na bandeja (abrir a pasta, ver o log, reiniciar,
+sair) e pode iniciar junto com o Windows:
 
 ```bat
 python -m pip install -r requirements-tray.txt
 python memi_tray.py               :: roda agora
+python memi_tray.py --reiniciar   :: reinicia o bot que está rodando (ou só abre)
 python memi_tray.py --instalar    :: abre sozinho ao ligar o Windows
 python memi_tray.py --desinstalar
 ```
 
 Ele usa o mesmo `memi_bot.log` e a mesma trava de instância do `memi_bot.py`.
+
+### Reiniciar o bot
+
+Três jeitos, todos fecham o bot com calma (sem perder nada) e abrem de novo sozinhos:
+
+- **`reiniciar.bat`**: dois cliques no arquivo, na pasta do bot. Se o bot não estiver
+  rodando, ele só abre.
+- **"Reiniciar"** no menu do ícone da bandeja.
+- **`mm!reiniciar`** no Discord (só o dono).
+
+Depois de atualizar os arquivos do bot (um `git pull`, por exemplo), é só reiniciar por um
+desses jeitos para a versão nova entrar no ar.
 
 Há um backup SQLite comprimido por dia em `backups/`, com retenção dos últimos sete.
 Os backups anteriores à migração ficam em subpastas separadas e não entram nessa limpeza.

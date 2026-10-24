@@ -11,7 +11,9 @@ import logging
 import os
 import shutil
 import socket
+import subprocess
 import sys
+import threading
 import typing
 import unicodedata
 from logging.handlers import RotatingFileHandler
@@ -262,16 +264,102 @@ class FluxoLog:
         return False
 
 
-def travar_instancia(porta=PORTA_UNICA):
+def travar_instancia(porta=PORTA_UNICA, espera=0.0):
     """Socket que marca esta cópia como a única em execução, ou None se já existe outra.
-    Mantenha a referência viva enquanto o bot rodar."""
-    trava = socket.socket()
+    Mantenha a referência viva enquanto o bot rodar. `espera`: segundos tentando de novo
+    (no reinício, a cópia nova espera a antiga terminar de fechar)."""
+    limite = monotonic() + espera
+    while True:
+        trava = socket.socket()
+        try:
+            trava.bind(("127.0.0.1", porta))
+            return trava
+        except OSError:
+            trava.close()
+        if monotonic() >= limite:
+            return None
+        time.sleep(0.5)
+
+
+# --- Reinício -----------------------------------------------------------------
+# Três jeitos de reiniciar, todos fechando o bot com calma antes: `mm!reiniciar` (só o dono),
+# "Reiniciar" no ícone da bandeja e o arquivo reiniciar.bat. Quem pede marca o reinício e
+# fecha o bot; quando ele termina, o programa abre uma cópia nova (com ARG_REINICIO, que
+# espera a trava ser liberada) e sai. O reiniciar.bat avisa a cópia que está rodando pela
+# porta da trava; se não houver nenhuma, ele só abre o bot.
+ARG_REINICIO = "--reiniciando"
+ARG_PEDIR_REINICIO = "--reiniciar"
+ESPERA_REINICIO = 30.0
+REINICIO = {"pedido": False, "loop": None}
+
+
+def espera_trava():
+    """Quanto tempo esperar pela trava: só no reinício (a cópia antiga ainda está saindo)."""
+    return ESPERA_REINICIO if ARG_REINICIO in sys.argv else 0.0
+
+
+def pedir_reinicio():
+    """Marca o reinício e fecha o bot (pode ser chamado de outra thread)."""
+    REINICIO["pedido"] = True
+    loop = REINICIO["loop"]
+    if loop is not None and loop.is_running():
+        asyncio.run_coroutine_threadsafe(bot.close(), loop)
+
+
+def ouvir_pedidos(trava):
+    """Atende o reiniciar.bat: ele conecta na porta da trava e manda "reiniciar"."""
+    trava.listen(1)
+
+    def atender():
+        while True:
+            try:
+                conexao, _ = trava.accept()
+            except OSError:
+                return  # trava fechada: o bot está saindo
+            with conexao:
+                conexao.settimeout(3)
+                try:
+                    pedido = conexao.recv(32).strip()
+                except OSError:
+                    continue
+            if pedido == b"reiniciar":
+                logging.info("Reinício pedido pelo reiniciar.bat.")
+                pedir_reinicio()
+
+    threading.Thread(target=atender, daemon=True, name="pedidos-de-reinicio").start()
+
+
+def mandar_reinicio(porta=PORTA_UNICA):
+    """Pede para a cópia que está rodando reiniciar. False se não há nenhuma rodando."""
     try:
-        trava.bind(("127.0.0.1", porta))
+        with socket.create_connection(("127.0.0.1", porta), timeout=3) as conexao:
+            conexao.sendall(b"reiniciar")
+        return True
     except OSError:
-        trava.close()
-        return None
-    return trava
+        return False
+
+
+def abrir_nova_copia():
+    """Abre de novo o mesmo programa (memi_bot.py ou memi_tray.py), sem janela."""
+    script = Path(sys.argv[0]).resolve()
+    argumentos = [a for a in sys.argv[1:] if a not in (ARG_REINICIO, ARG_PEDIR_REINICIO)]
+    comando = [sys.executable, str(script), *argumentos, ARG_REINICIO]
+    opcoes = {}
+    if os.name == "nt":
+        opcoes["creationflags"] = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+    else:
+        opcoes["start_new_session"] = True
+    subprocess.Popen(comando, cwd=str(script.parent), close_fds=True, **opcoes)
+    logging.info("Abrindo o bot de novo.")
+
+
+def reabrir_se_pedido(trava):
+    """No fim do programa: se pediram reinício, solta a trava e abre a cópia nova."""
+    if not REINICIO["pedido"]:
+        return False
+    trava.close()
+    abrir_nova_copia()
+    return True
 
 
 def intent_membros(valor):
@@ -3920,6 +4008,13 @@ class Ajuda(commands.Cog):
             embed=view.montar_embed(), view=view, allowed_mentions=discord.AllowedMentions.none()
         )
 
+    @commands.command(name="reiniciar", aliases=["restart", "reboot"], hidden=True)
+    @so_memi()
+    async def reiniciar(self, ctx):
+        """Fecha o bot com calma e abre de novo (só o dono)."""
+        await responder(ctx, "sucesso", "🔄 Reiniciando... volto em alguns segundos.")
+        pedir_reinicio()
+
     def __init__(self, bot):
         self.bot = bot
 
@@ -4067,6 +4162,7 @@ async def conectar():
     """Conecta o bot. Se o Discord recusar a Server Members Intent (não ativada no portal), segue
     sem ela em vez de falhar: a atualização não deve exigir nenhum passo manual."""
     global bot
+    REINICIO["loop"] = asyncio.get_running_loop()
     try:
         async with bot:
             await bot.start(TOKEN)
@@ -4087,8 +4183,13 @@ if __name__ == "__main__":
             'Falta o token! Abra o arquivo "token.txt" (na mesma pasta do bot) '
             "e troque COLE_SEU_TOKEN_AQUI pelo seu token (só o token, sem aspas)."
         )
-    trava = travar_instancia()  # a referência precisa continuar viva enquanto o bot rodar
+    if ARG_PEDIR_REINICIO in sys.argv and mandar_reinicio():
+        raise SystemExit("Pedido de reinício enviado ao MeMi BOT.")
+    # a referência precisa continuar viva enquanto o bot rodar
+    trava = travar_instancia(espera=espera_trava())
     if trava is None:
         logging.error("Outra cópia do MeMi BOT já está rodando; esta foi encerrada.")
         raise SystemExit("O MeMi BOT já está rodando. Feche a outra cópia antes de abrir esta.")
+    ouvir_pedidos(trava)
     executar()
+    reabrir_se_pedido(trava)

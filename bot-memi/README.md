@@ -141,10 +141,9 @@ dúvida entre homônimos, o script não baixa nada.
 Para testar manualmente, complete um time com `mm!time`, `mm!tatica` e
 `mm!escalar <id>` (o ID aparece em `mm!elenco`), depois use
 `mm!amistoso @pessoa`. Os campeonatos (Pintos Corridos e Copa IOS) jogam sozinhos às
-19:00 de Brasília, com todos do servidor que têm o time completo. O agendador fica
-desligado por padrão. Para habilitá-lo, configure o canal com
-`mm!campeonato canal [#canal]`, defina `MEMI_CHAMPIONSHIP_SCHEDULER=1` no `.env`,
-reinicie o bot e ative com `mm!campeonato ativar`. Alguém com Gerenciar servidor pode
+19:00 de Brasília, com todos do servidor que têm o time completo. Para ligar num
+servidor, configure o canal com `mm!campeonato canal [#canal]` e ative com
+`mm!campeonato ativar`. `MEMI_CHAMPIONSHIP_SCHEDULER=0` desliga o agendador em todos. Alguém com Gerenciar servidor pode
 começar a edição e jogar os jogos do dia na hora com `mm!campeonato jogar`.
 
 O schema v11 adiciona economia, wishes, times, escalações, trocas e campeonatos

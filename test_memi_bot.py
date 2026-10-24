@@ -2841,5 +2841,63 @@ class InfraTests(unittest.TestCase):
         self.assertEqual([r.getMessage() for r in capturado.records], ["linha 1", "linha 2"])
 
 
+
+class ReinicioTests(unittest.TestCase):
+    """mm!reiniciar, "Reiniciar" na bandeja e reiniciar.bat: fecha com calma e abre de novo."""
+
+    PORTA = 47911
+
+    def setUp(self):
+        self.addCleanup(m.REINICIO.update, {"pedido": False, "loop": None})
+
+    def test_copia_nova_espera_a_antiga_soltar_a_trava(self):
+        antiga = m.travar_instancia(self.PORTA)
+        self.assertIsNotNone(antiga)
+        self.assertIsNone(m.travar_instancia(self.PORTA))  # sem espera: recusa na hora
+        threading.Timer(0.6, antiga.close).start()
+        nova = m.travar_instancia(self.PORTA, espera=5)
+        self.assertIsNotNone(nova)
+        nova.close()
+
+    def test_so_o_reinicio_espera_pela_trava(self):
+        with patch.object(m.sys, "argv", ["memi_tray.py"]):
+            self.assertEqual(m.espera_trava(), 0.0)
+        with patch.object(m.sys, "argv", ["memi_tray.py", m.ARG_REINICIO]):
+            self.assertEqual(m.espera_trava(), m.ESPERA_REINICIO)
+
+    def test_reiniciar_bat_avisa_a_copia_que_esta_rodando(self):
+        self.assertFalse(m.mandar_reinicio(self.PORTA))  # nada rodando
+        trava = m.travar_instancia(self.PORTA)
+        self.addCleanup(trava.close)
+        m.ouvir_pedidos(trava)
+        self.assertTrue(m.mandar_reinicio(self.PORTA))
+        for _ in range(50):
+            if m.REINICIO["pedido"]:
+                break
+            time.sleep(0.05)
+        self.assertTrue(m.REINICIO["pedido"])
+
+    def test_abre_o_mesmo_programa_com_a_marca_de_reinicio(self):
+        with (
+            patch.object(m.sys, "argv", ["memi_tray.py", "--reiniciar"]),
+            patch.object(m.subprocess, "Popen") as popen,
+        ):
+            trava = socket.socket()
+            self.assertFalse(m.reabrir_se_pedido(trava))  # sem pedido, não reabre
+            popen.assert_not_called()
+            m.REINICIO["pedido"] = True
+            self.assertTrue(m.reabrir_se_pedido(trava))
+        comando = popen.call_args.args[0]
+        self.assertEqual(comando[0], m.sys.executable)
+        self.assertTrue(comando[1].endswith("memi_tray.py"))
+        self.assertEqual(comando[2:], [m.ARG_REINICIO])  # sem o --reiniciar do .bat
+
+    def test_comando_reiniciar_e_so_do_dono(self):
+        comando = m.Ajuda(None).reiniciar
+        self.assertTrue(comando.hidden)
+        self.assertIn("restart", comando.aliases)
+        self.assertTrue(comando.checks)
+
+
 if __name__ == "__main__":
     unittest.main()

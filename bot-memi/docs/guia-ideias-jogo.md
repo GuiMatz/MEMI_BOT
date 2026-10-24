@@ -476,9 +476,9 @@ resultados e os titulares usados ficam persistidos para estatísticas e
 reexecução segura.
 
 Para agendamento às 19:00 de Brasília, o administrador configura o canal com
-`mm!campeonato canal [#canal]`; a variável global
-`MEMI_CHAMPIONSHIP_SCHEDULER=1` precisa estar definida no `.env` e o servidor
-deve ser ativado com `mm!campeonato ativar`. O padrão seguro é desligado.
+`mm!campeonato canal [#canal]` e ativa o servidor com `mm!campeonato ativar`;
+sem essa ativação nenhum jogo acontece. `MEMI_CHAMPIONSHIP_SCHEDULER=0` desliga o
+agendador em todos os servidores.
 
 Uma troca de jogador afeta o resultado apenas na montagem da escalação: por
 exemplo, um overall 80 em vez de 70 aumenta em 2,5 a média de um setor com
