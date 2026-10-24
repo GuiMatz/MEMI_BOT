@@ -1,106 +1,43 @@
 """A análise do comentarista no fim do jogo: uma frase sobre o que a partida foi.
 
 A partida cai na primeira situação que bate (da mais marcante para a mais comum): virada
-insana antes de virada, hat-trick antes de vitória fácil, e assim por diante. Cada situação
-tem várias frases; a escolha é sempre a mesma para a mesma partida, então a mensagem não
-muda a cada edição.
+insana antes de virada, hat-trick antes de vitória fácil, e assim por diante. As frases
+ficam em `src.commentary_phrases`; a escolha evita as usadas há pouco e é sempre a mesma
+para a mesma partida.
 """
 
 from __future__ import annotations
 
 import random
-from collections import Counter
+from collections import Counter, OrderedDict, deque
 from collections.abc import Sequence
 from typing import Any
 
+from src.commentary_phrases import PHRASES, STARS
 from src.db import normalize_player_name
 
-# Marcadores: {winner}, {loser}, {home}, {away}, {player}, {goals}, {keeper}, {score}.
-PHRASES: dict[str, tuple[str, ...]] = {
-    "penaltis": (
-        "Noventa minutos não bastaram. Nos pênaltis, o {winner} teve mais frieza e o {loser} "
-        "vai dormir pensando na cobrança perdida.",
-        "Decisão na marca da cal é loteria? O {winner} vai dizer que foi treino. Classificação "
-        "suada.",
-        "Coração na boca até a última cobrança. O {winner} sobreviveu; o {loser} saiu de cabeça "
-        "erguida.",
-    ),
-    "virada_insana": (
-        "Que jogo, minha gente! O {winner} estava morto, enterrado, e ressuscitou para virar. "
-        "Vai entrar para a história.",
-        "Ninguém acreditava, nem a torcida do {winner}. Virada de quem não desiste nunca.",
-        "O {loser} já fazia a festa e deixou escapar o impossível. Virada épica do {winner}!",
-    ),
-    "virada": (
-        "Começou mal, terminou sorrindo. O {winner} buscou a virada com personalidade.",
-        "O {loser} saiu na frente, mas não soube segurar. Virada merecida do {winner}.",
-        "Time grande se mede na adversidade: o {winner} tomou o gol e foi buscar o resultado.",
-    ),
-    "poker": (
-        "{player} fez {goals} gols e levou a bola para casa. Atuação de gala, de outro planeta.",
-        "Noite inesquecível de {player}: {goals} gols. O {loser} vai ter pesadelos com ele.",
-    ),
-    "hattrick": (
-        "Hat-trick de {player}! Quando ele está nesse dia, não tem marcação que resolva.",
-        "{player} pediu a bola e resolveu: três gols e a partida no bolso.",
-        "Três gols de {player}. O {loser} tentou de tudo, mas não teve como parar o homem.",
-    ),
-    "goleada": (
-        "Atropelo! O {winner} passou por cima do {loser} sem pedir licença: {score}.",
-        "Foi treino de luxo para o {winner}. O {loser} precisa conversar muito no vestiário.",
-        "Massacre. O {winner} fez o que quis do primeiro ao último minuto.",
-    ),
-    "empate_fim": (
-        "Quando parecia acabado, o {team} arrancou o empate no fim. Futebol é isso!",
-        "O {other} já contava os três pontos e viu o empate escapar nos acréscimos. Dói.",
-    ),
-    "gol_no_fim": (
-        "Decidido no apagar das luzes! O {winner} acreditou até o fim e foi recompensado.",
-        "Gol no finzinho, festa do {winner} e silêncio do {loser}. Cruel, mas é o jogo.",
-    ),
-    "injustica": (
-        "O {loser} jogou melhor, criou mais e perdeu. O futebol nem sempre é justo.",
-        "Placar mentiroso: o {loser} mandou no jogo, mas quem fez os gols foi o {winner}.",
-        "Eficiência venceu volume. O {winner} chegou pouco e matou; o {loser} perdoou demais.",
-    ),
-    "goleiro": (
-        "{keeper} fechou o gol! Sem ele, o resultado seria outro.",
-        "Noite de paredão: {keeper} pegou tudo o que chegou.",
-    ),
-    "dominio": (
-        "Domínio do começo ao fim. O {winner} teve a bola, as chances e o resultado.",
-        "O {winner} jogou no campo do {loser} a partida inteira. Vitória incontestável.",
-    ),
-    "vitoria_facil": (
-        "Vitória tranquila do {winner}, sem sustos. Fez o dever de casa com sobras.",
-        "O {winner} controlou o jogo e venceu sem precisar acelerar muito.",
-        "Resultado seguro do {winner}. O {loser} até tentou, mas faltou poder de fogo.",
-    ),
-    "expulsao": (
-        "A expulsão mudou tudo: com um a menos, o {loser} não aguentou.",
-        "O vermelho custou caro. O {loser} pagou pela falta de cabeça.",
-    ),
-    "jogo_louco": (
-        "Que jogo maluco! {score}, defesas abertas e diversão garantida para quem assistiu.",
-        "Os goleiros não vão querer rever esse jogo. Chuva de gols: {score}.",
-    ),
-    "zero_a_zero": (
-        "Jogo amarrado, poucas chances e nenhum gol. Para quem gosta de tática, um prato cheio; "
-        "para o resto, sonífero.",
-        "0 × 0 justo. As defesas venceram o duelo e os atacantes ficaram devendo.",
-        "Muito estudo, pouca ousadia. Ninguém quis arriscar e o placar não saiu do zero.",
-    ),
-    "empate": (
-        "Empate que fica de bom tamanho. Os dois tiveram seus momentos e dividiram os pontos.",
-        "Ninguém mereceu perder. Jogo equilibrado, placar justo.",
-        "Ficou no empate, mas teve emoção. {home} e {away} saem com um pontinho cada.",
-    ),
-    "jogo_dificil": (
-        "Vitória suada do {winner}! Jogo pegado, decidido nos detalhes.",
-        "Não foi bonito, mas foi eficiente. O {winner} sofreu e segurou o resultado.",
-        "Três pontos com muito suor. O {loser} vendeu caro a derrota.",
-    ),
-}
+# Frases usadas há pouco, por situação: a próxima evita repetir (metade das opções fica de
+# fora). E a frase de cada partida fica guardada: o embed final pode ser montado mais de
+# uma vez e tem de mostrar sempre a mesma. Tudo em memória; recomeça quando o bot reinicia.
+_RECENT: dict[str, deque[int]] = {}
+_CHOSEN: OrderedDict[str, int] = OrderedDict()
+CHOSEN_LIMIT = 500
+
+
+def pick(group: str, seed: str, phrases: Sequence[str]) -> str:
+    """Uma frase de `phrases`, sem repetir as usadas há pouco no mesmo `group`."""
+    key = f"{group}|{seed}"
+    if key in _CHOSEN:
+        _CHOSEN.move_to_end(key)
+        return phrases[_CHOSEN[key]]
+    recent = _RECENT.setdefault(group, deque(maxlen=max(1, len(phrases) // 2)))
+    options = [index for index in range(len(phrases)) if index not in recent]
+    index = random.Random(seed).choice(options or range(len(phrases)))
+    recent.append(index)
+    _CHOSEN[key] = index
+    if len(_CHOSEN) > CHOSEN_LIMIT:
+        _CHOSEN.popitem(last=False)
+    return phrases[index]
 
 
 def _final_score(regular: Sequence[dict[str, Any]]) -> tuple[int, int]:
@@ -170,6 +107,8 @@ def _situation(events: Sequence[dict[str, Any]]) -> tuple[str, dict[str, str]] |
         index = {"home": 0, "away": 1}
         if shots[index[loser]] >= shots[index[winner]] + 4:
             return "injustica", info
+    if total == 0:  # o 0 × 0 é a história do jogo, mesmo com goleiro inspirado
+        return "zero_a_zero", info
     if total <= 1 and stats and stats.get("best", {}).get("rating", 0) >= 8:
         saves = Counter(
             (event["detail"], event["side"])
@@ -193,8 +132,6 @@ def _situation(events: Sequence[dict[str, Any]]) -> tuple[str, dict[str, str]] |
         return "expulsao", info
     if total >= 6:
         return "jogo_louco", info
-    if total == 0:
-        return "zero_a_zero", info
     if winner is None:
         return "empate", info
     return "jogo_dificil", info
@@ -225,73 +162,8 @@ def match_commentary(
         "keeper": info.get("keeper", ""),
         "score": f"{home} × {away}",
     }
-    # Mesma partida, mesma frase (o embed final é editado mais de uma vez).
     seed = f"{home_name}|{away_name}|{len(events)}|{home}x{away}|{situation}"
-    phrase = random.Random(seed).choice(PHRASES[situation])
-    return phrase.format(**values)
-
-
-# Craques marcantes: quando um deles faz gol, o comentarista lembra a marca registrada dele
-# (comemoração, apelido, narração famosa). Cada entrada: palavras do nome (todas precisam
-# estar no nome do jogador) e as frases. `exact` exige o nome inteiro (Pelé não é o Abédi
-# Pelé; Ronaldo Fenômeno não é o Cristiano Ronaldo).
-STARS: tuple[tuple[tuple[str, ...], bool, tuple[str, ...]], ...] = (
-    (
-        ("cristiano", "ronaldo"),
-        False,
-        (
-            "SIUUUU! Cristiano Ronaldo marcou e fez a comemoração mais famosa do planeta.",
-            "Cristiano Ronaldo subiu, marcou e girou no ar: SIUUU!",
-        ),
-    ),
-    (
-        ("messi",),
-        False,
-        (
-            "Messi sendo Messi. Tem coisa que não se explica, só se assiste.",
-            "Gol de Messi, dedos para o céu. O GOAT não tira folga.",
-        ),
-    ),
-    (
-        ("neymar",),
-        False,
-        (
-            "Ousadia e alegria! Neymar deixou a sua marca.",
-            "Neymar marcou e fez questão de sorrir para a câmera. Moleque Ney!",
-        ),
-    ),
-    (("mbappe",), False, ("Mbappé ligou o turbo, marcou e cruzou os braços na comemoração.",)),
-    (
-        ("haaland",),
-        False,
-        (
-            "Haaland marcou e sentou para meditar. O robô não erra.",
-            "Bola na área, Haaland na rede. Simples assim.",
-        ),
-    ),
-    (
-        ("vinicius", "junior"),
-        False,
-        ("Baila, Vini! Vinícius Júnior marcou e dançou na beira do campo.",),
-    ),
-    (("vini", "jr"), False, ("Baila, Vini! Vini Jr. marcou e dançou na beira do campo.",)),
-    (("salah",), False, ("Salah marcou e se ajoelhou em agradecimento. O Rei do Egito.",)),
-    (
-        ("ibrahimovic",),
-        False,
-        ("Zlatan não pede licença: marca e lembra a todos quem é o Zlatan.",),
-    ),
-    (("ronaldinho",), False, ("Ronaldinho marcou com aquele sorriso no rosto. Joga bonito!",)),
-    (("pele",), True, ("O Rei marcou! Soco no ar, como só Pelé sabia comemorar.",)),
-    (("romario",), True, ("Romário na área é gol. O Baixinho não perdoa.",)),
-    (("ronaldo", "fenomeno"), True, ("O Fenômeno arrancou e ninguém segurou. Gol de Ronaldo!",)),
-    (("maradona",), False, ("Barrilete cósmico! De que planeta viniste? Gol de Maradona!",)),
-    (("garrincha",), False, ("Garrincha deixou mais um João no chão. Alegria do povo!",)),
-    (("zidane",), False, ("Zidane marcou com a elegância de sempre. Classe pura.",)),
-    (("zico",), True, ("Galinho de Quintino! Zico marcou e a torcida foi à loucura.",)),
-    (("bellingham",), False, ("Bellingham marcou e abriu os braços no meio da festa. Hey Jude!",)),
-    (("lewandowski",), False, ("Lewandowski na área é gol certo. Máquina polonesa.",)),
-)
+    return pick(situation, seed, PHRASES[situation]).format(**values)
 
 
 def _star(name: str) -> tuple[str, ...] | None:
@@ -313,7 +185,7 @@ def star_lines(events: Sequence[dict[str, Any]], limit: int = 2) -> list[str]:
         seen.add(name)
         phrases = _star(name)
         if phrases:
-            lines.append(random.Random(f"{name}|{len(events)}").choice(phrases))
+            lines.append(pick(f"craque:{name}", f"{name}|{len(events)}", phrases))
         if len(lines) >= limit:
             break
     return lines

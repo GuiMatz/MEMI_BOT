@@ -2,7 +2,7 @@ import random
 import unittest
 from dataclasses import asdict
 
-from src.commentary import PHRASES, _situation, match_commentary, star_lines
+from src.commentary import PHRASES, STARS, _situation, match_commentary, pick, star_lines
 from src.narration import _line, match_embed
 from src.pve import LEGEND_STYLES, legend_teams
 from src.score_image import _kick_rows
@@ -121,6 +121,9 @@ class CommentaryTests(unittest.TestCase):
         for phrases in PHRASES.values():
             for phrase in phrases:
                 phrase.format(score="1 × 0", **values)
+        for _, _, phrases in STARS:
+            self.assertGreaterEqual(len(phrases), 3)
+            self.assertFalse(any("{" in phrase for phrase in phrases))
 
     def test_same_match_same_phrase_and_it_shows_in_the_final_embed(self):
         events = [goal(10, "home", 1, 0), goal(50, "home", 2, 0), fulltime(2, 0)]
@@ -129,6 +132,20 @@ class CommentaryTests(unittest.TestCase):
         embed = match_embed("Casa", "Fora", events, finished=True)
         fields = {field.name: field.value for field in embed.fields}
         self.assertIn(first, fields["🎙️ Análise"])
+
+    def test_recent_phrases_are_not_repeated(self):
+        phrases = PHRASES["jogo_dificil"]
+        chosen = [pick("teste", f"partida {n}", phrases) for n in range(len(phrases) // 2 + 1)]
+        self.assertEqual(len(set(chosen)), len(chosen))
+        self.assertEqual(pick("teste", "partida 0", phrases), chosen[0])  # mesma partida
+        common = ("jogo_dificil", "vitoria_facil", "penaltis", "virada", "dominio")
+        self.assertTrue(all(len(PHRASES[key]) >= 10 for key in common))
+        self.assertTrue(all(len(phrases) >= 4 for phrases in PHRASES.values()))
+
+    def test_scoreless_draw_beats_the_keeper_story(self):
+        saves = [event("save", 10 * n, "away", detail="Dida", player="X") for n in range(1, 5)]
+        events = saves + [fulltime(0, 0, {"best": {"rating": 9}, "shots": (1, 5)})]
+        self.assertEqual(_situation(events)[0], "zero_a_zero")
 
     def test_star_players_get_their_line(self):
         events = [
