@@ -8,7 +8,13 @@ from pathlib import Path
 from src.db import connect, initialize_database
 from src.game import register_user
 from src.simulation import simulate_match
-from src.team_stats import compute_stats, filter_records, match_records, record_friendly
+from src.team_stats import (
+    compute_stats,
+    filter_records,
+    match_records,
+    record_friendly,
+    rivalry,
+)
 from src.teams import FORMATIONS, ensure_team
 
 NOW = datetime(2026, 10, 23, 18, tzinfo=timezone.utc)
@@ -82,6 +88,20 @@ class TeamStatsTests(unittest.TestCase):
         penalties = (5, 4) if result.home_goals == result.away_goals else None
         record_friendly(100, 200, result, penalties, self.database_path, now=now)
         return result, penalties
+
+    def test_rivalry_is_in_order_and_counts_championship_and_penalties(self):
+        self.assertEqual(rivalry(100, 200, self.database_path).games, 0)
+        self.championship(200, 100, 2, 0, played_at=NOW - timedelta(days=3))
+        results = [self.friendly(seed, NOW + timedelta(hours=seed)) for seed in range(4)]
+        duel = rivalry(100, 200, self.database_path)
+        self.assertEqual(duel.games, 5)
+        self.assertEqual(duel.outcomes[0], "D")  # o jogo do campeonato é o mais antigo
+        for outcome, (result, penalties) in zip(duel.outcomes[1:], results):
+            won = result.home_goals > result.away_goals or bool(penalties)
+            lost = result.home_goals < result.away_goals
+            self.assertEqual(outcome, "V" if won else "D" if lost else "E")
+        self.assertEqual(rivalry(200, 100, self.database_path), duel.flipped())
+        self.assertEqual(rivalry(100, 300, self.database_path).games, 0)
 
     def test_championship_and_friendlies_are_combined_and_filtered(self):
         self.championship(

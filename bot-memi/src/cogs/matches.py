@@ -29,6 +29,7 @@ from src.narration import narrate
 from src.positions import slot_rating
 from src.pve import PveError, opponent_for, pve_title, record_result
 from src.pve_crests import crest_for
+from src.commentary import rivalry_intro, rivalry_line
 from src.compare import compare_image, compare_rows, forecast, head_to_head, snapshot
 from src.cogs.pve_views import PveHubView, hub_embed
 from src.score_image import render_score_gif
@@ -40,6 +41,7 @@ from src.team_stats import (
     filter_records,
     match_records,
     record_friendly,
+    rivalry,
 )
 from src.teams import STYLE_LABELS, TeamError, get_team, get_valid_lineup
 
@@ -705,8 +707,14 @@ class MatchesCog(commands.Cog):
             )
             timeline += penalty_events(kicks, result.home_name, result.away_name)
             penalties = (kicks[-1].home_score, kicks[-1].away_score)
+        names = (result.home_name, result.away_name)
+        before = await asyncio.to_thread(rivalry, home_id, away_id, self.database_path)
         record_friendly(home_id, away_id, result, penalties, self.database_path)
-        await context.send(f"🏟️ {title} · Local: **{venue_name(home)}**")
+        after = await asyncio.to_thread(rivalry, home_id, away_id, self.database_path)
+        note = rivalry_line(after, *names)
+        await context.send(
+            f"🏟️ {title} · Local: **{venue_name(home)}**\n{rivalry_intro(before, *names)}"
+        )
         await narrate(
             lambda embed: context.send(embed=embed),
             result.home_name,
@@ -716,6 +724,7 @@ class MatchesCog(commands.Cog):
             penalties=penalties,
             home_color=home.get("color"),
             away_color=away.get("color"),
+            notes=[note] if note else (),
         )
         await context.send(
             file=await score_file(

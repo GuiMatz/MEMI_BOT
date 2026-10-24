@@ -365,3 +365,51 @@ STARS: tuple[tuple[tuple[str, ...], bool, tuple[str, ...]], ...] = (
         ),
     ),
 )
+
+# Rivalidades (amistosos e campeonato entre as mesmas duas pessoas). Marcadores: {winner} e
+# {loser} deste jogo, {home} e {away}, {n} (sequência, jejum ou número do confronto) e
+# {record} ("Ana FC 5 × 3 Beto FC").
+RIVALRY: dict[str, tuple[str, ...]] = {
+    # Primeiro jogo entre os dois, com vencedor.
+    "primeiro": (
+        "Primeiro capítulo de uma nova rivalidade: o {winner} sai na frente contra o {loser}.",
+        "Começa a história de {home} × {away}, e o primeiro ponto é do {winner}.",
+        "O {winner} venceu o primeiro duelo. O {loser} já tem uma revanche para buscar.",
+    ),
+    # Primeiro jogo entre os dois, sem vencedor (só no ida e volta).
+    "primeiro_empate": (
+        "Primeiro encontro sem vencedor. A rivalidade {home} × {away} começa equilibrada.",
+        "Ninguém levou a melhor no primeiro duelo. Que venha o próximo.",
+    ),
+    # O vencedor ganhou os últimos {n} (3 ou mais).
+    "freguesia": (
+        "{n}ª vitória seguida do {winner} sobre o {loser}. Freguesia confirmada!",
+        "O {loser} virou freguês: {n} derrotas seguidas para o {winner}.",
+        "De novo o {winner}! São {n} vitórias seguidas no confronto. O {loser} precisa de um "
+        "exorcista.",
+        "O {winner} tem o número do {loser}: {n} jogos, {n} vitórias seguidas.",
+    ),
+    # O vencedor não ganhava havia {n} jogos (3 ou mais).
+    "jejum": (
+        "Acabou o jejum! O {winner} não vencia o {loser} havia {n} jogos.",
+        "Fim da freguesia! Depois de {n} jogos sem vencer, o {winner} enfim derrota o {loser}.",
+        "O {winner} quebrou a escrita: {n} jogos depois, voltou a vencer o {loser}.",
+    ),
+    # Confronto de número redondo (10º, 25º, 50º, 100º).
+    "marco": (
+        "{n}º confronto entre {home} e {away}! Retrospecto agora: {record}.",
+        "Já são {n} jogos dessa rivalidade. Placar geral: {record}.",
+    ),
+    # Com esta vitória, o vencedor passou à frente no retrospecto.
+    "virou": (
+        "Com essa, o {winner} passa à frente no retrospecto: {record}.",
+        "Virada no confronto direto! Agora é {record}.",
+        "O {winner} assume a liderança da rivalidade: {record}.",
+    ),
+    # Com esta vitória, o retrospecto ficou empatado.
+    "igualou": (
+        "O {winner} empata o retrospecto: {record}. Rivalidade pegando fogo!",
+        "Tudo igual de novo no confronto direto: {record}.",
+        "O {loser} estava na frente na rivalidade, mas o {winner} igualou: {record}.",
+    ),
+}

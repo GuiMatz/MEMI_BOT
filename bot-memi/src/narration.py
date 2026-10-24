@@ -287,7 +287,10 @@ def match_embed(
     color: discord.Color | None = None,
     home_color: str | None = None,
     away_color: str | None = None,
+    notes: Sequence[str] = (),
 ) -> discord.Embed:
+    """O placar ao vivo ou, com `finished`, o resumo final. `notes` são frases a mais na
+    análise do fim (a rivalidade, por exemplo)."""
     dots = {"home": team_dot(home_color, "⚪"), "away": team_dot(away_color, "⚫")}
     if dots["home"] == dots["away"]:
         dots["away"] = "⚫" if dots["home"] != "⚫" else "⚪"
@@ -325,7 +328,8 @@ def match_embed(
         best = _best_from_stats(stats, regular, dots) if stats else _best_player(regular)
         if best:
             embed.add_field(name="⭐ Melhor em campo", value=best, inline=False)
-        analysis = [match_commentary(events, home_name, away_name), *star_lines(regular)]
+        analysis = [match_commentary(events, home_name, away_name), *notes]
+        analysis += star_lines(regular)
         if any(analysis):
             text = "\n".join(f"*{line}*" for line in analysis if line)
             embed.add_field(name="🎙️ Análise", value=text[:1024], inline=False)
@@ -352,6 +356,7 @@ async def narrate(
     delay: float | None = None,
     home_color: str | None = None,
     away_color: str | None = None,
+    notes: Sequence[str] = (),
 ) -> discord.Message:
     """Envia o placar e o atualiza a cada lance até o apito final."""
     pause = DEFAULT_DELAY if delay is None else delay
@@ -373,7 +378,14 @@ async def narrate(
             continue
     await asyncio.sleep(pause)
     final = match_embed(
-        home_name, away_name, shown, title=title, finished=True, penalties=penalties, **colors
+        home_name,
+        away_name,
+        shown,
+        title=title,
+        finished=True,
+        penalties=penalties,
+        notes=notes,
+        **colors,
     )
     try:
         await message.edit(embed=final)

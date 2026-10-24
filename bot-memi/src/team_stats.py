@@ -269,3 +269,52 @@ def compute_stats(records: list[MatchRecord]) -> TeamStats:
         stats.streak = (first, length)
     stats.top_scorers = sorted(scorers.items(), key=lambda item: (-item[1], item[0]))[:5]
     return stats
+
+
+@dataclass(frozen=True)
+class Rivalry:
+    """Confronto direto entre dois times (campeonato e amistosos), do mais antigo ao mais
+    recente. `outcomes` é do ponto de vista do primeiro time: "V", "E" ou "D"."""
+
+    outcomes: tuple[str, ...] = ()
+
+    @property
+    def games(self) -> int:
+        return len(self.outcomes)
+
+    @property
+    def wins(self) -> int:
+        return self.outcomes.count("V")
+
+    @property
+    def draws(self) -> int:
+        return self.outcomes.count("E")
+
+    @property
+    def losses(self) -> int:
+        return self.outcomes.count("D")
+
+    def flipped(self) -> "Rivalry":
+        """O mesmo confronto do ponto de vista do outro time."""
+        swap = {"V": "D", "D": "V", "E": "E"}
+        return Rivalry(tuple(swap[outcome] for outcome in self.outcomes))
+
+    def run(self, outcome: str = "V", skip_last: bool = False) -> int:
+        """Quantos jogos seguidos, contando do fim, deram `outcome`."""
+        outcomes = self.outcomes[:-1] if skip_last else self.outcomes
+        count = 0
+        for item in reversed(outcomes):
+            if item != outcome:
+                break
+            count += 1
+        return count
+
+
+def rivalry(
+    first_user_id: int | str, second_user_id: int | str, database_path: str | Path = DATABASE_PATH
+) -> Rivalry:
+    """O confronto direto do primeiro time contra o segundo."""
+    other = str(second_user_id)
+    records = [r for r in match_records(first_user_id, database_path) if r.opponent_id == other]
+    records.sort(key=lambda record: record.played_at)
+    return Rivalry(tuple(record.outcome for record in records))

@@ -13,8 +13,9 @@ from collections import Counter, OrderedDict, deque
 from collections.abc import Sequence
 from typing import Any
 
-from src.commentary_phrases import PHRASES, STARS
+from src.commentary_phrases import PHRASES, RIVALRY, STARS
 from src.db import normalize_player_name
+from src.team_stats import Rivalry
 
 # Frases usadas há pouco, por situação: a próxima evita repetir (metade das opções fica de
 # fora). E a frase de cada partida fica guardada: o embed final pode ser montado mais de
@@ -189,3 +190,71 @@ def star_lines(events: Sequence[dict[str, Any]], limit: int = 2) -> list[str]:
         if len(lines) >= limit:
             break
     return lines
+
+
+MILESTONES = (10, 25, 50, 100)
+
+
+def _record(rivalry: Rivalry, winner: str, loser: str) -> str:
+    """ "Ana FC 5 × 3 Beto FC (2 empates)", do ponto de vista de `winner`."""
+    draws = f" ({rivalry.draws} empate{'s' if rivalry.draws > 1 else ''})" if rivalry.draws else ""
+    return f"{winner} {rivalry.wins} × {rivalry.losses} {loser}{draws}"
+
+
+def rivalry_intro(rivalry: Rivalry, home_name: str, away_name: str) -> str:
+    """Linha antes do jogo: retrospecto do mandante contra o visitante."""
+    if not rivalry.games:
+        return f"🆕 Primeiro confronto entre **{home_name}** e **{away_name}**!"
+    head = "⚔️ **Clássico!** " if rivalry.games >= 5 else "📜 "
+    text = f"{head}Retrospecto: **{home_name}** {rivalry.wins} × {rivalry.losses} **{away_name}**"
+    if rivalry.draws:
+        text += f" · {rivalry.draws} empate{'s' if rivalry.draws > 1 else ''}"
+    for outcome, name in (("V", home_name), ("D", away_name)):
+        streak = rivalry.run(outcome)
+        if streak >= 2:
+            text += f" · 🔥 {name} venceu os últimos {streak}"
+    return text
+
+
+def rivalry_line(rivalry: Rivalry, home_name: str, away_name: str) -> str | None:
+    """Depois do jogo (já contado em `rivalry`, do ponto de vista do mandante): uma frase se a
+    rivalidade tiver novidade (sequência, fim de jejum, liderança, empate, marco)."""
+    if not rivalry.games:
+        return None
+    last = rivalry.outcomes[-1]
+    seed = f"{home_name}|{away_name}|{rivalry.games}|{rivalry.outcomes}"
+    values = {"home": home_name, "away": away_name, "n": rivalry.games}
+    if last == "E":
+        if rivalry.games == 1:
+            return pick("rival:primeiro_empate", seed, RIVALRY["primeiro_empate"]).format(**values)
+        situation = "marco" if rivalry.games in MILESTONES else None
+        if situation is None:
+            return None
+        values.update(winner=home_name, loser=away_name)
+        values["record"] = _record(rivalry, home_name, away_name)
+        return pick("rival:marco", seed, RIVALRY["marco"]).format(**values)
+    home_won = last == "V"
+    view = rivalry if home_won else rivalry.flipped()
+    winner, loser = (home_name, away_name) if home_won else (away_name, home_name)
+    values.update(winner=winner, loser=loser, record=_record(view, winner, loser))
+    streak = view.run("V")
+    drought = 0
+    for outcome in reversed(view.outcomes[:-1]):
+        if outcome == "V":
+            break
+        drought += 1
+    if view.games == 1:
+        situation = "primeiro"
+    elif streak >= 3:
+        situation, values["n"] = "freguesia", streak
+    elif drought >= 3:
+        situation, values["n"] = "jejum", drought
+    elif view.games in MILESTONES:
+        situation = "marco"
+    elif view.wins > view.losses and view.wins - 1 <= view.losses:
+        situation = "virou"
+    elif view.wins == view.losses:
+        situation = "igualou"
+    else:
+        return None
+    return pick(f"rival:{situation}", seed, RIVALRY[situation]).format(**values)

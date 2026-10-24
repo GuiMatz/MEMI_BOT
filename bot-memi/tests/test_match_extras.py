@@ -2,7 +2,18 @@ import random
 import unittest
 from dataclasses import asdict
 
-from src.commentary import PHRASES, STARS, _situation, match_commentary, pick, star_lines
+from src.commentary import (
+    PHRASES,
+    RIVALRY,
+    STARS,
+    _situation,
+    match_commentary,
+    pick,
+    rivalry_intro,
+    rivalry_line,
+    star_lines,
+)
+from src.team_stats import Rivalry
 from src.narration import _line, match_embed
 from src.pve import LEGEND_STYLES, legend_teams
 from src.score_image import _kick_rows
@@ -167,6 +178,36 @@ class CommentaryTests(unittest.TestCase):
             for _ in range(60):
                 result = simulate_match("A", home, "B", AWAY, rng=rng)
                 self.assertTrue(match_commentary([asdict(e) for e in result.events], "A", "B"))
+
+
+def duel(outcomes: str) -> Rivalry:
+    return Rivalry(tuple(outcomes))
+
+
+class RivalryTextTests(unittest.TestCase):
+    def line(self, outcomes):
+        return rivalry_line(duel(outcomes), "Ana FC", "Beto FC")
+
+    def test_intro_shows_record_classic_and_streak(self):
+        self.assertIn("Primeiro confronto", rivalry_intro(duel(""), "Ana FC", "Beto FC"))
+        intro = rivalry_intro(duel("DVEVV"), "Ana FC", "Beto FC")
+        self.assertIn("Clássico", intro)
+        self.assertIn("**Ana FC** 3 × 1 **Beto FC** · 1 empate", intro)
+        self.assertIn("Ana FC venceu os últimos 2", intro)
+        self.assertNotIn("Clássico", rivalry_intro(duel("VD"), "Ana FC", "Beto FC"))
+
+    def test_lines_after_the_match(self):
+        self.assertIn("Ana FC", self.line("V"))
+        self.assertIn("3", self.line("DVVV"))  # freguesia
+        self.assertIn("Beto FC", self.line("VVVD"))  # fim do jejum do visitante
+        self.assertIn("3 × 2", self.line("VDDVV"))  # passou à frente
+        self.assertIn("2 × 2", self.line("VVDD"))  # igualou
+        self.assertIn("10", self.line("VDVDVDVDEE"))  # marco
+        self.assertIsNone(self.line("VVDV"))  # nada de novo: sem frase
+        self.assertIsNone(self.line(""))
+        for phrases in RIVALRY.values():
+            for phrase in phrases:
+                phrase.format(winner="W", loser="L", home="H", away="A", n=3, record="W 1 × 0 L")
 
 
 if __name__ == "__main__":
