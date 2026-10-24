@@ -1,21 +1,59 @@
-"""Comandos de diagnóstico restritos ao proprietário do bot."""
+"""Comandos de admin (`src.admins`): testes, correções e ajustes de conta.
+
+`mm!admin` lista tudo. Os ajustes (Memilets, itens, jogadores, rolls) mexem direto no banco,
+sem as regras do jogo, para compensar alguém ou corrigir um erro.
+"""
 
 from __future__ import annotations
 
 import asyncio
 import random
+import subprocess
+import time
 from io import BytesIO
+from pathlib import Path
 
 import discord
 from discord.ext import commands
 
+from src import admin_tools
+from src.admin_tools import AdminError
 from src.admins import is_admin
 from src.db import DATABASE_PATH
+from src.inventory import INVENTORY_ITEMS
 from src.dedupe import find_duplicates, remove_duplicates
 from src.narration import narrate
 from src.simulation import penalty_events, penalty_shootout_kicks, simulate_match
 
 TEST_RATINGS = [80, 75, 90, 77, 60, 50]
+STARTED = time.monotonic()
+REPO = Path(__file__).resolve().parents[3]
+
+
+def _version() -> str:
+    """O commit que está rodando (para conferir se a atualização entrou)."""
+    try:
+        return subprocess.run(
+            ["git", "log", "-1", "--format=%h · %s"],
+            cwd=REPO,
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=True,
+        ).stdout.strip()[:90]
+    except (OSError, subprocess.SubprocessError):
+        return "desconhecida"
+
+
+def _duration(seconds: float) -> str:
+    minutes, _ = divmod(int(seconds), 60)
+    hours, minutes = divmod(minutes, 60)
+    days, hours = divmod(hours, 24)
+    return (f"{days}d " if days else "") + f"{hours}h {minutes:02d}min"
+
+
+def _size(value: int) -> str:
+    return f"{value / 1024 / 1024:.1f} MB"
 
 
 # Nomes de mentira para os jogos de teste (cada time de teste pega 11 diferentes).
@@ -157,7 +195,17 @@ class AdminCog(commands.Cog):
                 "`mm!testeamistoso` — partida de teste narrada (empate vai aos pênaltis)\n"
                 "`mm!testecampeonato <n>` — campeonato de teste com final narrada\n"
                 "`mm!testeimagem` — a escalação em embed, anexo e Components V2\n"
-                "`mm!admin duplicados` — procura e remove jogadores duplicados"
+                "`mm!admin duplicados` — procura e remove jogadores duplicados\n\n"
+                "**Contas**\n"
+                "`mm!admin dar @pessoa 5000` · `mm!admin tirar @pessoa 5000` — Memilets\n"
+                "`mm!admin item @pessoa caixa_epica 2` — itens (número negativo tira)\n"
+                "`mm!admin jogador @pessoa <nome ou ID> [forçar]` — entrega um jogador\n"
+                "`mm!admin resetar @pessoa rolls|claim|tudo` — devolve rolls ou libera o claim\n\n"
+                "**Bot**\n"
+                "`mm!admin status` — versão, tempo ligado, ping, banco e último backup\n"
+                "`mm!admin backup` — cópia do banco agora\n\n"
+                "**Campeonato**: `mm!campeonato status · jogar · adiantar · pausar · retomar · "
+                "horario · remover · cancelar`"
             ),
             color=discord.Color.red(),
         )
@@ -276,6 +324,148 @@ class AdminCog(commands.Cog):
     @commands.command(name="testeimagem", hidden=True)
     async def test_image_shortcut(self, context: commands.Context) -> None:
         await self.test_image(context)
+
+    # Contas ----------------------------------------------------------------------------
+
+    async def _memilets(self, context, member: discord.Member, amount: int) -> None:
+        change, balance = await asyncio.to_thread(
+            admin_tools.adjust_memilets,
+            member.id,
+            member.display_name,
+            amount,
+            self.database_path,
+        )
+        verb = "recebeu" if change >= 0 else "perdeu"
+        await context.reply(
+            f"{'💰' if change >= 0 else '💸'} {member.mention} {verb} **{abs(change):,}** "
+            f"Memilets. Saldo: **{balance:,}**.".replace(",", "."),
+            mention_author=False,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+
+    @admin.command(name="dar", aliases=["memilets", "pagar"])
+    async def give_memilets(self, context, member: discord.Member, amount: int) -> None:
+        """Dá Memilets (compensação, prêmio de evento...)."""
+        if amount <= 0:
+            await context.reply("Use um valor positivo.", mention_author=False)
+            return
+        await self._memilets(context, member, amount)
+
+    @admin.command(name="tirar", aliases=["remover"])
+    async def take_memilets(self, context, member: discord.Member, amount: int) -> None:
+        """Tira Memilets (o saldo não fica negativo)."""
+        if amount <= 0:
+            await context.reply("Use um valor positivo.", mention_author=False)
+            return
+        await self._memilets(context, member, -amount)
+
+    @admin.command(name="item", aliases=["itens", "caixa"])
+    async def give_item(self, context, member: discord.Member, item: str, amount: int = 1) -> None:
+        """Dá (ou tira, com número negativo) itens do inventário."""
+        try:
+            key = admin_tools.item_key(item)
+        except AdminError as error:
+            await context.reply(str(error), mention_author=False)
+            return
+        if not amount:
+            await context.reply("Use uma quantidade diferente de zero.", mention_author=False)
+            return
+        left = await asyncio.to_thread(
+            admin_tools.adjust_items,
+            member.id,
+            member.display_name,
+            key,
+            amount,
+            self.database_path,
+        )
+        emoji, label = INVENTORY_ITEMS[key]
+        verb = "recebeu" if amount > 0 else "perdeu"
+        await context.reply(
+            f"{emoji} {member.mention} {verb} {abs(amount)}× {label}. Agora tem **{left}**.",
+            mention_author=False,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+
+    @admin.command(name="jogador", aliases=["player", "darjogador"])
+    async def give_player(self, context, member: discord.Member, *, query: str) -> None:
+        """Entrega um jogador (nome ou ID). Com `forçar` no fim, tira de quem já tem."""
+        words = query.split()
+        force = bool(words) and words[-1].casefold() in {"forçar", "forcar", "force"}
+        if force:
+            query = " ".join(words[:-1])
+        try:
+            given = await asyncio.to_thread(
+                admin_tools.give_player,
+                query,
+                member.id,
+                member.display_name,
+                self.database_path,
+                force=force,
+            )
+        except AdminError as error:
+            await context.reply(
+                str(error), mention_author=False, allowed_mentions=discord.AllowedMentions.none()
+            )
+            return
+        player = given.player
+        name = player.get("display_name") or player["name"]
+        origin = f" (tirado de <@{given.previous_owner}>)" if given.previous_owner else ""
+        await context.reply(
+            f"🤝 **{name}** ({player['overall']}, {player.get('game_position')}) agora é de "
+            f"{member.mention}{origin}.",
+            mention_author=False,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+
+    @admin.command(name="resetar", aliases=["reset"])
+    async def reset(self, context, member: discord.Member, what: str = "tudo") -> None:
+        """Devolve os rolls do ciclo e/ou libera o claim na hora."""
+        choice = what.casefold()
+        if choice not in {"rolls", "roll", "claim", "tudo", "all"}:
+            await context.reply("Use `rolls`, `claim` ou `tudo`.", mention_author=False)
+            return
+        done = []
+        if choice in {"rolls", "roll", "tudo", "all"}:
+            await asyncio.to_thread(admin_tools.reset_rolls, member.id, self.database_path)
+            done.append("rolls do ciclo devolvidos")
+        if choice in {"claim", "tudo", "all"}:
+            await asyncio.to_thread(admin_tools.reset_claim, member.id, self.database_path)
+            done.append("claim liberado")
+        await context.reply(
+            f"🔄 {member.mention}: " + " e ".join(done) + ".",
+            mention_author=False,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+
+    # Bot ----------------------------------------------------------------------------------
+
+    @admin.command(name="status", aliases=["info", "versao", "versão"])
+    async def status(self, context) -> None:
+        """Versão rodando, tempo ligado, ping, tamanho do banco e último backup."""
+        backup = admin_tools.last_backup(self.database_path)
+        latency = getattr(self.bot, "latency", None)
+        lines = [
+            f"Versão: `{await asyncio.to_thread(_version)}`",
+            f"Ligado há: **{_duration(time.monotonic() - STARTED)}**",
+            "Ping: " + (f"**{latency * 1000:.0f} ms**" if latency else "—"),
+            f"Servidores: **{len(getattr(self.bot, 'guilds', []) or [])}**",
+            f"Banco do jogo: **{_size(admin_tools.database_size(self.database_path))}**",
+            "Último backup: " + (f"`{backup.name}`" if backup else "nenhum ainda"),
+        ]
+        embed = discord.Embed(
+            title="🛠️ MEMI · status", description="\n".join(lines), color=discord.Color.red()
+        )
+        await context.reply(embed=embed, mention_author=False)
+
+    @admin.command(name="backup")
+    async def backup(self, context) -> None:
+        """Cópia do banco do jogo agora (guarda as últimas 10)."""
+        path = await asyncio.to_thread(admin_tools.backup_database, self.database_path)
+        await context.reply(
+            f"💾 Backup feito: `{path.name}` ({_size(path.stat().st_size)}), na pasta "
+            f"`{path.parent}`.",
+            mention_author=False,
+        )
 
     @admin.command(name="duplicados", aliases=["duplicatas"])
     async def duplicates(self, context: commands.Context) -> None:

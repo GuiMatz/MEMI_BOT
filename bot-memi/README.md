@@ -424,12 +424,31 @@ O FUT.AE é um módulo do MeMi BOT, não um bot separado. O menu geral continua 
   - Cada competição paga os prêmios quando termina. Depois da final da Copa, a próxima
     edição começa no dia seguinte, às 19:00 (com 16 times, uma edição dura 20 dias).
   - Subcomandos: `tabela` (também `mm!tabela`), `agenda [@pessoa]`, `copa`, `historico`
-    (também `mm!campeoes`) e, para quem tem Gerenciar servidor, `canal`, `ativar`, `jogar` e
-    `adiantar` (joga já a próxima rodada ou fase da Copa e adianta o calendário em um dia).
+    (também `mm!campeoes`).
+  - Para admins do bot e quem tem Gerenciar servidor:
+    - `canal [#canal]` e `ativar`: onde e se os jogos acontecem;
+    - `jogar`: começa a edição (se estiver esperando) e joga os jogos de hoje na hora;
+    - `adiantar`: joga já a próxima rodada ou fase da Copa e adianta o calendário em um dia;
+    - `pausar` / `retomar`: para os jogos diários; ao retomar, o calendário anda os dias
+      parados (não acumula jogos);
+    - `horario 21:00`: muda o horário dos jogos do servidor (Brasília; padrão 19h). Se o bot
+      estava desligado no horário, os jogos saem quando ele voltar, no mesmo dia;
+    - `status`: agendador, canal, horário, pausa, dia da edição, jogos pendentes e times que
+      perderiam por W.O.;
+    - `remover @pessoa`: tira um time da edição; os jogos que faltam dele viram W.O.;
+    - `cancelar confirmar`: encerra a edição sem prêmios e abre a próxima.
   - O antigo campeonato diário e a temporada mensal saíram; os jogos deles continuam
     contando no `mm!stats` e nas rivalidades.
-- `mm!admin testeamistoso` e `mm!admin testecampeonato <quantidade>` executam testes
-  com times fictícios e são restritos ao proprietário do bot.
+- `mm!admin` (só admins: o dono, lurram e quem estiver em `MEMI_ADMIN_IDS`, separado por
+  vírgula):
+  - `dar @pessoa 5000` / `tirar @pessoa 5000`: Memilets (o saldo não fica negativo);
+  - `item @pessoa caixa_epica 2`: itens do inventário (número negativo tira);
+  - `jogador @pessoa <nome ou ID> [forçar]`: entrega um jogador; com `forçar`, tira de quem
+    já tem (e do time dele);
+  - `resetar @pessoa rolls|claim|tudo`: devolve os rolls do ciclo e/ou libera o claim;
+  - `status`: versão (commit) rodando, tempo ligado, ping, tamanho do banco e último backup;
+  - `backup`: cópia comprimida do banco agora, em `data/backups/` (guarda as 10 últimas);
+  - `testeamistoso`, `testecampeonato <quantidade>`, `testeimagem` e `duplicados`.
 
 ### Operação e segurança
 
