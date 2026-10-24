@@ -290,6 +290,28 @@ def day_number(edition: dict, now: datetime | None = None) -> int:
     return (today(now) - date.fromisoformat(edition["start_date"])).days + 1
 
 
+def pull_forward(
+    edition: dict, database_path: str | Path = DATABASE_PATH, *, now: datetime | None = None
+) -> dict:
+    """Traz o próximo dia de jogos para hoje: o calendário inteiro anda um dia para trás.
+
+    Assim a rodada seguinte cai hoje e as outras continuam uma por dia, sem dia vazio. Só
+    adianta se hoje já não tiver jogo pendente."""
+    if edition["status"] != "playing" or due_fixtures(edition, now, database_path):
+        return edition
+    pending = [g["day"] for g in fixtures(edition["id"], database_path) if g["played_at"] is None]
+    if not pending:
+        return edition
+    shift = min(pending) - day_number(edition, now)
+    start = date.fromisoformat(edition["start_date"]) - timedelta(days=shift)
+    with connect(database_path) as connection:
+        connection.execute(
+            "UPDATE league_editions SET start_date = ? WHERE id = ?",
+            (start.isoformat(), edition["id"]),
+        )
+    return {**edition, "start_date": start.isoformat()}
+
+
 # Consultas ---------------------------------------------------------------------------------
 
 
@@ -433,8 +455,19 @@ def play_fixture(
 ) -> dict:
     """Joga uma partida (ou dá o W.O.) e grava o resultado. Devolve a partida atualizada."""
     generator = rng or random.SystemRandom()
+    with connect(database_path) as connection:
+        removed = {
+            row["discord_user_id"]
+            for row in connection.execute(
+                "SELECT discord_user_id FROM league_entries WHERE edition_id = ? AND removed = 1",
+                (fixture["edition_id"],),
+            )
+        }
     lineups = {}
     for side in ("home", "away"):
+        if fixture[f"{side}_user_id"] in removed:
+            lineups[side] = None  # tirado da edição por um admin: perde por W.O.
+            continue
         try:
             lineups[side] = get_valid_lineup(fixture[f"{side}_user_id"], database_path)
         except (TeamError, LookupError):
@@ -725,7 +758,8 @@ def history(guild_id: int | str, database_path: str | Path = DATABASE_PATH) -> l
             dict(row)
             for row in connection.execute(
                 """
-                SELECT * FROM league_editions WHERE guild_id = ? AND status = 'completed'
+                SELECT * FROM league_editions
+                WHERE guild_id = ? AND status = 'completed' AND cancelled = 0
                 ORDER BY number DESC
                 """,
                 (str(guild_id),),
@@ -763,3 +797,91 @@ def bracket(edition_id: int, database_path: str | Path = DATABASE_PATH) -> list[
                 games[game["slot"]] = game
         rounds.append({"stage": stage, "day": first_day + index, "games": games})
     return rounds
+
+
+# Controles de admin ---------------------------------------------------------------------------
+
+
+def shift_calendar(edition: dict, days: int, database_path: str | Path = DATABASE_PATH) -> dict:
+    """Empurra o calendário da edição `days` dias para frente (ao retomar depois de uma pausa,
+    os dias parados não viram jogos acumulados)."""
+    if not edition.get("start_date") or not days:
+        return edition
+    start = date.fromisoformat(edition["start_date"]) + timedelta(days=days)
+    with connect(database_path) as connection:
+        connection.execute(
+            "UPDATE league_editions SET start_date = ? WHERE id = ?",
+            (start.isoformat(), edition["id"]),
+        )
+    return {**edition, "start_date": start.isoformat()}
+
+
+def remove_team(edition: dict, user_id: int | str, database_path=DATABASE_PATH) -> int:
+    """Tira um time da edição: os jogos que faltam dele viram W.O. (3 × 0 para o adversário).
+
+    Devolve quantos jogos ele ainda tinha."""
+    user = str(user_id)
+    with connect(database_path) as connection:
+        entry = connection.execute(
+            """
+            SELECT removed FROM league_entries
+            WHERE edition_id = ? AND discord_user_id = ? AND waitlisted = 0
+            """,
+            (edition["id"], user),
+        ).fetchone()
+        if entry is None:
+            raise LeagueError("Esse time não está jogando esta edição.")
+        if entry["removed"]:
+            raise LeagueError("Esse time já foi tirado desta edição.")
+        connection.execute(
+            "UPDATE league_entries SET removed = 1 WHERE edition_id = ? AND discord_user_id = ?",
+            (edition["id"], user),
+        )
+        pending = connection.execute(
+            """
+            SELECT COUNT(*) FROM league_fixtures
+            WHERE edition_id = ? AND played_at IS NULL
+              AND (home_user_id = ? OR away_user_id = ?)
+            """,
+            (edition["id"], user, user),
+        ).fetchone()[0]
+    return int(pending)
+
+
+def cancel_edition(
+    edition: dict, database_path: str | Path = DATABASE_PATH, *, now: datetime | None = None
+) -> dict:
+    """Encerra a edição sem prêmios e abre a próxima, que já pode começar hoje.
+
+    Os jogos já feitos continuam valendo no `mm!stats` e nas rivalidades."""
+    if edition["status"] == "completed":
+        raise LeagueError("Essa edição já terminou.")
+    with connect(database_path) as connection:
+        connection.execute(
+            """
+            UPDATE league_editions SET status = 'completed', cancelled = 1, completed_at = ?
+            WHERE id = ?
+            """,
+            (datetime.now(timezone.utc).isoformat(timespec="seconds"), edition["id"]),
+        )
+        connection.execute(
+            "INSERT OR IGNORE INTO league_editions (guild_id, number, opens_on) VALUES (?, ?, ?)",
+            (edition["guild_id"], edition["number"] + 1, today(now).isoformat()),
+        )
+    return current_edition(edition["guild_id"], database_path)
+
+
+def lineup_problems(edition: dict, database_path: str | Path = DATABASE_PATH) -> list[str]:
+    """Times da edição que perderiam por W.O. hoje (sem escalação válida ou tirados)."""
+    problems = []
+    for entry in entries(edition["id"], database_path):
+        if entry["waitlisted"]:
+            continue
+        if entry["removed"]:
+            problems.append(entry["discord_user_id"])
+            continue
+        try:
+            get_valid_lineup(entry["discord_user_id"], database_path)
+        except (TeamError, LookupError):
+            problems.append(entry["discord_user_id"])
+    return problems

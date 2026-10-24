@@ -485,10 +485,17 @@ def limites_periodo(tipo, periodo):
     return discord.utils.time_snowflake(inicio), discord.utils.time_snowflake(fim)
 
 
+def eh_admin(usuario_id):
+    """O dono (config.json/MEMI_OWNER_ID) e os admins do FUT.AE (`src.admins`)."""
+    from src.admins import is_admin
+
+    return usuario_id == MEMI_ID or is_admin(usuario_id)
+
+
 def so_memi():
     async def permitido(ctx):
-        if ctx.author.id != MEMI_ID:
-            raise commands.CheckFailure("Só o Memi pode usar esse comando.")
+        if not eh_admin(ctx.author.id):
+            raise commands.CheckFailure("Só os admins do bot podem usar esse comando.")
         return True
 
     return commands.check(permitido)

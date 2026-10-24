@@ -2892,6 +2892,11 @@ class ReinicioTests(unittest.TestCase):
         self.assertTrue(comando[1].endswith("memi_tray.py"))
         self.assertEqual(comando[2:], [m.ARG_REINICIO])  # sem o --reiniciar do .bat
 
+    def test_admins_do_futae_usam_os_comandos_de_dono(self):
+        self.assertTrue(m.eh_admin(302873192706605057))  # lurram
+        self.assertTrue(m.eh_admin(m.MEMI_ID) or m.MEMI_ID == 0)
+        self.assertFalse(m.eh_admin(123))
+
     def test_comando_reiniciar_e_so_do_dono(self):
         comando = m.Ajuda(None).reiniciar
         self.assertTrue(comando.hidden)

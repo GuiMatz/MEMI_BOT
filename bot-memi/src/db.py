@@ -536,7 +536,10 @@ CREATE TABLE IF NOT EXISTS championship_settings (
     guild_id TEXT PRIMARY KEY,
     channel_id TEXT NOT NULL,
     enabled INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0, 1)),
-    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    game_time TEXT NOT NULL DEFAULT '19:00',
+    paused_on TEXT,
+    last_run_on TEXT
 );
 
 -- Edições do Pintos Corridos + Copa IOS (`src.league`). As tabelas `championship*` acima
@@ -551,6 +554,7 @@ CREATE TABLE IF NOT EXISTS league_editions (
     start_date TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     completed_at TEXT,
+    cancelled INTEGER NOT NULL DEFAULT 0,
     UNIQUE (guild_id, number)
 );
 
@@ -560,6 +564,7 @@ CREATE TABLE IF NOT EXISTS league_entries (
     team_name TEXT NOT NULL,
     seed INTEGER NOT NULL,
     waitlisted INTEGER NOT NULL DEFAULT 0 CHECK (waitlisted IN (0, 1)),
+    removed INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (edition_id, discord_user_id)
 );
 
@@ -759,6 +764,20 @@ def initialize_database(database_path: str | Path = DATABASE_PATH) -> None:
                 "ALTER TABLE championship_fixtures ADD COLUMN winner_user_id TEXT "
                 "REFERENCES game_users(discord_user_id)"
             )
+
+        # Controles de admin do campeonato (horário, pausa, edição cancelada, time removido).
+        for table, column, definition in (
+            ("championship_settings", "game_time", "TEXT NOT NULL DEFAULT '19:00'"),
+            ("championship_settings", "paused_on", "TEXT"),
+            ("championship_settings", "last_run_on", "TEXT"),
+            ("league_editions", "cancelled", "INTEGER NOT NULL DEFAULT 0"),
+            ("league_entries", "removed", "INTEGER NOT NULL DEFAULT 0"),
+        ):
+            columns = {row["name"] for row in connection.execute(f"PRAGMA table_info({table})")}
+            if column not in columns:
+                connection.execute(
+                    f"ALTER TABLE {_identifier(table)} ADD COLUMN {_identifier(column)} {definition}"
+                )
 
         player_columns = {row["name"] for row in connection.execute("PRAGMA table_info(players)")}
         if "club_id" in player_columns:

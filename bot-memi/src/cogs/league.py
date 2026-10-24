@@ -1,6 +1,7 @@
-"""Comandos do Pintos Corridos e da Copa IOS (`src.league`) e os jogos diários das 19h.
+"""Comandos do Pintos Corridos e da Copa IOS (`src.league`) e os jogos diários.
 
-Todo dia às 19h (Brasília), nos servidores com o campeonato ativado, o bot começa a edição
+Todo dia no horário do servidor (19h de Brasília, se ninguém mudou com
+`mm!campeonato horario`), nos servidores com o campeonato ativado, o bot começa a edição
 (se for o dia) e joga tudo o que está marcado até hoje, cada jogo narrado lance a lance:
 primeiro as rodadas e a final do Pintos, depois as fases da Copa. No fim vêm o quadro do
 dia, a tabela ou a chave atualizada e a agenda; nas finais, o pôster do campeão.
@@ -15,12 +16,13 @@ import asyncio
 import json
 import logging
 import os
-from datetime import date, time, timedelta
+from datetime import date, datetime, timedelta
 
 import discord
 from discord.ext import commands, tasks
 
 from src import league
+from src.admins import is_admin
 from src.boards_image import render_league_table
 from src.clock import BRASILIA
 from src.cogs.matches import score_file
@@ -41,7 +43,7 @@ from src.team_stats import rivalry
 from src.teams import get_team
 
 LOGGER = logging.getLogger("memi.league")
-GAME_TIME = time(hour=19, minute=0, tzinfo=BRASILIA)
+DEFAULT_TIME = "19:00"
 GOLD_COLOR = discord.Color.from_rgb(*GOLD)
 GREEN_COLOR = discord.Color.from_rgb(*GREEN)
 INTRO = (
@@ -50,9 +52,32 @@ INTRO = (
     "fazem a final.\n"
     "🏆 **Copa IOS**: logo depois, mata-mata com uma fase por dia. Campeão e vice do Pintos "
     "em lados opostos da chave; empate vai para os pênaltis.\n"
-    "Entram sozinhos todos com o time completo (11 titulares), até 16. Jogos às **19h**."
+    "Entram sozinhos todos com o time completo (11 titulares), até 16. Jogos às **{hour}**."
 )
 Page = tuple[discord.Embed, list[discord.File]]
+
+
+def _now() -> datetime:
+    """Agora em Brasília (separado para os testes poderem trocar o relógio)."""
+    return datetime.now(BRASILIA)
+
+
+def hour_label(value: str | None) -> str:
+    """ "19:00" vira "19h"; "20:30" vira "20h30"."""
+    hour, minute = (value or DEFAULT_TIME).split(":")
+    return f"{int(hour)}h" + (minute if minute != "00" else "")
+
+
+def parse_time(text: str) -> str | None:
+    """Horário digitado ("21", "21h", "21:30", "21h30") em "HH:MM", ou None se não der."""
+    cleaned = text.strip().lower().replace("h", ":").rstrip(":")
+    hour, _, minute = cleaned.partition(":")
+    if not hour.isdigit() or (minute and not minute.isdigit()):
+        return None
+    hour_value, minute_value = int(hour), int(minute or 0)
+    if not (0 <= hour_value <= 23 and 0 <= minute_value <= 59):
+        return None
+    return f"{hour_value:02d}:{minute_value:02d}"
 
 
 def _date(edition: dict, day: int) -> date:
@@ -194,6 +219,16 @@ class LeagueCog(commands.Cog):
         if self.daily_games.is_running():
             self.daily_games.cancel()
 
+    def _settings(self, guild_id: int | str) -> dict | None:
+        with connect(self.database_path) as connection:
+            row = connection.execute(
+                "SELECT * FROM championship_settings WHERE guild_id = ?", (str(guild_id),)
+            ).fetchone()
+        return dict(row) if row else None
+
+    def _hour(self, guild_id: int | str) -> str:
+        return hour_label((self._settings(guild_id) or {}).get("game_time"))
+
     def _teams(self) -> dict[str, dict]:
         return league.team_info(self.database_path)
 
@@ -282,7 +317,7 @@ class LeagueCog(commands.Cog):
         )
         embed = discord.Embed(
             title=f"🏁 Começou a edição {edition['number']}!",
-            description=INTRO,
+            description=INTRO.format(hour=self._hour(edition["guild_id"])),
             color=GREEN_COLOR,
         )
         if waiting:
@@ -352,6 +387,7 @@ class LeagueCog(commands.Cog):
         """Quadro de cada competição do dia + tabela (Pintos) ou chave (Copa), e a agenda."""
         teams = self._teams()
         names = {user: team["team_name"] for user, team in teams.items()}
+        hour = self._hour(edition["guild_id"])
         games = league.fixtures(edition["id"], self.database_path)
         by_id = {game["id"]: game for game in games}
         today = [by_id[game["id"]] for game in played]
@@ -390,7 +426,7 @@ class LeagueCog(commands.Cog):
             later = [g for g in upcoming if g["competition"] == competition]
             if later:
                 embeds[-1].add_field(
-                    name=f"📅 Amanhã ({_day_label(edition, day + 1)}), 19h",
+                    name=f"📅 Amanhã ({_day_label(edition, day + 1)}), {hour}",
                     value="\n".join(f"{_title(g)}: {_score(g, names)}" for g in later)[:1024],
                     inline=False,
                 )
@@ -407,7 +443,7 @@ class LeagueCog(commands.Cog):
                 if g["competition"] == "copa"
             )
             embed.description = (
-                f"Começa {_day_label(edition, first_day)}, às 19h. Campeão e vice do Pintos "
+                f"Começa {_day_label(edition, first_day)}, às {hour}. Campeão e vice do Pintos "
                 "ficam em lados opostos: só podem se cruzar na final."
             )
             await send(embed=embed, files=files)
@@ -415,7 +451,7 @@ class LeagueCog(commands.Cog):
             nxt = news["next_edition"]
             opens = date.fromisoformat(nxt["opens_on"])
             await send(
-                content=f"🔜 A edição {nxt['number']} começa **{opens:%d/%m} às 19h**. Entram "
+                content=f"🔜 A edição {nxt['number']} começa **{opens:%d/%m} às {hour}**. Entram "
                 "todos com o time completo (11 titulares)."
             )
 
@@ -484,7 +520,7 @@ class LeagueCog(commands.Cog):
             embed = discord.Embed(
                 title="🏆 Campeonatos",
                 description="Ainda não teve campeonato por aqui. A primeira edição começa às "
-                "19h, quando houver pelo menos 4 times completos.",
+                f"{self._hour(guild_id)}, quando houver pelo menos 4 times completos.",
                 color=GOLD_COLOR,
             )
             return embed, []
@@ -498,7 +534,7 @@ class LeagueCog(commands.Cog):
         edition = league.ensure_edition(guild_id, self.database_path)
         embed = discord.Embed(
             title=f"🏆 Campeonatos · Edição {edition['number']}",
-            description=INTRO,
+            description=INTRO.format(hour=self._hour(guild_id)),
             color=GOLD_COLOR,
         )
         names = self._names()
@@ -506,7 +542,7 @@ class LeagueCog(commands.Cog):
             opens = date.fromisoformat(edition["opens_on"])
             embed.add_field(
                 name="⏳ Ainda não começou",
-                value=f"Começa **{opens:%d/%m} às 19h** (precisa de pelo menos "
+                value=f"Começa **{opens:%d/%m} às {self._hour(guild_id)}** (precisa de pelo menos "
                 f"{league.MIN_TEAMS} times completos).",
                 inline=False,
             )
@@ -543,7 +579,7 @@ class LeagueCog(commands.Cog):
             nxt = mine[0]
             embed.add_field(
                 name="📅 Seu próximo jogo",
-                value=f"{_day_label(edition, nxt['day'])}, 19h · {_title(nxt)}\n"
+                value=f"{_day_label(edition, nxt['day'])}, {self._hour(guild_id)} · {_title(nxt)}\n"
                 f"{_score(nxt, names)}",
                 inline=False,
             )
@@ -612,7 +648,8 @@ class LeagueCog(commands.Cog):
             render_matchday,
             _matchday_rows(nxt, teams),
             heading.upper(),
-            f"{'Copa IOS' if copa else 'Pintos Corridos'} · {_day_label(edition, day)} · 19h",
+            f"{'Copa IOS' if copa else 'Pintos Corridos'} · {_day_label(edition, day)} · "
+            f"{self._hour(edition['guild_id'])}",
             GOLD if copa else GREEN,
             name="agenda.png",
         )
@@ -640,23 +677,40 @@ class LeagueCog(commands.Cog):
             return
         embed, files = await self.page(page, context.guild.id, context.author)
         view = LeaguePanel(self, context.guild.id, context.author, page)
-        embed.set_footer(text="admin: mm!campeonato canal · ativar · jogar")
+        embed.set_footer(text="admin: mm!campeonato status · jogar · adiantar · pausar · horario")
         view.message = await context.reply(
             embed=embed, files=files, view=view, mention_author=False
         )
 
     # Agendador -----------------------------------------------------------------------------
 
-    @tasks.loop(time=GAME_TIME)
+    @tasks.loop(minutes=1)
     async def daily_games(self) -> None:
+        """Cada servidor joga no seu horário, uma vez por dia, a não ser que esteja pausado.
+
+        Se o bot estava desligado no horário, os jogos saem quando ele voltar (no mesmo dia)."""
+        now = _now()
+        today = now.date().isoformat()
         with connect(self.database_path) as connection:
             settings = [
                 dict(row)
                 for row in connection.execute(
-                    "SELECT guild_id, channel_id FROM championship_settings WHERE enabled = 1"
+                    """
+                    SELECT * FROM championship_settings
+                    WHERE enabled = 1 AND paused_on IS NULL
+                      AND (last_run_on IS NULL OR last_run_on < ?)
+                    """,
+                    (today,),
                 )
             ]
         for setting in settings:
+            if now.strftime("%H:%M") < (setting.get("game_time") or DEFAULT_TIME):
+                continue
+            with connect(self.database_path) as connection:
+                connection.execute(
+                    "UPDATE championship_settings SET last_run_on = ? WHERE guild_id = ?",
+                    (today, setting["guild_id"]),
+                )
             guild = self.bot.get_guild(int(setting["guild_id"]))
             channel = self.bot.get_channel(int(setting["channel_id"]))
             if guild is None or not isinstance(channel, discord.TextChannel):
@@ -705,7 +759,10 @@ class LeagueCog(commands.Cog):
         await self._open(context, "campeoes")
 
     def _is_admin(self, context: commands.Context) -> bool:
-        return bool(context.guild) and context.author.guild_permissions.manage_guild
+        """Admin do bot (`src.admins`) ou quem tem Gerenciar servidor."""
+        if context.guild is None:
+            return False
+        return is_admin(context.author.id) or context.author.guild_permissions.manage_guild
 
     @championship.command(name="canal")
     async def channel(
@@ -713,7 +770,8 @@ class LeagueCog(commands.Cog):
     ) -> None:
         if not self._is_admin(context):
             await context.reply(
-                "É preciso ter a permissão Gerenciar servidor.", mention_author=False
+                "É preciso ser admin do bot ou ter a permissão Gerenciar servidor.",
+                mention_author=False,
             )
             return
         target = channel or context.channel
@@ -740,7 +798,8 @@ class LeagueCog(commands.Cog):
     async def enable(self, context: commands.Context) -> None:
         if not self._is_admin(context):
             await context.reply(
-                "É preciso ter a permissão Gerenciar servidor.", mention_author=False
+                "É preciso ser admin do bot ou ter a permissão Gerenciar servidor.",
+                mention_author=False,
             )
             return
         if not self.scheduler_enabled:
@@ -763,7 +822,8 @@ class LeagueCog(commands.Cog):
             return
         league.ensure_edition(context.guild.id, self.database_path)
         await context.reply(
-            "Jogos diários ativados: todo dia às 19h (Brasília).", mention_author=False
+            f"Jogos diários ativados: todo dia às {self._hour(context.guild.id)} (Brasília).",
+            mention_author=False,
         )
 
     @championship.command(name="jogar", aliases=["iniciar"])
@@ -771,10 +831,211 @@ class LeagueCog(commands.Cog):
         """Admin: começa a edição agora (se estiver esperando) e joga os jogos de hoje."""
         if not self._is_admin(context):
             await context.reply(
-                "É preciso ter a permissão Gerenciar servidor.", mention_author=False
+                "É preciso ser admin do bot ou ter a permissão Gerenciar servidor.",
+                mention_author=False,
             )
             return
         await self.run_day(context.guild, lambda **kwargs: context.send(**kwargs), manual=True)
+
+    @championship.command(name="adiantar", aliases=["proxima", "próxima", "pular", "avancar"])
+    async def pull_forward(self, context: commands.Context) -> None:
+        """Admin: joga agora a próxima rodada (ou fase da Copa) e adianta o calendário."""
+        if not self._is_admin(context):
+            await context.reply(
+                "É preciso ser admin do bot ou ter a permissão Gerenciar servidor.",
+                mention_author=False,
+            )
+            return
+        edition = league.ensure_edition(context.guild.id, self.database_path)
+        if edition["status"] == "playing":
+            league.pull_forward(edition, self.database_path)
+        await self.run_day(context.guild, lambda **kwargs: context.send(**kwargs), manual=True)
+
+    async def _admin_only(self, context: commands.Context) -> bool:
+        if self._is_admin(context):
+            return True
+        await context.reply(
+            "É preciso ser admin do bot ou ter a permissão Gerenciar servidor.",
+            mention_author=False,
+        )
+        return False
+
+    @championship.command(name="pausar", aliases=["pause"])
+    async def pause(self, context: commands.Context) -> None:
+        """Admin: para os jogos diários até `mm!campeonato retomar` (a edição fica guardada)."""
+        if not await self._admin_only(context):
+            return
+        settings = self._settings(context.guild.id)
+        if settings is None:
+            await context.reply(
+                "Configure antes o canal com `mm!campeonato canal`.", mention_author=False
+            )
+            return
+        if settings.get("paused_on"):
+            await context.reply("O campeonato já está pausado.", mention_author=False)
+            return
+        with connect(self.database_path) as connection:
+            connection.execute(
+                "UPDATE championship_settings SET paused_on = ? WHERE guild_id = ?",
+                (league.today().isoformat(), str(context.guild.id)),
+            )
+        await context.reply(
+            "⏸️ Campeonato pausado. Nenhum jogo acontece até `mm!campeonato retomar`; o "
+            "calendário anda junto, sem jogos acumulados.",
+            mention_author=False,
+        )
+
+    @championship.command(name="retomar", aliases=["despausar", "resume"])
+    async def resume(self, context: commands.Context) -> None:
+        if not await self._admin_only(context):
+            return
+        settings = self._settings(context.guild.id)
+        if not settings or not settings.get("paused_on"):
+            await context.reply("O campeonato não está pausado.", mention_author=False)
+            return
+        paused = (league.today() - date.fromisoformat(settings["paused_on"])).days
+        edition = league.current_edition(context.guild.id, self.database_path)
+        if edition and edition["status"] == "playing" and paused:
+            league.shift_calendar(edition, paused, self.database_path)
+        with connect(self.database_path) as connection:
+            connection.execute(
+                "UPDATE championship_settings SET paused_on = NULL WHERE guild_id = ?",
+                (str(context.guild.id),),
+            )
+        extra = f" O calendário andou {paused} dia(s)." if paused else ""
+        await context.reply(
+            f"▶️ Campeonato retomado: os jogos voltam às {self._hour(context.guild.id)}.{extra}",
+            mention_author=False,
+        )
+
+    @championship.command(name="horario", aliases=["horário", "hora"])
+    async def set_time(self, context: commands.Context, value: str | None = None) -> None:
+        """Admin: muda o horário dos jogos do servidor (Brasília), ex.: `21:00`."""
+        if not await self._admin_only(context):
+            return
+        chosen = parse_time(value or "")
+        if chosen is None:
+            await context.reply(
+                f"Use o horário de Brasília, ex.: `mm!campeonato horario 21:00`. Agora é "
+                f"**{self._hour(context.guild.id)}**.",
+                mention_author=False,
+            )
+            return
+        with connect(self.database_path) as connection:
+            cursor = connection.execute(
+                "UPDATE championship_settings SET game_time = ? WHERE guild_id = ?",
+                (chosen, str(context.guild.id)),
+            )
+        if not cursor.rowcount:
+            await context.reply(
+                "Configure antes o canal com `mm!campeonato canal`.", mention_author=False
+            )
+            return
+        await context.reply(
+            f"🕘 Os jogos passam a ser às **{hour_label(chosen)}** (Brasília).",
+            mention_author=False,
+        )
+
+    @championship.command(name="status", aliases=["diagnostico", "diagnóstico"])
+    async def status(self, context: commands.Context) -> None:
+        """Admin: tudo o que decide se os jogos saem, numa mensagem só."""
+        if not await self._admin_only(context):
+            return
+        guild_id = context.guild.id
+        settings = self._settings(guild_id) or {}
+        names = self._names()
+        lines = [
+            f"Agendador do bot: **{'ligado' if self.scheduler_enabled else 'desligado'}**",
+            "Canal: "
+            + (
+                f"<#{settings['channel_id']}>"
+                if settings.get("channel_id")
+                else "**não configurado**"
+            ),
+            f"Ativado no servidor: **{'sim' if settings.get('enabled') else 'não'}**",
+            f"Horário: **{hour_label(settings.get('game_time'))}** (Brasília)",
+            "Pausado: "
+            + (f"**sim**, desde {settings['paused_on']}" if settings.get("paused_on") else "não"),
+            f"Última rodada automática: {settings.get('last_run_on') or '—'}",
+        ]
+        edition = league.current_edition(guild_id, self.database_path)
+        if edition:
+            lines.append("")
+            status = {"registration": "esperando para começar", "playing": "em andamento"}.get(
+                edition["status"], "encerrada"
+            )
+            lines.append(f"Edição **{edition['number']}**: {status}")
+            if edition["status"] == "registration":
+                ready = await self._members_ready(context.guild)
+                lines.append(
+                    f"Começa {date.fromisoformat(edition['opens_on']):%d/%m} · times completos "
+                    f"no servidor: **{len(ready)}** (mínimo {league.MIN_TEAMS})"
+                )
+            elif edition["status"] == "playing":
+                due = league.due_fixtures(edition, database_path=self.database_path)
+                pending = [
+                    g
+                    for g in league.fixtures(edition["id"], self.database_path)
+                    if not g["played_at"]
+                ]
+                lines.append(
+                    f"Dia {league.day_number(edition)} · jogos pendentes hoje: **{len(due)}** · "
+                    f"faltam no total: **{len(pending)}**"
+                )
+                problems = league.lineup_problems(edition, self.database_path)
+                if problems:
+                    lines.append(
+                        "⚠️ Perderiam por W.O.: "
+                        + ", ".join(names.get(user, user) for user in problems)
+                    )
+        embed = discord.Embed(
+            title="🛠️ Campeonato · status", description="\n".join(lines), color=GOLD_COLOR
+        )
+        await context.reply(embed=embed, mention_author=False)
+
+    @championship.command(name="remover", aliases=["tirar", "expulsar"])
+    async def remove(self, context: commands.Context, member: discord.Member) -> None:
+        """Admin: tira um time da edição; os jogos que faltam dele viram W.O."""
+        if not await self._admin_only(context):
+            return
+        edition = league.current_edition(context.guild.id, self.database_path)
+        if not edition or edition["status"] != "playing":
+            await context.reply("Não há edição em andamento.", mention_author=False)
+            return
+        try:
+            pending = league.remove_team(edition, member.id, self.database_path)
+        except league.LeagueError as error:
+            await context.reply(str(error), mention_author=False)
+            return
+        await context.reply(
+            f"🚫 {member.mention} saiu da edição {edition['number']}. Os {pending} jogo(s) que "
+            "faltavam viram W.O. (3 × 0 para o adversário).",
+            mention_author=False,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+
+    @championship.command(name="cancelar")
+    async def cancel(self, context: commands.Context, confirm: str | None = None) -> None:
+        """Admin: encerra a edição sem prêmios e abre a próxima (precisa de `confirmar`)."""
+        if not await self._admin_only(context):
+            return
+        edition = league.current_edition(context.guild.id, self.database_path)
+        if not edition or edition["status"] == "completed":
+            await context.reply("Não há edição para cancelar.", mention_author=False)
+            return
+        if (confirm or "").casefold() != "confirmar":
+            await context.reply(
+                f"Isso encerra a edição {edition['number']} **sem prêmios** e abre a próxima. "
+                "Para seguir, use `mm!campeonato cancelar confirmar`.",
+                mention_author=False,
+            )
+            return
+        nxt = league.cancel_edition(edition, self.database_path)
+        await context.reply(
+            f"🗑️ Edição {edition['number']} cancelada. A edição {nxt['number']} já pode começar: "
+            f"às {self._hour(context.guild.id)} ou na hora com `mm!campeonato jogar`.",
+            mention_author=False,
+        )
 
     @commands.command(name="temporada", aliases=["season", "tabela"])
     async def season(self, context: commands.Context) -> None:
