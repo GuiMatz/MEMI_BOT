@@ -214,6 +214,16 @@ ADMIN_PAGES: dict[str, tuple[str, str, int, str, list[tuple[str, str]]]] = {
                 "mm!campeonato cancelar confirmar",
                 "Encerra a edição sem prêmios e abre a próxima.",
             ),
+            (
+                "mm!pintos adiantar · encerrar confirmar · refazer @pessoa",
+                "Pintos: joga já a próxima rodada; acaba os pontos corridos e marca a final dos "
+                "2 primeiros; refaz o jogo de hoje da pessoa.",
+            ),
+            (
+                "mm!copa adiantar · sortear · wo @pessoa · refazer @pessoa",
+                "Copa: joga já a próxima fase; novo sorteio (antes de começar); W.O. no próximo "
+                "jogo da pessoa; refaz o jogo de hoje.",
+            ),
         ],
     ),
     "bot": (

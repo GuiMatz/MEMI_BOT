@@ -525,10 +525,10 @@ class LeagueCog(commands.Cog):
             )
             return embed, []
         if key == "tabela":
-            return await self._table_page(edition)
+            return await self._table_page(edition, user)
         if key == "agenda":
             return await self._agenda_page(edition, user)
-        return await self._cup_page(edition)
+        return await self._cup_page(edition, user)
 
     def _summary_page(self, guild_id: int, user) -> Page:
         edition = league.ensure_edition(guild_id, self.database_path)
@@ -585,7 +585,27 @@ class LeagueCog(commands.Cog):
             )
         return embed, []
 
-    async def _table_page(self, edition: dict) -> Page:
+    def _next_game_field(self, embed, edition: dict, user, competition: str) -> None:
+        """O próximo jogo de `user` na competição, num campo do embed."""
+        if user is None:
+            return
+        games = [
+            g
+            for g in league.fixtures(edition["id"], self.database_path)
+            if g["competition"] == competition
+            and g["played_at"] is None
+            and str(user.id) in (g["home_user_id"], g["away_user_id"])
+        ]
+        if games:
+            game = games[0]
+            embed.add_field(
+                name="📅 Seu próximo jogo",
+                value=f"{_day_label(edition, game['day'])}, {self._hour(edition['guild_id'])} · "
+                f"{_title(game)}\n{_score(game, self._names())}",
+                inline=False,
+            )
+
+    async def _table_page(self, edition: dict, user=None) -> Page:
         table = league.standings(edition["id"], self.database_path)
         rounds = league.rounds_total(edition["id"], self.database_path)
         played = max((team["played"] for team in table), default=0)
@@ -598,11 +618,13 @@ class LeagueCog(commands.Cog):
         )
         embed = discord.Embed(title="🐣 Pintos Corridos · Tabela", color=GREEN_COLOR)
         embed.set_image(url="attachment://tabela.png")
+        self._next_game_field(embed, edition, user, "pintos")
         return embed, [file]
 
-    async def _cup_page(self, edition: dict) -> Page:
+    async def _cup_page(self, edition: dict, user=None) -> Page:
         rounds = league.bracket(edition["id"], self.database_path)
         embed = discord.Embed(title=f"🏆 Copa IOS · Edição {edition['number']}", color=GOLD_COLOR)
+        self._next_game_field(embed, edition, user, "copa")
         if not rounds:
             embed.description = (
                 "A Copa IOS começa no dia seguinte à final do Pintos Corridos, com o campeão e o "
@@ -727,9 +749,7 @@ class LeagueCog(commands.Cog):
 
     # Comandos ------------------------------------------------------------------------------
 
-    @commands.group(
-        name="campeonato", aliases=["campeonatos", "pintos"], invoke_without_command=True
-    )
+    @commands.group(name="campeonato", aliases=["campeonatos"], invoke_without_command=True)
     async def championship(self, context: commands.Context) -> None:
         """Painel do campeonato: resumo, tabela, agenda, Copa e campeões em botões."""
         await self._open(context, "resumo")
@@ -1036,6 +1056,217 @@ class LeagueCog(commands.Cog):
             f"às {self._hour(context.guild.id)} ou na hora com `mm!campeonato jogar`.",
             mention_author=False,
         )
+
+    # `mm!pintos` e `mm!copa` -------------------------------------------------------------
+
+    def _playing_edition(self, guild_id: int) -> dict | None:
+        edition = league.current_edition(guild_id, self.database_path)
+        return edition if edition and edition["status"] == "playing" else None
+
+    async def _advance_competition(self, context: commands.Context, competition: str) -> None:
+        """Joga já o próximo dia da competição e adianta o calendário."""
+        if not await self._admin_only(context):
+            return
+        edition = self._playing_edition(context.guild.id)
+        if edition is None:
+            await context.reply("Não há edição em andamento.", mention_author=False)
+            return
+        try:
+            league.pull_forward(edition, self.database_path, competition=competition)
+        except league.LeagueError as error:
+            await context.reply(str(error), mention_author=False)
+            return
+        await self.run_day(context.guild, lambda **kwargs: context.send(**kwargs), manual=True)
+
+    async def _replay(self, context: commands.Context, member: discord.Member) -> None:
+        """Refaz o jogo de hoje da pessoa (narrado de novo) e atualiza tabela ou chave."""
+        if not await self._admin_only(context):
+            return
+        edition = self._playing_edition(context.guild.id)
+        if edition is None:
+            await context.reply("Não há edição em andamento.", mention_author=False)
+            return
+        lock = self.locks.setdefault(str(context.guild.id), asyncio.Lock())
+        if lock.locked():
+            await context.reply("Espere os jogos de agora terminarem.", mention_author=False)
+            return
+        async with lock:
+            try:
+                game = league.replayable(edition, member.id, self.database_path)
+            except league.LeagueError as error:
+                await context.reply(str(error), mention_author=False)
+                return
+            names = self._names()
+            await context.reply(
+                f"🔁 Refazendo {_title(game)}: {_score(game, names)}.", mention_author=False
+            )
+            fresh = await asyncio.to_thread(league.reset_fixture, game, self.database_path)
+            send = lambda **kwargs: context.send(**kwargs)  # noqa: E731
+            await self._play_and_narrate(send, fresh, names)
+            replayed = next(
+                g
+                for g in league.fixtures(edition["id"], self.database_path)
+                if g["id"] == game["id"]
+            )
+            if replayed["competition"] == "copa":
+                league.sync_copa_winner(replayed, self.database_path)
+                embed, files = await self._cup_page(edition)
+            else:
+                embed, files = await self._table_page(edition)
+            await context.send(embed=embed, files=files)
+
+    @commands.group(name="pintos", aliases=["pintoscorridos"], invoke_without_command=True)
+    async def pintos(self, context: commands.Context) -> None:
+        """Pintos Corridos: tabela, seu próximo jogo e o painel do campeonato."""
+        await self._open(context, "tabela")
+
+    @pintos.command(name="rodada", aliases=["jogos", "resultados"])
+    async def pintos_round(self, context: commands.Context, number: int | None = None) -> None:
+        """Os jogos de uma rodada (sem número: a última jogada)."""
+        if context.guild is None:
+            await context.reply("O campeonato é de cada servidor.", mention_author=False)
+            return
+        edition = self._shown_edition(context.guild.id)
+        if edition is None:
+            await context.reply("Ainda não teve campeonato por aqui.", mention_author=False)
+            return
+        rounds = league.rounds_total(edition["id"], self.database_path)
+        chosen = number or max(1, league.current_round(edition["id"], self.database_path))
+        games = league.round_games(edition["id"], chosen, self.database_path)
+        if not games:
+            await context.reply(
+                f"Essa edição tem {rounds} rodadas (e a final, que é a {rounds + 1}).",
+                mention_author=False,
+            )
+            return
+        heading = "FINAL" if games[0]["stage"] == "final" else f"RODADA {chosen}"
+        played = all(g["played_at"] for g in games)
+        when = _day_label(edition, games[0]["day"])
+        subtitle = f"Pintos Corridos · Edição {edition['number']} · {when}" + (
+            "" if played else f" · {self._hour(context.guild.id)}"
+        )
+        file = await _file(
+            render_matchday,
+            _matchday_rows(games, self._teams()),
+            heading,
+            subtitle,
+            GREEN,
+            name="rodada.png",
+        )
+        embed = discord.Embed(
+            title=f"🐣 Pintos Corridos · {heading.capitalize()}"
+            + ("" if played else " (ainda não jogada)"),
+            color=GREEN_COLOR,
+        )
+        embed.set_image(url="attachment://rodada.png")
+        embed.set_footer(text=f"mm!pintos rodada <1 a {rounds + 1}>")
+        await context.reply(embed=embed, file=file, mention_author=False)
+
+    @pintos.command(name="adiantar", aliases=["proxima", "próxima"])
+    async def pintos_advance(self, context: commands.Context) -> None:
+        """Admin: joga já a próxima rodada do Pintos."""
+        await self._advance_competition(context, "pintos")
+
+    @pintos.command(name="encerrar", aliases=["terminar", "finalizar"])
+    async def pintos_end(self, context: commands.Context, confirm: str | None = None) -> None:
+        """Admin: acaba os pontos corridos agora e marca a final dos 2 primeiros."""
+        if not await self._admin_only(context):
+            return
+        edition = self._playing_edition(context.guild.id)
+        if edition is None:
+            await context.reply("Não há edição em andamento.", mention_author=False)
+            return
+        if (confirm or "").casefold() != "confirmar":
+            await context.reply(
+                "Isso apaga as rodadas que faltam do Pintos (a tabela fica como está) e marca a "
+                "final entre os 2 primeiros. Para seguir: `mm!pintos encerrar confirmar`.",
+                mention_author=False,
+            )
+            return
+        try:
+            final = league.end_pintos(edition, self.database_path)
+        except league.LeagueError as error:
+            await context.reply(str(error), mention_author=False)
+            return
+        names = self._names()
+        await context.reply(
+            f"🏁 Pontos corridos encerrados. Final: **{_score(final, names)}**, "
+            f"{_day_label(edition, final['day'])} às {self._hour(context.guild.id)} "
+            "(ou agora, com `mm!pintos adiantar`).",
+            mention_author=False,
+        )
+
+    @pintos.command(name="refazer", aliases=["rejogar", "replay"])
+    async def pintos_replay(self, context: commands.Context, member: discord.Member) -> None:
+        """Admin: refaz o jogo de hoje da pessoa (só jogos do dia; final não)."""
+        await self._replay(context, member)
+
+    @commands.group(name="copa", aliases=["copaios"], invoke_without_command=True)
+    async def copa(self, context: commands.Context) -> None:
+        """Copa IOS: chave, fase atual e seu próximo jogo."""
+        await self._open(context, "copa")
+
+    @copa.command(name="adiantar", aliases=["proxima", "próxima"])
+    async def copa_advance(self, context: commands.Context) -> None:
+        """Admin: joga já a próxima fase da Copa."""
+        await self._advance_competition(context, "copa")
+
+    @copa.command(name="sortear", aliases=["resortear", "sorteio"])
+    async def copa_redraw(self, context: commands.Context) -> None:
+        """Admin: sorteia a chave de novo (antes da primeira fase ser jogada)."""
+        if not await self._admin_only(context):
+            return
+        edition = self._playing_edition(context.guild.id)
+        if edition is None:
+            await context.reply("Não há edição em andamento.", mention_author=False)
+            return
+        try:
+            league.redraw_copa(edition, self.database_path)
+        except league.LeagueError as error:
+            await context.reply(str(error), mention_author=False)
+            return
+        embed, files = await self._cup_page(edition)
+        embed.title = "🎲 Copa IOS · novo sorteio"
+        await context.reply(embed=embed, files=files, mention_author=False)
+
+    @copa.command(name="wo", aliases=["w.o.", "walkover"])
+    async def copa_walkover(self, context: commands.Context, member: discord.Member) -> None:
+        """Admin: W.O. no próximo jogo da Copa da pessoa (o adversário passa)."""
+        if not await self._admin_only(context):
+            return
+        edition = self._playing_edition(context.guild.id)
+        if edition is None:
+            await context.reply("Não há edição em andamento.", mention_author=False)
+            return
+        try:
+            game = league.copa_walkover(edition, member.id, self.database_path)
+        except league.LeagueError as error:
+            await context.reply(str(error), mention_author=False)
+            return
+        news = await asyncio.to_thread(league.advance, edition, self.database_path)
+        names = self._names()
+        await context.reply(
+            f"🏳️ W.O. na {_title(game)}: {_score(game, names)}. "
+            f"**{names.get(game['winner_user_id'], 'Time')}** avança.",
+            mention_author=False,
+        )
+        send = lambda **kwargs: context.send(**kwargs)  # noqa: E731
+        if news["prizes"].get("copa"):
+            await self._announce_champion(send, edition, "copa", news, self._teams())
+        else:
+            embed, files = await self._cup_page(edition)
+            await context.send(embed=embed, files=files)
+        if news.get("next_edition"):
+            nxt = news["next_edition"]
+            await context.send(
+                f"🔜 A edição {nxt['number']} começa "
+                f"**{date.fromisoformat(nxt['opens_on']):%d/%m} às {self._hour(context.guild.id)}**."
+            )
+
+    @copa.command(name="refazer", aliases=["rejogar", "replay"])
+    async def copa_replay(self, context: commands.Context, member: discord.Member) -> None:
+        """Admin: refaz o jogo de hoje da pessoa na Copa (se a fase seguinte não começou)."""
+        await self._replay(context, member)
 
     @commands.command(name="temporada", aliases=["season", "tabela"])
     async def season(self, context: commands.Context) -> None:

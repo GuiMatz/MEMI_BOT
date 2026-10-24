@@ -199,6 +199,29 @@ COMMAND_HELP: dict[str, tuple[str, str, tuple[str, ...]]] = {
         "o pote.",
         ("mm!penaltis @Ana", "mm!penaltis @Ana 2000"),
     ),
+    "campeonato": (
+        "mm!campeonato [tabela | agenda [@pessoa] | copa | historico]",
+        "Painel do Pintos Corridos e da Copa IOS com botões (Resumo, Tabela, Agenda, Copa, "
+        "Campeões). Quem tem o time completo entra sozinho; os jogos são todo dia no horário do "
+        "servidor. Admins: `status`, `jogar`, `adiantar`, `pausar`, `retomar`, `horario`, "
+        "`remover`, `cancelar`.",
+        ("mm!campeonato", "mm!campeonato agenda @Ana", "mm!campeonato status"),
+    ),
+    "pintos": (
+        "mm!pintos [rodada N]",
+        "Pintos Corridos: a tabela com o seu próximo jogo, e os jogos de qualquer rodada. Os 2 "
+        "primeiros fazem a final. Admins: `adiantar` (joga já a próxima rodada), `encerrar "
+        "confirmar` (acaba os pontos corridos e marca a final) e `refazer @pessoa` (refaz o jogo "
+        "de hoje).",
+        ("mm!pintos", "mm!pintos rodada 3", "mm!pintos adiantar"),
+    ),
+    "copa": (
+        "mm!copa",
+        "Copa IOS: a chave com o seu próximo jogo. Começa depois da final do Pintos, uma fase "
+        "por dia. Admins: `adiantar` (joga já a próxima fase), `sortear` (sorteia de novo antes "
+        "de começar), `wo @pessoa` (W.O. no próximo jogo) e `refazer @pessoa`.",
+        ("mm!copa", "mm!copa adiantar", "mm!copa wo @Ana"),
+    ),
 }
 
 

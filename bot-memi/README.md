@@ -437,6 +437,15 @@ O FUT.AE é um módulo do MeMi BOT, não um bot separado. O menu geral continua 
       perderiam por W.O.;
     - `remover @pessoa`: tira um time da edição; os jogos que faltam dele viram W.O.;
     - `cancelar confirmar`: encerra a edição sem prêmios e abre a próxima.
+  - `mm!pintos`: a tabela com o seu próximo jogo; `mm!pintos rodada N` mostra os jogos de
+    qualquer rodada (sem número, a última jogada). Admins: `adiantar` (joga já a próxima
+    rodada), `encerrar confirmar` (as rodadas que faltam somem, a tabela fica como está e a
+    final dos 2 primeiros vai para o próximo dia de jogos) e `refazer @pessoa` (refaz o jogo de
+    hoje da pessoa; final não).
+  - `mm!copa`: a chave com o seu próximo jogo. Admins: `adiantar` (joga já a próxima fase),
+    `sortear` (novo sorteio, só antes da primeira fase), `wo @pessoa` (W.O. no próximo jogo da
+    pessoa; o adversário passa) e `refazer @pessoa` (refaz o jogo de hoje, se a fase seguinte
+    ainda não foi jogada; o vencedor novo entra na vaga dela).
   - O antigo campeonato diário e a temporada mensal saíram; os jogos deles continuam
     contando no `mm!stats` e nas rivalidades.
 - `mm!admin` (só admins: o dono, lurram e quem estiver em `MEMI_ADMIN_IDS`, separado por
