@@ -2,8 +2,11 @@
 
 Todo dia às 19h (Brasília), nos servidores com o campeonato ativado, o bot começa a edição
 (se for o dia) e joga tudo o que está marcado até hoje, cada jogo narrado lance a lance:
-primeiro as rodadas e a final do Pintos, depois as fases da Copa. No fim vêm os resultados,
-a tabela e a agenda.
+primeiro as rodadas e a final do Pintos, depois as fases da Copa. No fim vêm o quadro do
+dia, a tabela ou a chave atualizada e a agenda; nas finais, o pôster do campeão.
+
+`mm!campeonato` abre um painel com botões (Resumo, Tabela, Agenda, Copa, Campeões) que
+troca a página na mesma mensagem. As imagens ficam em `src.league_images`.
 """
 
 from __future__ import annotations
@@ -24,6 +27,14 @@ from src.cogs.matches import score_file
 from src.commentary import rivalry_intro, rivalry_line
 from src.db import DATABASE_PATH, connect
 from src.income import venue_name
+from src.league_images import (
+    GOLD,
+    GREEN,
+    render_bracket,
+    render_champion,
+    render_edition_start,
+    render_matchday,
+)
 from src.narration import narrate
 from src.simulation import penalty_events
 from src.team_stats import rivalry
@@ -31,6 +42,8 @@ from src.teams import get_team
 
 LOGGER = logging.getLogger("memi.league")
 GAME_TIME = time(hour=19, minute=0, tzinfo=BRASILIA)
+GOLD_COLOR = discord.Color.from_rgb(*GOLD)
+GREEN_COLOR = discord.Color.from_rgb(*GREEN)
 INTRO = (
     "Dois campeonatos, um depois do outro, com os mesmos times:\n"
     "🐣 **Pintos Corridos**: todos contra todos, só ida, uma rodada por dia. Os 2 primeiros "
@@ -39,13 +52,17 @@ INTRO = (
     "em lados opostos da chave; empate vai para os pênaltis.\n"
     "Entram sozinhos todos com o time completo (11 titulares), até 16. Jogos às **19h**."
 )
+Page = tuple[discord.Embed, list[discord.File]]
+
+
+def _date(edition: dict, day: int) -> date:
+    return date.fromisoformat(edition["start_date"]) + timedelta(days=day - 1)
 
 
 def _day_label(edition: dict, day: int) -> str:
     """Data do dia `day` da edição ("qui, 05/11")."""
-    start = date.fromisoformat(edition["start_date"])
-    moment = start + timedelta(days=day - 1)
     weekdays = ("seg", "ter", "qua", "qui", "sex", "sáb", "dom")
+    moment = _date(edition, day)
     return f"{weekdays[moment.weekday()]}, {moment:%d/%m}"
 
 
@@ -72,6 +89,94 @@ def _score(fixture: dict, names: dict) -> str:
     return line
 
 
+def _matchday_rows(games: list[dict], teams: dict) -> list[dict]:
+    """Os jogos no formato de `render_matchday` (sem placar se ainda não jogaram)."""
+    rows = []
+    for game in games:
+        played = game["played_at"] is not None
+        rows.append(
+            {
+                "home": teams.get(game["home_user_id"]),
+                "away": teams.get(game["away_user_id"]),
+                "home_goals": game["home_goals"] if played else None,
+                "away_goals": game["away_goals"] if played else None,
+                "penalties": (
+                    (game["home_penalties"], game["away_penalties"])
+                    if game["home_penalties"] is not None
+                    else None
+                ),
+                "walkover": bool(game["walkover"]),
+            }
+        )
+    return rows
+
+
+async def _file(render, *args, name: str) -> discord.File:
+    image = await asyncio.to_thread(render, *args)
+    return discord.File(image, filename=name)
+
+
+class LeaguePanel(discord.ui.View):
+    """Painel do `mm!campeonato`: cada botão troca a página na mesma mensagem."""
+
+    PAGES = (
+        ("resumo", "Resumo", "🏠"),
+        ("tabela", "Tabela", "🐣"),
+        ("agenda", "Agenda", "📅"),
+        ("copa", "Copa IOS", "🏆"),
+        ("campeoes", "Campeões", "📜"),
+    )
+
+    def __init__(self, cog: "LeagueCog", guild_id: int, owner, page: str = "resumo"):
+        super().__init__(timeout=300)
+        self.cog = cog
+        self.guild_id = guild_id
+        self.owner = owner
+        self.message: discord.Message | None = None
+        for key, label, emoji in self.PAGES:
+            button = discord.ui.Button(
+                label=label,
+                emoji=emoji,
+                style=discord.ButtonStyle.primary if key == page else discord.ButtonStyle.secondary,
+                custom_id=f"campeonato:{key}",
+            )
+            button.callback = self._switch(key)
+            self.add_item(button)
+
+    def _mark(self, page: str) -> None:
+        for item in self.children:
+            if isinstance(item, discord.ui.Button):
+                active = item.custom_id == f"campeonato:{page}"
+                item.style = (
+                    discord.ButtonStyle.primary if active else discord.ButtonStyle.secondary
+                )
+
+    def _switch(self, page: str):
+        async def callback(interaction: discord.Interaction) -> None:
+            if interaction.user.id != self.owner.id:
+                await interaction.response.send_message(
+                    "Esse painel é de quem abriu. Use `mm!campeonato` para abrir o seu.",
+                    ephemeral=True,
+                )
+                return
+            await interaction.response.defer()
+            embed, files = await self.cog.page(page, self.guild_id, self.owner)
+            self._mark(page)
+            await interaction.edit_original_response(embed=embed, attachments=files, view=self)
+
+        return callback
+
+    async def on_timeout(self) -> None:
+        if self.message is None:
+            return
+        for item in self.children:
+            item.disabled = True
+        try:
+            await self.message.edit(view=self)
+        except discord.HTTPException:
+            pass
+
+
 class LeagueCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -85,10 +190,11 @@ class LeagueCog(commands.Cog):
         if self.daily_games.is_running():
             self.daily_games.cancel()
 
+    def _teams(self) -> dict[str, dict]:
+        return league.team_info(self.database_path)
+
     def _names(self) -> dict[str, str]:
-        return {
-            user: team["team_name"] for user, team in league.team_info(self.database_path).items()
-        }
+        return {user: team["team_name"] for user, team in self._teams().items()}
 
     # O dia de jogos ------------------------------------------------------------------------
 
@@ -137,14 +243,14 @@ class LeagueCog(commands.Cog):
                 if manual:
                     await send(content="Não há jogos marcados para hoje.")
                 return
-            day = league.day_number(edition)
             stages = []
             for fixture in due:
                 label = _title(fixture)
                 if label not in stages:
                     stages.append(label)
             await send(
-                content=f"📅 **Dia {day} da edição {edition['number']}** · " + " · ".join(stages)
+                content=f"📅 **Dia {league.day_number(edition)} da edição {edition['number']}** · "
+                + " · ".join(stages)
             )
             names = self._names()
             for fixture in due:
@@ -153,68 +259,36 @@ class LeagueCog(commands.Cog):
             await self._day_summary(send, edition, due, news)
 
     async def _announce_start(self, send, edition: dict) -> None:
-        names = self._names()
+        teams = self._teams()
         entries = league.entries(edition["id"], self.database_path)
-        playing = [
-            names.get(e["discord_user_id"], e["team_name"]) for e in entries if not e["waitlisted"]
-        ]
-        waiting = [
-            names.get(e["discord_user_id"], e["team_name"]) for e in entries if e["waitlisted"]
-        ]
+        playing = [teams.get(e["discord_user_id"]) or e for e in entries if not e["waitlisted"]]
+        waiting = [teams.get(e["discord_user_id"]) or e for e in entries if e["waitlisted"]]
         rounds = league.rounds_total(edition["id"], self.database_path)
+        calendar = (
+            f"{rounds} rodadas · final do Pintos {_date(edition, rounds + 1):%d/%m} · "
+            "Copa IOS em seguida"
+        )
+        file = await _file(
+            render_edition_start,
+            playing,
+            edition["number"],
+            calendar,
+            len(waiting),
+            name="edicao.png",
+        )
         embed = discord.Embed(
             title=f"🏁 Começou a edição {edition['number']}!",
             description=INTRO,
-            color=discord.Color.gold(),
-        )
-        embed.add_field(
-            name=f"Times ({len(playing)})", value=", ".join(playing)[:1024], inline=False
-        )
-        embed.add_field(
-            name="Calendário",
-            value=f"Pintos Corridos: {rounds} rodadas e a final no dia {rounds + 1} "
-            f"({_day_label(edition, rounds + 1)}). A Copa IOS começa no dia seguinte.",
-            inline=False,
+            color=GREEN_COLOR,
         )
         if waiting:
             embed.add_field(
                 name="Lista de espera (entram primeiro na próxima)",
-                value=", ".join(waiting)[:1024],
+                value=", ".join(team["team_name"] for team in waiting)[:1024],
                 inline=False,
             )
-        await send(embed=embed)
-
-    async def _announce_cup(self, send, edition: dict) -> None:
-        """O sorteio da Copa IOS, logo depois da final do Pintos."""
-        names = self._names()
-        draw = [
-            f
-            for f in league.fixtures(edition["id"], self.database_path)
-            if f["competition"] == "copa"
-        ]
-        if not draw:
-            return
-        half = len(draw) // 2
-        sides = []
-        for label, games in (("Lado A", draw[:half]), ("Lado B", draw[half:])):
-            lines = [
-                (
-                    f"{names.get(f['home_user_id'], 'Time')} passa direto"
-                    if f["walkover"] == "folga"
-                    else _score(f, names)
-                )
-                for f in games
-            ]
-            sides.append((label, lines))
-        embed = discord.Embed(
-            title=f"🏆 Sorteio da Copa IOS · {league.STAGE_LABELS[draw[0]['stage']]}",
-            description=f"Começa {_day_label(edition, draw[0]['day'])}, às 19h. Campeão e vice "
-            "do Pintos ficam em lados opostos: só podem se cruzar na final.",
-            color=discord.Color.gold(),
-        )
-        for label, lines in sides:
-            embed.add_field(name=label, value="\n".join(lines)[:1024] or "—", inline=True)
-        await send(embed=embed)
+        embed.set_image(url="attachment://edicao.png")
+        await send(embed=embed, file=file)
 
     async def _play_and_narrate(self, send, fixture: dict, names: dict) -> None:
         home_id, away_id = fixture["home_user_id"], fixture["away_user_id"]
@@ -271,44 +345,68 @@ class LeagueCog(commands.Cog):
             )
 
     async def _day_summary(self, send, edition: dict, played: list[dict], news: dict) -> None:
-        names = self._names()
+        """Quadro de cada competição do dia + tabela (Pintos) ou chave (Copa), e a agenda."""
+        teams = self._teams()
+        names = {user: team["team_name"] for user, team in teams.items()}
         games = league.fixtures(edition["id"], self.database_path)
         by_id = {game["id"]: game for game in games}
         today = [by_id[game["id"]] for game in played]
-        embed = discord.Embed(title="📋 Resultados do dia", color=discord.Color.gold())
-        for competition, label in (("copa", "🏆 Copa IOS"), ("pintos", "🐣 Pintos Corridos")):
-            lines = [_score(g, names) for g in today if g["competition"] == competition]
-            if lines:
-                embed.add_field(name=label, value="\n".join(lines)[:1024], inline=False)
         day = max((g["day"] for g in today), default=league.day_number(edition))
         upcoming = [g for g in games if g["day"] == day + 1 and g["played_at"] is None]
-        if upcoming:
-            embed.add_field(
-                name=f"📅 Amanhã ({_day_label(edition, day + 1)}), 19h",
-                value="\n".join(f"{_title(g)}: {_score(g, names)}" for g in upcoming)[:1024],
-                inline=False,
-            )
-        file = None
-        if any(g["competition"] == "pintos" and g["stage"] != "final" for g in today):
-            file = await self._table_file(edition)
-            embed.set_image(url="attachment://tabela.png")
-        await send(embed=embed, **({"file": file} if file else {}))
-        for competition, title in (("copa", "🏆 Copa IOS"), ("pintos", "🐣 Pintos Corridos")):
-            prizes = news["prizes"].get(competition)
-            if not prizes:
+        for competition in ("pintos", "copa"):
+            mine = [g for g in today if g["competition"] == competition]
+            if not mine:
                 continue
-            champion = news.get(f"{competition}_champion")
-            lines = [
-                f"{league.PLACE_LABELS.get(p['place'], p['place'])}: "
-                f"**{names.get(p['user_id'], 'Time')}** · {league.prize_text(p)}"
-                for p in prizes
-            ]
-            await send(
-                content=f"🎉 **{names.get(champion, 'Time')}** é o campeão da {title}!\n\n"
-                "**Prêmios**\n" + "\n".join(lines)
+            accent, color = (GREEN, GREEN_COLOR) if competition == "pintos" else (GOLD, GOLD_COLOR)
+            heading = _title(mine[0]).replace("Pintos Corridos · ", "").replace("Copa IOS · ", "")
+            subtitle = (
+                f"{'Pintos Corridos' if competition == 'pintos' else 'Copa IOS'} · "
+                f"Edição {edition['number']} · {_day_label(edition, day)}"
             )
+            board = await _file(
+                render_matchday,
+                _matchday_rows(mine, teams),
+                heading.upper(),
+                subtitle,
+                accent,
+                name=f"dia-{competition}.png",
+            )
+            first = discord.Embed(title=f"📋 Resultados do dia · {heading}", color=color)
+            first.set_image(url=f"attachment://dia-{competition}.png")
+            files = [board]
+            embeds = [first]
+            if competition == "pintos" and mine[0]["stage"] != "final":
+                embed, table = await self._table_page(edition)
+                embeds.append(embed)
+                files += table
+            elif competition == "copa":
+                embed, chart = await self._cup_page(edition)
+                embeds.append(embed)
+                files += chart
+            later = [g for g in upcoming if g["competition"] == competition]
+            if later:
+                embeds[-1].add_field(
+                    name=f"📅 Amanhã ({_day_label(edition, day + 1)}), 19h",
+                    value="\n".join(f"{_title(g)}: {_score(g, names)}" for g in later)[:1024],
+                    inline=False,
+                )
+            await send(embeds=embeds, files=files)
+        for competition in ("pintos", "copa"):
+            if news["prizes"].get(competition):
+                await self._announce_champion(send, edition, competition, news, teams)
         if news.get("copa_draw"):
-            await self._announce_cup(send, edition)
+            embed, files = await self._cup_page(edition)
+            embed.title = "🏆 Sorteio da Copa IOS"
+            first_day = min(
+                g["day"]
+                for g in league.fixtures(edition["id"], self.database_path)
+                if g["competition"] == "copa"
+            )
+            embed.description = (
+                f"Começa {_day_label(edition, first_day)}, às 19h. Campeão e vice do Pintos "
+                "ficam em lados opostos: só podem se cruzar na final."
+            )
+            await send(embed=embed, files=files)
         if news.get("next_edition"):
             nxt = news["next_edition"]
             opens = date.fromisoformat(nxt["opens_on"])
@@ -317,13 +415,233 @@ class LeagueCog(commands.Cog):
                 "todos com o time completo (11 titulares)."
             )
 
-    async def _table_file(self, edition: dict) -> discord.File:
+    async def _announce_champion(self, send, edition, competition, news, teams) -> None:
+        names = {user: team["team_name"] for user, team in teams.items()}
+        prizes = news["prizes"][competition]
+        champion = news.get(f"{competition}_champion")
+        final = next(
+            g
+            for g in league.fixtures(edition["id"], self.database_path)
+            if g["competition"] == competition and g["stage"] == "final"
+        )
+        vice = final["away_user_id"] if champion == final["home_user_id"] else final["home_user_id"]
+        line = (
+            f"Final: {names.get(final['home_user_id'], 'Time')} {final['home_goals']} × "
+            f"{final['away_goals']} {names.get(final['away_user_id'], 'Time')}"
+        )
+        if final["home_penalties"] is not None:
+            line += f" (pên. {final['home_penalties']} × {final['away_penalties']})"
+        own = next((p for p in prizes if p["user_id"] == champion), None)
+        label = "Pintos Corridos" if competition == "pintos" else "Copa IOS"
+        poster = await _file(
+            render_champion,
+            teams.get(champion) or {"team_name": "Time"},
+            label,
+            edition["number"],
+            line,
+            teams.get(vice),
+            league.prize_plain(own) if own else "",
+            name="campeao.png",
+        )
+        embed = discord.Embed(
+            title=f"🎉 {names.get(champion, 'Time')} é campeão da {label}!",
+            description="**Prêmios**\n"
+            + "\n".join(
+                f"{league.PLACE_LABELS.get(p['place'], p['place'])}: "
+                f"**{names.get(p['user_id'], 'Time')}** · {league.prize_text(p)}"
+                for p in prizes
+            ),
+            color=GOLD_COLOR,
+        )
+        embed.set_image(url="attachment://campeao.png")
+        await send(embed=embed, file=poster)
+
+    # Páginas (painel e comandos) -----------------------------------------------------------
+
+    def _shown_edition(self, guild_id: int) -> dict | None:
+        """A edição em andamento ou, entre uma e outra, a última que terminou."""
+        edition = league.current_edition(guild_id, self.database_path)
+        if edition and edition["status"] == "registration":
+            with connect(self.database_path) as connection:
+                row = connection.execute(
+                    "SELECT * FROM league_editions WHERE guild_id = ? AND number = ?",
+                    (str(guild_id), edition["number"] - 1),
+                ).fetchone()
+            return dict(row) if row else None
+        return edition
+
+    async def page(self, key: str, guild_id: int, user) -> Page:
+        if key == "campeoes":
+            return self._champions_page(guild_id)
+        if key == "resumo":
+            return self._summary_page(guild_id, user)
+        edition = self._shown_edition(guild_id)
+        if edition is None:
+            embed = discord.Embed(
+                title="🏆 Campeonatos",
+                description="Ainda não teve campeonato por aqui. A primeira edição começa às "
+                "19h, quando houver pelo menos 4 times completos.",
+                color=GOLD_COLOR,
+            )
+            return embed, []
+        if key == "tabela":
+            return await self._table_page(edition)
+        if key == "agenda":
+            return await self._agenda_page(edition, user)
+        return await self._cup_page(edition)
+
+    def _summary_page(self, guild_id: int, user) -> Page:
+        edition = league.ensure_edition(guild_id, self.database_path)
+        embed = discord.Embed(
+            title=f"🏆 Campeonatos · Edição {edition['number']}",
+            description=INTRO,
+            color=GOLD_COLOR,
+        )
+        names = self._names()
+        if edition["status"] == "registration":
+            opens = date.fromisoformat(edition["opens_on"])
+            embed.add_field(
+                name="⏳ Ainda não começou",
+                value=f"Começa **{opens:%d/%m} às 19h** (precisa de pelo menos "
+                f"{league.MIN_TEAMS} times completos).",
+                inline=False,
+            )
+            return embed, []
+        rounds = league.rounds_total(edition["id"], self.database_path)
+        table = league.standings(edition["id"], self.database_path)
+        games = league.fixtures(edition["id"], self.database_path)
+        if table:
+            leader = table[0]
+            played = max(team["played"] for team in table)
+            embed.add_field(
+                name="🐣 Pintos Corridos",
+                value=f"{played} de {rounds} rodadas · Líder: **{leader['team_name']}** "
+                f"({leader['points']} pts)",
+                inline=False,
+            )
+        copa = [g for g in games if g["competition"] == "copa"]
+        if copa:
+            last = copa[-1]
+            status = (
+                f"Campeão: **{names.get(last['winner_user_id'], 'Time')}**"
+                if last["stage"] == "final" and last["played_at"]
+                else f"Fase atual: **{league.STAGE_LABELS[last['stage']]}**"
+            )
+        else:
+            status = "Começa no dia seguinte à final do Pintos."
+        embed.add_field(name="🏆 Copa IOS", value=status, inline=False)
+        mine = [
+            g
+            for g in games
+            if g["played_at"] is None and str(user.id) in (g["home_user_id"], g["away_user_id"])
+        ]
+        if mine:
+            nxt = mine[0]
+            embed.add_field(
+                name="📅 Seu próximo jogo",
+                value=f"{_day_label(edition, nxt['day'])}, 19h · {_title(nxt)}\n"
+                f"{_score(nxt, names)}",
+                inline=False,
+            )
+        return embed, []
+
+    async def _table_page(self, edition: dict) -> Page:
         table = league.standings(edition["id"], self.database_path)
         rounds = league.rounds_total(edition["id"], self.database_path)
         played = max((team["played"] for team in table), default=0)
-        subtitle = f"Edição {edition['number']} · {played} de {rounds} rodadas · os 2 primeiros vão à final"
-        image = await asyncio.to_thread(render_league_table, table, "PINTOS CORRIDOS", subtitle)
-        return discord.File(image, filename="tabela.png")
+        subtitle = (
+            f"Edição {edition['number']} · {played} de {rounds} rodadas · "
+            "os 2 primeiros vão à final"
+        )
+        file = await _file(
+            render_league_table, table, "PINTOS CORRIDOS", subtitle, name="tabela.png"
+        )
+        embed = discord.Embed(title="🐣 Pintos Corridos · Tabela", color=GREEN_COLOR)
+        embed.set_image(url="attachment://tabela.png")
+        return embed, [file]
+
+    async def _cup_page(self, edition: dict) -> Page:
+        rounds = league.bracket(edition["id"], self.database_path)
+        embed = discord.Embed(title=f"🏆 Copa IOS · Edição {edition['number']}", color=GOLD_COLOR)
+        if not rounds:
+            embed.description = (
+                "A Copa IOS começa no dia seguinte à final do Pintos Corridos, com o campeão e o "
+                "vice em lados opostos da chave."
+            )
+            return embed, []
+        labels = {r["day"]: f"{_date(edition, r['day']):%d/%m}" for r in rounds}
+        pending = [r for r in rounds if any(g is None or not g["played_at"] for g in r["games"])]
+        subtitle = f"Edição {edition['number']} · " + (
+            f"{league.STAGE_LABELS[pending[0]['stage']]} {_day_label(edition, pending[0]['day'])}"
+            if pending
+            else "Encerrada"
+        )
+        file = await _file(
+            render_bracket, rounds, self._teams(), "COPA IOS", subtitle, labels, name="chave.png"
+        )
+        embed.set_image(url="attachment://chave.png")
+        return embed, [file]
+
+    async def _agenda_page(self, edition: dict, user) -> Page:
+        teams = self._teams()
+        names = {key: team["team_name"] for key, team in teams.items()}
+        games = [
+            g for g in league.fixtures(edition["id"], self.database_path) if g["played_at"] is None
+        ]
+        mine = [g for g in games if str(user.id) in (g["home_user_id"], g["away_user_id"])]
+        embed = discord.Embed(
+            title=f"📅 Agenda · {names.get(str(user.id), user.display_name)}",
+            description="\n".join(
+                f"**{_day_label(edition, g['day'])}** · {_title(g)}\n{_score(g, names)}"
+                for g in mine[:8]
+            )
+            or "Nenhum jogo seu marcado.",
+            color=GREEN_COLOR,
+        )
+        if not games:
+            return embed, []
+        day = games[0]["day"]
+        nxt = [g for g in games if g["day"] == day]
+        heading = _title(nxt[0]).replace("Pintos Corridos · ", "").replace("Copa IOS · ", "")
+        copa = nxt[0]["competition"] == "copa"
+        file = await _file(
+            render_matchday,
+            _matchday_rows(nxt, teams),
+            heading.upper(),
+            f"{'Copa IOS' if copa else 'Pintos Corridos'} · {_day_label(edition, day)} · 19h",
+            GOLD if copa else GREEN,
+            name="agenda.png",
+        )
+        embed.add_field(name="Próximo dia de jogos", value=_day_label(edition, day), inline=False)
+        embed.set_image(url="attachment://agenda.png")
+        return embed, [file]
+
+    def _champions_page(self, guild_id: int) -> Page:
+        editions = league.history(guild_id, self.database_path)
+        lines = [
+            f"**Edição {e['number']}** · 🐣 {e.get('pintos_campeao', '—')} "
+            f"(vice {e.get('pintos_vice', '—')}) · 🏆 {e.get('copa_campeao', '—')}"
+            for e in editions[:20]
+        ]
+        embed = discord.Embed(
+            title="📜 Campeões",
+            description="\n".join(lines) or "Nenhuma edição terminou ainda.",
+            color=GOLD_COLOR,
+        )
+        return embed, []
+
+    async def _open(self, context: commands.Context, page: str) -> None:
+        if context.guild is None:
+            await context.reply("O campeonato é de cada servidor.", mention_author=False)
+            return
+        embed, files = await self.page(page, context.guild.id, context.author)
+        view = LeaguePanel(self, context.guild.id, context.author, page)
+        embed.set_footer(text="admin: mm!campeonato canal · ativar · jogar")
+        view.message = await context.reply(
+            embed=embed, files=files, view=view, mention_author=False
+        )
+
+    # Agendador -----------------------------------------------------------------------------
 
     @tasks.loop(time=GAME_TIME)
     async def daily_games(self) -> None:
@@ -355,179 +673,32 @@ class LeagueCog(commands.Cog):
         name="campeonato", aliases=["campeonatos", "pintos"], invoke_without_command=True
     )
     async def championship(self, context: commands.Context) -> None:
-        """Resumo da edição: dia, líder, fase da Copa e o seu próximo jogo."""
-        if context.guild is None:
-            await context.reply("O campeonato é de cada servidor.", mention_author=False)
-            return
-        edition = league.ensure_edition(context.guild.id, self.database_path)
-        embed = discord.Embed(
-            title=f"🏆 Campeonatos · Edição {edition['number']}",
-            description=INTRO,
-            color=discord.Color.gold(),
-        )
-        names = self._names()
-        if edition["status"] == "registration":
-            opens = date.fromisoformat(edition["opens_on"])
-            embed.add_field(
-                name="⏳ Ainda não começou",
-                value=f"Começa **{opens:%d/%m} às 19h** (precisa de pelo menos "
-                f"{league.MIN_TEAMS} times completos).",
-                inline=False,
-            )
-        else:
-            day = league.day_number(edition)
-            rounds = league.rounds_total(edition["id"], self.database_path)
-            table = league.standings(edition["id"], self.database_path)
-            if table:
-                leader = table[0]
-                embed.add_field(
-                    name="🐣 Pintos Corridos",
-                    value=f"Dia {day} · {rounds} rodadas + final\nLíder: **{leader['team_name']}** "
-                    f"({leader['points']} pts)",
-                    inline=False,
-                )
-            games = league.fixtures(edition["id"], self.database_path)
-            copa = [g for g in games if g["competition"] == "copa"]
-            if copa:
-                last = copa[-1]
-                status = (
-                    f"Campeão: **{names.get(last['winner_user_id'], 'Time')}**"
-                    if last["stage"] == "final" and last["played_at"]
-                    else f"Fase atual: **{league.STAGE_LABELS[last['stage']]}**"
-                )
-            else:
-                status = "Começa no dia seguinte à final do Pintos."
-            embed.add_field(name="🏆 Copa IOS", value=status, inline=False)
-            mine = [
-                g
-                for g in games
-                if g["played_at"] is None
-                and str(context.author.id) in (g["home_user_id"], g["away_user_id"])
-            ]
-            if mine:
-                nxt = mine[0]
-                embed.add_field(
-                    name="📅 Seu próximo jogo",
-                    value=f"{_day_label(edition, nxt['day'])}, 19h · {_title(nxt)}\n{_score(nxt, names)}",
-                    inline=False,
-                )
-        embed.set_footer(
-            text="mm!campeonato tabela · agenda [@pessoa] · copa · historico · "
-            "admin: canal, ativar, jogar"
-        )
-        await context.reply(embed=embed, mention_author=False)
-
-    async def _playing(self, context: commands.Context) -> dict | None:
-        if context.guild is None:
-            await context.reply("O campeonato é de cada servidor.", mention_author=False)
-            return None
-        edition = league.current_edition(context.guild.id, self.database_path)
-        if edition and edition["status"] == "registration":
-            # Entre uma edição e outra, mostra a última que terminou.
-            with connect(self.database_path) as connection:
-                row = connection.execute(
-                    "SELECT * FROM league_editions WHERE guild_id = ? AND number = ?",
-                    (str(context.guild.id), edition["number"] - 1),
-                ).fetchone()
-            edition = dict(row) if row else None
-        if edition is None:
-            await context.reply(
-                "Ainda não teve campeonato por aqui. Veja `mm!campeonato`.", mention_author=False
-            )
-        return edition
+        """Painel do campeonato: resumo, tabela, agenda, Copa e campeões em botões."""
+        await self._open(context, "resumo")
 
     @championship.command(name="tabela", aliases=["classificacao", "classificação"])
     async def table(self, context: commands.Context) -> None:
-        edition = await self._playing(context)
-        if edition is None:
-            return
-        file = await self._table_file(edition)
-        await context.reply(file=file, mention_author=False)
+        await self._open(context, "tabela")
 
     @championship.command(name="agenda", aliases=["jogos", "proximos", "próximos"])
     async def agenda(self, context: commands.Context, member: discord.Member | None = None) -> None:
-        edition = await self._playing(context)
-        if edition is None:
-            return
-        target = member or context.author
-        names = self._names()
-        games = [
-            g for g in league.fixtures(edition["id"], self.database_path) if g["played_at"] is None
-        ]
-        mine = [g for g in games if str(target.id) in (g["home_user_id"], g["away_user_id"])]
-        embed = discord.Embed(
-            title=f"📅 Agenda · {names.get(str(target.id), target.display_name)}",
-            color=discord.Color.gold(),
-        )
-        embed.description = (
-            "\n".join(
-                f"**{_day_label(edition, g['day'])}** · {_title(g)}\n{_score(g, names)}"
-                for g in mine[:10]
-            )
-            or "Nenhum jogo marcado."
-        )
-        if games:
-            day = games[0]["day"]
-            embed.add_field(
-                name=f"Próximo dia de jogos ({_day_label(edition, day)}, 19h)",
-                value="\n".join(
-                    f"{_title(g)}: {_score(g, names)}" for g in games if g["day"] == day
-                )[:1024],
-                inline=False,
-            )
-        await context.reply(embed=embed, mention_author=False)
-
-    @championship.command(name="copa", aliases=["chave", "ios"])
-    async def cup(self, context: commands.Context) -> None:
-        edition = await self._playing(context)
-        if edition is None:
-            return
-        names = self._names()
-        copa = [
-            g
-            for g in league.fixtures(edition["id"], self.database_path)
-            if g["competition"] == "copa"
-        ]
-        embed = discord.Embed(
-            title=f"🏆 Copa IOS · Edição {edition['number']}", color=discord.Color.gold()
-        )
-        for stage in league.STAGE_LABELS:
-            games = [g for g in copa if g["stage"] == stage]
-            if not games:
-                continue
-            lines = []
-            for game in games:
-                if game["walkover"] == "folga":
-                    lines.append(f"{names.get(game['home_user_id'], 'Time')} passou direto")
-                    continue
-                mark = ""
-                if game["winner_user_id"]:
-                    mark = f" → **{names.get(game['winner_user_id'], 'Time')}**"
-                lines.append(_score(game, names) + mark)
-            embed.add_field(
-                name=f"{league.STAGE_LABELS[stage]} · {_day_label(edition, games[0]['day'])}",
-                value="\n".join(lines)[:1024],
-                inline=False,
-            )
-        await context.reply(embed=embed, mention_author=False)
-
-    @championship.command(name="historico", aliases=["histórico", "campeoes", "campeões"])
-    async def past(self, context: commands.Context) -> None:
         if context.guild is None:
             await context.reply("O campeonato é de cada servidor.", mention_author=False)
             return
-        editions = league.history(context.guild.id, self.database_path)
-        lines = [
-            f"**Edição {e['number']}** · 🐣 {e.get('pintos_campeao', '—')} "
-            f"(vice {e.get('pintos_vice', '—')}) · 🏆 {e.get('copa_campeao', '—')}"
-            for e in editions[:20]
-        ]
-        embed = discord.Embed(
-            title="📜 Campeões",
-            description="\n".join(lines) or "Nenhuma edição terminou ainda.",
-            color=discord.Color.gold(),
+        target = member or context.author
+        embed, files = await self.page("agenda", context.guild.id, target)
+        view = LeaguePanel(self, context.guild.id, context.author, "agenda")
+        view.message = await context.reply(
+            embed=embed, files=files, view=view, mention_author=False
         )
-        await context.reply(embed=embed, mention_author=False)
+
+    @championship.command(name="copa", aliases=["chave", "ios"])
+    async def cup(self, context: commands.Context) -> None:
+        await self._open(context, "copa")
+
+    @championship.command(name="historico", aliases=["histórico", "campeoes", "campeões"])
+    async def past(self, context: commands.Context) -> None:
+        await self._open(context, "campeoes")
 
     def _is_admin(self, context: commands.Context) -> bool:
         return bool(context.guild) and context.author.guild_permissions.manage_guild
@@ -602,11 +773,11 @@ class LeagueCog(commands.Cog):
 
     @commands.command(name="temporada", aliases=["season", "tabela"])
     async def season(self, context: commands.Context) -> None:
-        await self.table(context)
+        await self._open(context, "tabela")
 
     @commands.command(name="temporadas", aliases=["seasons", "campeoes", "campeões"])
     async def seasons(self, context: commands.Context) -> None:
-        await self.past(context)
+        await self._open(context, "campeoes")
 
 
 async def setup(bot: commands.Bot) -> None:

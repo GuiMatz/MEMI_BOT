@@ -710,6 +710,13 @@ def prize_text(prize: dict) -> str:
     return f"{prize['memilets']:,}".replace(",", ".") + (f" + {items}" if items else "")
 
 
+def prize_plain(prize: dict) -> str:
+    """O prêmio sem emojis, para as imagens ("15.900 Memilets · caixa épica")."""
+    parts = [f"{prize['memilets']:,} Memilets".replace(",", ".")]
+    parts += [INVENTORY_ITEMS[item][1].lower() for item in prize["items"]]
+    return " · ".join(parts)
+
+
 def history(guild_id: int | str, database_path: str | Path = DATABASE_PATH) -> list[dict]:
     """Edições encerradas, da mais recente para a mais antiga, com os campeões."""
     info = team_info(database_path)
@@ -735,3 +742,24 @@ def history(guild_id: int | str, database_path: str | Path = DATABASE_PATH) -> l
                 name = (info.get(row["discord_user_id"]) or {}).get("team_name") or "Time"
                 edition[f"{row['competition']}_{row['place']}"] = name
     return editions
+
+
+def bracket(edition_id: int, database_path: str | Path = DATABASE_PATH) -> list[dict]:
+    """A chave inteira da Copa, fase por fase, já com as fases que ainda não têm times.
+
+    Cada fase: {"stage", "day", "games"}; cada jogo é a partida gravada (ou None, se ainda
+    não foi montada). O jogo `slot` de uma fase sai dos jogos 2·slot e 2·slot+1 da anterior,
+    então a primeira metade de cada fase é o lado A da chave e a segunda, o lado B."""
+    copa = [game for game in fixtures(edition_id, database_path) if game["competition"] == "copa"]
+    if not copa:
+        return []
+    size = _copa_size(copa)
+    first_day = min(game["day"] for game in copa)
+    rounds = []
+    for index, stage in enumerate(COPA_STAGES[size]):
+        games: list[dict | None] = [None] * (size // 2 ** (index + 1))
+        for game in copa:
+            if game["stage"] == stage:
+                games[game["slot"]] = game
+        rounds.append({"stage": stage, "day": first_day + index, "games": games})
+    return rounds

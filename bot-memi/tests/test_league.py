@@ -9,7 +9,9 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from src import league
-from src.cogs.league import LeagueCog, _score, _title
+import discord
+
+from src.cogs.league import LeagueCog, LeaguePanel, _score, _title
 from src.db import connect, initialize_database
 from src.game import claim_player, get_wallet, register_user
 from src.team_stats import compute_stats, match_records
@@ -256,11 +258,55 @@ class LeagueTests(unittest.TestCase):
             titles = [call.kwargs["title"] for call in narrated.await_args_list]
             self.assertEqual(titles, ["Pintos Corridos · Rodada 1"] * 2)
             asyncio.run(cog.run_day(guild, send, manual=True))  # nada mais para hoje
-        embeds = [item["embed"].title for item in sent if item.get("embed")]
-        self.assertIn("🏁 Começou a edição 1!", embeds)
-        self.assertIn("📋 Resultados do dia", embeds)
-        self.assertTrue(any(item.get("file") for item in sent))  # a tabela
+        embeds = [item["embed"] for item in sent if item.get("embed")]
+        embeds += [embed for item in sent for embed in item.get("embeds", [])]
+        titles = [embed.title for embed in embeds]
+        self.assertIn("🏁 Começou a edição 1!", titles)
+        self.assertIn("📋 Resultados do dia · Rodada 1", titles)
+        self.assertIn("🐣 Pintos Corridos · Tabela", titles)
+        # Imagens: início da edição, quadro do dia e tabela.
+        names = [item["file"].filename for item in sent if item.get("file")]
+        names += [file.filename for item in sent for file in item.get("files", [])]
+        self.assertEqual(set(names), {"edicao.png", "dia-pintos.png", "tabela.png"})
         self.assertEqual(sent[-1]["content"], "Não há jogos marcados para hoje.")
+
+    def test_a_whole_edition_through_the_cog_posts_every_image(self):
+        self.teams(4)
+        cog = LeagueCog(SimpleNamespace(database_path=self.db))
+        member = SimpleNamespace(bot=False)
+        guild = SimpleNamespace(id=555, get_member=lambda _id: member)
+        sent = []
+
+        async def send(**kwargs):
+            sent.append(kwargs)
+            return AsyncMock()
+
+        module = LeagueCog.run_day.__globals__["league"]
+        day = {"value": NOW}
+        fakes = {"narrate": AsyncMock(), "score_file": AsyncMock(return_value=None)}
+        with (
+            patch.dict(LeagueCog.run_day.__globals__, fakes),
+            patch.object(module, "today", lambda now=None: day["value"].date()),
+        ):
+            for _ in range(6):  # 3 rodadas, final do Pintos, semis e final da Copa
+                asyncio.run(cog.run_day(guild, send, manual=True))
+                day["value"] += timedelta(days=1)
+            user = SimpleNamespace(id=1000, display_name="P1000")
+            pages = {key: asyncio.run(cog.page(key, 555, user)) for key, *_ in LeaguePanel.PAGES}
+        names = [item["file"].filename for item in sent if item.get("file")]
+        names += [file.filename for item in sent for file in item.get("files", [])]
+        self.assertEqual(names.count("campeao.png"), 2)  # pôster do Pintos e da Copa
+        self.assertIn("chave.png", names)  # sorteio e fases da Copa
+        self.assertIn("dia-copa.png", names)
+        texts = [item.get("content") or "" for item in sent]
+        self.assertTrue(any("A edição 2 começa" in text for text in texts))
+        self.assertEqual(pages["copa"][1][0].filename, "chave.png")
+        self.assertEqual(pages["tabela"][1][0].filename, "tabela.png")
+        self.assertIn("Edição 1", pages["campeoes"][0].description)
+        view = LeaguePanel(cog, 555, user, "copa")
+        styles = {item.label: item.style for item in view.children}
+        self.assertEqual(styles["Copa IOS"], discord.ButtonStyle.primary)
+        self.assertEqual(styles["Tabela"], discord.ButtonStyle.secondary)
 
 
 if __name__ == "__main__":
