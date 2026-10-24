@@ -424,7 +424,8 @@ O FUT.AE é um módulo do MeMi BOT, não um bot separado. O menu geral continua 
   - Cada competição paga os prêmios quando termina. Depois da final da Copa, a próxima
     edição começa no dia seguinte, às 19:00 (com 16 times, uma edição dura 20 dias).
   - Subcomandos: `tabela` (também `mm!tabela`), `agenda [@pessoa]`, `copa`, `historico`
-    (também `mm!campeoes`) e, para quem tem Gerenciar servidor, `canal`, `ativar` e `jogar`.
+    (também `mm!campeoes`) e, para quem tem Gerenciar servidor, `canal`, `ativar`, `jogar` e
+    `adiantar` (joga já a próxima rodada ou fase da Copa e adianta o calendário em um dia).
   - O antigo campeonato diário e a temporada mensal saíram; os jogos deles continuam
     contando no `mm!stats` e nas rivalidades.
 - `mm!admin testeamistoso` e `mm!admin testecampeonato <quantidade>` executam testes

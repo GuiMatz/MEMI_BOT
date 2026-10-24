@@ -640,7 +640,7 @@ class LeagueCog(commands.Cog):
             return
         embed, files = await self.page(page, context.guild.id, context.author)
         view = LeaguePanel(self, context.guild.id, context.author, page)
-        embed.set_footer(text="admin: mm!campeonato canal · ativar · jogar")
+        embed.set_footer(text="admin: mm!campeonato canal · ativar · jogar · adiantar")
         view.message = await context.reply(
             embed=embed, files=files, view=view, mention_author=False
         )
@@ -774,6 +774,19 @@ class LeagueCog(commands.Cog):
                 "É preciso ter a permissão Gerenciar servidor.", mention_author=False
             )
             return
+        await self.run_day(context.guild, lambda **kwargs: context.send(**kwargs), manual=True)
+
+    @championship.command(name="adiantar", aliases=["proxima", "próxima", "pular", "avancar"])
+    async def pull_forward(self, context: commands.Context) -> None:
+        """Admin: joga agora a próxima rodada (ou fase da Copa) e adianta o calendário."""
+        if not self._is_admin(context):
+            await context.reply(
+                "É preciso ter a permissão Gerenciar servidor.", mention_author=False
+            )
+            return
+        edition = league.ensure_edition(context.guild.id, self.database_path)
+        if edition["status"] == "playing":
+            league.pull_forward(edition, self.database_path)
         await self.run_day(context.guild, lambda **kwargs: context.send(**kwargs), manual=True)
 
     @commands.command(name="temporada", aliases=["season", "tabela"])

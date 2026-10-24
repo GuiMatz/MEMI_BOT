@@ -225,6 +225,26 @@ class LeagueTests(unittest.TestCase):
             env["MEMI_CHAMPIONSHIP_SCHEDULER"] = "1"
             self.assertTrue(LeagueCog(bot).scheduler_enabled)
 
+    def test_pull_forward_plays_the_next_round_now_and_keeps_one_per_day(self):
+        users = self.teams(4)
+        edition = league.start_edition(555, users, self.db, now=NOW)
+        for fixture in league.due_fixtures(edition, NOW, self.db):
+            league.play_fixture(fixture, random.Random(1), self.db)
+        league.advance(edition, self.db, now=NOW)
+        self.assertEqual(league.due_fixtures(edition, NOW, self.db), [])  # rodada 2 é amanhã
+        moved = league.pull_forward(edition, self.db, now=NOW)
+        due = league.due_fixtures(moved, NOW, self.db)
+        self.assertEqual({g["stage"] for g in due}, {"rodada 2"})
+        self.assertEqual(league.day_number(moved, NOW), 2)
+        # Com jogo pendente hoje, não adianta de novo.
+        self.assertEqual(league.pull_forward(moved, self.db, now=NOW), moved)
+        for fixture in due:
+            league.play_fixture(fixture, random.Random(1), self.db)
+        # Amanhã cai a rodada 3, sem dia vazio.
+        tomorrow = NOW + timedelta(days=1)
+        stages = {g["stage"] for g in league.due_fixtures(moved, tomorrow, self.db)}
+        self.assertEqual(stages, {"rodada 3"})
+
     def test_titles_and_scores_for_the_channel(self):
         game = {
             "competition": "copa",

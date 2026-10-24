@@ -290,6 +290,28 @@ def day_number(edition: dict, now: datetime | None = None) -> int:
     return (today(now) - date.fromisoformat(edition["start_date"])).days + 1
 
 
+def pull_forward(
+    edition: dict, database_path: str | Path = DATABASE_PATH, *, now: datetime | None = None
+) -> dict:
+    """Traz o próximo dia de jogos para hoje: o calendário inteiro anda um dia para trás.
+
+    Assim a rodada seguinte cai hoje e as outras continuam uma por dia, sem dia vazio. Só
+    adianta se hoje já não tiver jogo pendente."""
+    if edition["status"] != "playing" or due_fixtures(edition, now, database_path):
+        return edition
+    pending = [g["day"] for g in fixtures(edition["id"], database_path) if g["played_at"] is None]
+    if not pending:
+        return edition
+    shift = min(pending) - day_number(edition, now)
+    start = date.fromisoformat(edition["start_date"]) - timedelta(days=shift)
+    with connect(database_path) as connection:
+        connection.execute(
+            "UPDATE league_editions SET start_date = ? WHERE id = ?",
+            (start.isoformat(), edition["id"]),
+        )
+    return {**edition, "start_date": start.isoformat()}
+
+
 # Consultas ---------------------------------------------------------------------------------
 
 
