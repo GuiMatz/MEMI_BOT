@@ -406,21 +406,24 @@ O FUT.AE é um módulo do MeMi BOT, não um bot separado. O menu geral continua 
   quem defende escolhe onde pular, em segredo. Acertar o canto defende 75% das vezes; errar
   ainda pode dar trave (6%). 5 cobranças para cada lado, morte súbita no empate, e quem
   demora mais de 60 s tem o canto sorteado.
-- `mm!campeonato`: Pintos Corridos e Copa IOS, jogados juntos em edições. Entram sozinhos
+- `mm!campeonato`: Pintos Corridos e depois a Copa IOS, jogados em edições. Entram sozinhos
   todos do servidor com o time completo (11 titulares), até 16: primeiro quem ficou de fora
   na edição anterior, depois por ordem de criação do time. Todo dia às 19:00 (Brasília) o
-  bot narra lance a lance todos os jogos do dia, Copa primeiro, e depois mostra os
-  resultados, a tabela e a agenda de amanhã.
+  bot narra lance a lance todos os jogos do dia e depois mostra os resultados, a tabela e
+  a agenda de amanhã.
   - **Pintos Corridos**: pontos corridos só de ida, uma rodada por dia (com 16 times, 15
     rodadas); os 2 primeiros fazem a final no dia seguinte, e o 1º tem o mando. Desempate:
     pontos, vitórias, saldo e gols marcados.
-  - **Copa IOS**: mata-mata sorteado a partir do dia 1, uma fase por dia (oitavas, quartas,
-    semi e final com 16 times; com menos, alguns passam direto). Empate vai para os pênaltis.
+  - **Copa IOS**: começa no dia seguinte à final do Pintos, uma fase por dia (oitavas,
+    quartas, semi e final com 16 times). O campeão e o vice do Pintos ficam em lados opostos
+    da chave e só podem se cruzar na final; o resto é sorteado. Com menos de 16 times, os
+    mais bem colocados no Pintos passam direto na primeira fase. Empate vai para os pênaltis.
   - Sem escalação válida no dia do jogo: derrota por W.O. (3 × 0).
   - Prêmios do Pintos: campeão 15.000 + caixa épica + pacote épico, vice 8.000 + caixa
     épica, 3º 5.000, 4º 3.000, os demais 1.000, e todos +150 por vitória. Copa: campeão
     8.000 + caixa épica, vice 4.000, semifinalistas 2.000, quartas 1.000.
-  - Depois da final do Pintos a próxima edição começa no dia seguinte, às 19:00.
+  - Cada competição paga os prêmios quando termina. Depois da final da Copa, a próxima
+    edição começa no dia seguinte, às 19:00 (com 16 times, uma edição dura 20 dias).
   - Subcomandos: `tabela` (também `mm!tabela`), `agenda [@pessoa]`, `copa`, `historico`
     (também `mm!campeoes`) e, para quem tem Gerenciar servidor, `canal`, `ativar` e `jogar`.
   - O antigo campeonato diário e a temporada mensal saíram; os jogos deles continuam

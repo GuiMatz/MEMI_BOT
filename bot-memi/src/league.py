@@ -1,19 +1,21 @@
 """Pintos Corridos e Copa IOS: os campeonatos do servidor, jogados um dia de cada vez.
 
-Cada **edição** junta as duas competições com os mesmos times:
+Cada **edição** junta as duas competições com os mesmos times, uma depois da outra:
 
 - Entram sozinhos todos do servidor com o time completo (11 titulares válidos), até 16:
   primeiro quem ficou de fora na edição anterior, depois por ordem de criação do time.
   Os demais ficam na lista de espera e têm prioridade na próxima.
 - **Pintos Corridos**: pontos corridos, só ida (todos contra todos uma vez), uma rodada por
   dia. Os dois primeiros fazem a final no dia seguinte à última rodada.
-- **Copa IOS**: mata-mata sorteado, uma fase por dia a partir do dia 1 (oitavas, quartas,
-  semi e final com 16 times). Com menos times, alguns passam direto na primeira fase.
-  Empate no mata-mata (e na final do Pintos) vai para os pênaltis.
+- **Copa IOS**: começa no dia seguinte à final do Pintos. Mata-mata, uma fase por dia
+  (oitavas, quartas, semi e final com 16 times). O campeão e o vice do Pintos ficam em
+  lados opostos da chave (só se cruzam na final); o resto é sorteado. Com menos de 16,
+  os mais bem colocados no Pintos passam direto na primeira fase. Empate no mata-mata (e
+  na final do Pintos) vai para os pênaltis.
 - Quem está sem escalação válida no dia do jogo perde por W.O. (3 × 0).
 
-Terminada a final do Pintos, os prêmios são pagos e a próxima edição já fica criada; ela
-começa no dia seguinte (`opens_on`), no horário dos jogos.
+Cada competição paga os prêmios ao terminar. Depois da final da Copa a próxima edição já
+fica criada; ela começa no dia seguinte (`opens_on`), no horário dos jogos.
 """
 
 from __future__ import annotations
@@ -158,17 +160,59 @@ def _round_robin(teams: list[str]) -> list[list[tuple[str, str]]]:
     return rounds
 
 
-def _copa_draw(teams: list[str], rng: random.Random) -> list[tuple[str, str | None]]:
-    """Primeira fase da Copa: sorteio, com quem passa direto (adversário None) se faltar time."""
-    size = 2 ** math.ceil(math.log2(len(teams)))
-    shuffled = list(teams)
-    rng.shuffle(shuffled)
-    byes = size - len(teams)
-    games: list[tuple[str, str | None]] = [(team, None) for team in shuffled[:byes]]
-    rest = shuffled[byes:]
-    games += [(rest[index], rest[index + 1]) for index in range(0, len(rest), 2)]
-    rng.shuffle(games)
-    return games
+def _copa_draw(seeded: list[str], rng: random.Random) -> list[tuple[str, str | None]]:
+    """Primeira fase da Copa, em ordem de vaga na chave (vagas 2k e 2k+1 se cruzam depois).
+
+    `seeded` vem na ordem do Pintos (campeão, vice, 3º...). O campeão fica na metade de cima
+    e o vice na de baixo: só se encontram na final. Se faltar time para a chave cheia, quem
+    passa direto (adversário None) são os mais bem colocados, alternando as metades; os
+    outros jogos são sorteados."""
+    size = 2 ** math.ceil(math.log2(len(seeded)))
+    games = size // 2
+    halves = (list(range(games // 2)), list(range(games // 2, games)))
+    for half in halves:
+        rng.shuffle(half)
+    pairs: list[list[str | None]] = [[] for _ in range(games)]
+    byes = size - len(seeded)
+    # Cabeças de chave: campeão e vice sempre; e todos os que passam direto.
+    heads = seeded[: max(2, byes)]
+    for index, team in enumerate(heads):
+        slot = halves[index % 2].pop()
+        pairs[slot] = [team, None] if index < byes else [team]
+    rest = seeded[len(heads) :]
+    rng.shuffle(rest)
+    free = [slot for slot in range(games) for _ in range(2 - len(pairs[slot]))]
+    rng.shuffle(free)
+    for team, slot in zip(rest, free):
+        pairs[slot].append(team)
+    return [(pair[0], pair[1]) for pair in pairs]
+
+
+def _insert_copa(connection, edition_id: int, seeded: list[str], day: int, rng) -> None:
+    """Grava a primeira fase da Copa; quem passa direto já sai com a vaga garantida."""
+    stage = COPA_STAGES[2 ** math.ceil(math.log2(len(seeded)))][0]
+    played_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    for slot, (home, away) in enumerate(_copa_draw(seeded, rng)):
+        bye = away is None
+        connection.execute(
+            """
+            INSERT OR IGNORE INTO league_fixtures (
+                edition_id, competition, stage, day, slot, home_user_id, away_user_id,
+                winner_user_id, walkover, played_at
+            ) VALUES (?, 'copa', ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                edition_id,
+                stage,
+                day,
+                slot,
+                home,
+                away,
+                home if bye else None,
+                "folga" if bye else None,
+                played_at if bye else None,
+            ),
+        )
 
 
 def start_edition(
@@ -177,13 +221,11 @@ def start_edition(
     database_path: str | Path = DATABASE_PATH,
     *,
     now: datetime | None = None,
-    rng: random.Random | None = None,
     force: bool = False,
 ) -> dict:
-    """Fecha as inscrições: monta os participantes, a tabela do Pintos e o sorteio da Copa.
+    """Fecha as inscrições: monta os participantes e a tabela do Pintos Corridos.
 
     `eligible` são os ids (do servidor) com time completo, na ordem de `eligible_users`."""
-    generator = rng or random.SystemRandom()
     edition = ensure_edition(guild_id, database_path, now=now)
     if edition["status"] != "registration":
         raise LeagueError("Essa edição já começou.")
@@ -214,8 +256,6 @@ def start_edition(
         )
     playing, waiting = order[:MAX_TEAMS], order[MAX_TEAMS:]
     rounds = _round_robin(playing)
-    copa = _copa_draw(playing, generator)
-    first_stage = COPA_STAGES[2 ** math.ceil(math.log2(len(playing)))][0]
     with connect(database_path) as connection:
         connection.execute("BEGIN IMMEDIATE")
         for seed, user in enumerate(order):
@@ -236,27 +276,6 @@ def start_edition(
                     """,
                     (edition["id"], f"rodada {number}", number, slot, home, away),
                 )
-        played_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
-        for slot, (home, away) in enumerate(copa):
-            bye = away is None
-            connection.execute(
-                """
-                INSERT INTO league_fixtures (
-                    edition_id, competition, stage, day, slot, home_user_id, away_user_id,
-                    winner_user_id, walkover, played_at
-                ) VALUES (?, 'copa', ?, 1, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    edition["id"],
-                    first_stage,
-                    slot,
-                    home,
-                    away,
-                    home if bye else None,
-                    "folga" if bye else None,
-                    played_at if bye else None,
-                ),
-            )
         connection.execute(
             "UPDATE league_editions SET status = 'playing', start_date = ? WHERE id = ?",
             (day_one.isoformat(), edition["id"]),
@@ -508,28 +527,65 @@ def play_fixture(
 
 
 def advance(
-    edition: dict, database_path: str | Path = DATABASE_PATH, *, now: datetime | None = None
+    edition: dict,
+    database_path: str | Path = DATABASE_PATH,
+    *,
+    now: datetime | None = None,
+    rng: random.Random | None = None,
 ) -> dict[str, Any]:
-    """Depois dos jogos: monta a próxima fase da Copa, a final do Pintos e paga os prêmios.
+    """Depois dos jogos do dia, monta o que vem a seguir e paga os prêmios.
 
-    Devolve o que aconteceu: {"copa_champion", "pintos_champion", "prizes", "next_edition"}."""
+    Ordem da edição: rodadas do Pintos, final do Pintos (os 2 primeiros), Copa IOS (uma
+    fase por dia, sorteada com o campeão e o vice do Pintos em lados opostos). Acabada a
+    final da Copa, a edição termina e a próxima começa no dia seguinte.
+
+    Devolve o que aconteceu: {"prizes", "pintos_champion", "copa_draw", "copa_champion",
+    "next_edition"}."""
+    generator = rng or random.SystemRandom()
     news: dict[str, Any] = {"prizes": {}}
     games = fixtures(edition["id"], database_path)
+    pintos = [game for game in games if game["competition"] == "pintos"]
+    regular = [game for game in pintos if game["stage"] != "final"]
+    final = next((game for game in pintos if game["stage"] == "final"), None)
     copa = [game for game in games if game["competition"] == "copa"]
+    if regular and all(game["played_at"] for game in regular) and final is None:
+        top = standings(edition["id"], database_path)[:2]
+        with connect(database_path) as connection:
+            connection.execute(
+                """
+                INSERT OR IGNORE INTO league_fixtures (
+                    edition_id, competition, stage, day, slot, home_user_id, away_user_id
+                ) VALUES (?, 'pintos', 'final', ?, 0, ?, ?)
+                """,
+                (
+                    edition["id"],
+                    max(game["day"] for game in regular) + 1,
+                    top[0]["discord_user_id"],
+                    top[1]["discord_user_id"],
+                ),
+            )
+    pintos_done = final is not None and final["played_at"]
+    if pintos_done and not _paid(edition["id"], "pintos", database_path):
+        news["prizes"]["pintos"] = _pay_pintos(edition["id"], final, database_path)
+        champion = final["winner_user_id"]
+        news["pintos_champion"] = champion
+        vice = final["away_user_id"] if champion == final["home_user_id"] else final["home_user_id"]
+        table = [team["discord_user_id"] for team in standings(edition["id"], database_path)]
+        seeded = [champion, vice] + [user for user in table if user not in (champion, vice)]
+        with connect(database_path) as connection:
+            _insert_copa(connection, edition["id"], seeded, final["day"] + 1, generator)
+        news["copa_draw"] = True
+        copa = [g for g in fixtures(edition["id"], database_path) if g["competition"] == "copa"]
     stages = [
         stage for stage in COPA_STAGES[_copa_size(copa)] if any(g["stage"] == stage for g in copa)
     ]
     last = stages[-1] if stages else None
     current = [game for game in copa if game["stage"] == last]
     if current and all(game["played_at"] for game in current):
-        if last == "final":
-            if not _paid(edition["id"], "copa", database_path):
-                news["prizes"]["copa"] = _pay_copa(edition["id"], copa, database_path)
-                news["copa_champion"] = current[0]["winner_user_id"]
-        else:
+        if last != "final":
             following = COPA_STAGES[_copa_size(copa)][len(stages)]
             winners = [game["winner_user_id"] for game in sorted(current, key=lambda g: g["slot"])]
-            day = current[0]["day"] + 1
+            day = max(game["day"] for game in current) + 1
             with connect(database_path) as connection:
                 for slot in range(len(winners) // 2):
                     connection.execute(
@@ -547,45 +603,24 @@ def advance(
                             winners[2 * slot + 1],
                         ),
                     )
-    pintos = [game for game in games if game["competition"] == "pintos"]
-    regular = [game for game in pintos if game["stage"] != "final"]
-    final = next((game for game in pintos if game["stage"] == "final"), None)
-    if regular and all(game["played_at"] for game in regular) and final is None:
-        top = standings(edition["id"], database_path)[:2]
-        with connect(database_path) as connection:
-            connection.execute(
-                """
-                INSERT OR IGNORE INTO league_fixtures (
-                    edition_id, competition, stage, day, slot, home_user_id, away_user_id
-                ) VALUES (?, 'pintos', 'final', ?, 0, ?, ?)
-                """,
-                (
-                    edition["id"],
-                    max(game["day"] for game in regular) + 1,
-                    top[0]["discord_user_id"],
-                    top[1]["discord_user_id"],
-                ),
-            )
-    if (
-        final is not None
-        and final["played_at"]
-        and not _paid(edition["id"], "pintos", database_path)
-    ):
-        news["prizes"]["pintos"] = _pay_pintos(edition["id"], final, database_path)
-        news["pintos_champion"] = final["winner_user_id"]
-        with connect(database_path) as connection:
-            connection.execute(
-                "UPDATE league_editions SET status = 'completed', completed_at = ? WHERE id = ?",
-                (datetime.now(timezone.utc).isoformat(timespec="seconds"), edition["id"]),
-            )
-        news["next_edition"] = ensure_edition(edition["guild_id"], database_path, now=now)
+        elif not _paid(edition["id"], "copa", database_path):
+            news["prizes"]["copa"] = _pay_copa(edition["id"], copa, database_path)
+            news["copa_champion"] = current[0]["winner_user_id"]
+            with connect(database_path) as connection:
+                connection.execute(
+                    "UPDATE league_editions SET status = 'completed', completed_at = ? WHERE id = ?",
+                    (datetime.now(timezone.utc).isoformat(timespec="seconds"), edition["id"]),
+                )
+            news["next_edition"] = ensure_edition(edition["guild_id"], database_path, now=now)
     return news
 
 
 def _copa_size(copa: list[dict]) -> int:
-    """Tamanho da chave: a primeira fase (dia 1) tem metade dele em jogos."""
-    first = sum(1 for game in copa if game["day"] == 1)
-    return 2 * first if first else 4
+    """Tamanho da chave: a primeira fase (o primeiro dia de Copa) tem metade dele em jogos."""
+    if not copa:
+        return 4
+    first_day = min(game["day"] for game in copa)
+    return 2 * sum(1 for game in copa if game["day"] == first_day)
 
 
 # Prêmios -----------------------------------------------------------------------------------

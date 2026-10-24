@@ -481,12 +481,11 @@ class ChampionshipRewardTests(Case):
             league.eligible_users(self.database_path),
             self.database_path,
             now=NOW,
-            rng=random.Random(3),
         )
         for fixture in league.due_fixtures(edition, NOW, self.database_path):
             league.play_fixture(fixture, random.Random(3), self.database_path)
         box = box_office_status(100, self.database_path)
-        self.assertGreaterEqual(box.reserve, 100)  # 2 jogos no dia 1 (Copa e Pintos)
+        self.assertGreaterEqual(box.reserve, 50)  # rodada 1 do Pintos
         self.assertEqual(box_office_status(200, self.database_path).reserve, 0)
         collected = collect_box_office(100, self.database_path)
         self.assertEqual(collected, box.reserve)

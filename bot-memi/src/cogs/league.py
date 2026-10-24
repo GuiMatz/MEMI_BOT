@@ -1,8 +1,9 @@
 """Comandos do Pintos Corridos e da Copa IOS (`src.league`) e os jogos diários das 19h.
 
 Todo dia às 19h (Brasília), nos servidores com o campeonato ativado, o bot começa a edição
-(se for o dia) e joga tudo o que está marcado até hoje: primeiro a Copa, depois a rodada do
-Pintos, cada jogo narrado lance a lance. No fim vêm os resultados, a tabela e a agenda.
+(se for o dia) e joga tudo o que está marcado até hoje, cada jogo narrado lance a lance:
+primeiro as rodadas e a final do Pintos, depois as fases da Copa. No fim vêm os resultados,
+a tabela e a agenda.
 """
 
 from __future__ import annotations
@@ -31,10 +32,11 @@ from src.teams import get_team
 LOGGER = logging.getLogger("memi.league")
 GAME_TIME = time(hour=19, minute=0, tzinfo=BRASILIA)
 INTRO = (
-    "Dois campeonatos rodando juntos, com os mesmos times:\n"
+    "Dois campeonatos, um depois do outro, com os mesmos times:\n"
     "🐣 **Pintos Corridos**: todos contra todos, só ida, uma rodada por dia. Os 2 primeiros "
     "fazem a final.\n"
-    "🏆 **Copa IOS**: mata-mata sorteado, uma fase por dia, empate vai para os pênaltis.\n"
+    "🏆 **Copa IOS**: logo depois, mata-mata com uma fase por dia. Campeão e vice do Pintos "
+    "em lados opostos da chave; empate vai para os pênaltis.\n"
     "Entram sozinhos todos com o time completo (11 titulares), até 16. Jogos às **19h**."
 )
 
@@ -171,7 +173,7 @@ class LeagueCog(commands.Cog):
         embed.add_field(
             name="Calendário",
             value=f"Pintos Corridos: {rounds} rodadas e a final no dia {rounds + 1} "
-            f"({_day_label(edition, rounds + 1)}).",
+            f"({_day_label(edition, rounds + 1)}). A Copa IOS começa no dia seguinte.",
             inline=False,
         )
         if waiting:
@@ -180,25 +182,38 @@ class LeagueCog(commands.Cog):
                 value=", ".join(waiting)[:1024],
                 inline=False,
             )
+        await send(embed=embed)
+
+    async def _announce_cup(self, send, edition: dict) -> None:
+        """O sorteio da Copa IOS, logo depois da final do Pintos."""
+        names = self._names()
         draw = [
             f
             for f in league.fixtures(edition["id"], self.database_path)
             if f["competition"] == "copa"
         ]
-        lines = [
-            (
-                f"{names.get(f['home_user_id'], 'Time')} passa direto"
-                if f["walkover"] == "folga"
-                else _score(f, names)
-            )
-            for f in draw
-        ]
-        if lines:
-            embed.add_field(
-                name=f"Sorteio da Copa IOS · {league.STAGE_LABELS[draw[0]['stage']]}",
-                value="\n".join(lines)[:1024],
-                inline=False,
-            )
+        if not draw:
+            return
+        half = len(draw) // 2
+        sides = []
+        for label, games in (("Lado A", draw[:half]), ("Lado B", draw[half:])):
+            lines = [
+                (
+                    f"{names.get(f['home_user_id'], 'Time')} passa direto"
+                    if f["walkover"] == "folga"
+                    else _score(f, names)
+                )
+                for f in games
+            ]
+            sides.append((label, lines))
+        embed = discord.Embed(
+            title=f"🏆 Sorteio da Copa IOS · {league.STAGE_LABELS[draw[0]['stage']]}",
+            description=f"Começa {_day_label(edition, draw[0]['day'])}, às 19h. Campeão e vice "
+            "do Pintos ficam em lados opostos: só podem se cruzar na final.",
+            color=discord.Color.gold(),
+        )
+        for label, lines in sides:
+            embed.add_field(name=label, value="\n".join(lines)[:1024] or "—", inline=True)
         await send(embed=embed)
 
     async def _play_and_narrate(self, send, fixture: dict, names: dict) -> None:
@@ -292,6 +307,8 @@ class LeagueCog(commands.Cog):
                 content=f"🎉 **{names.get(champion, 'Time')}** é o campeão da {title}!\n\n"
                 "**Prêmios**\n" + "\n".join(lines)
             )
+        if news.get("copa_draw"):
+            await self._announce_cup(send, edition)
         if news.get("next_edition"):
             nxt = news["next_edition"]
             opens = date.fromisoformat(nxt["opens_on"])
@@ -378,7 +395,9 @@ class LeagueCog(commands.Cog):
                     if last["stage"] == "final" and last["played_at"]
                     else f"Fase atual: **{league.STAGE_LABELS[last['stage']]}**"
                 )
-                embed.add_field(name="🏆 Copa IOS", value=status, inline=False)
+            else:
+                status = "Começa no dia seguinte à final do Pintos."
+            embed.add_field(name="🏆 Copa IOS", value=status, inline=False)
             mine = [
                 g
                 for g in games

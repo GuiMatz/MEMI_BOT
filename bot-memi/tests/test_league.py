@@ -77,6 +77,18 @@ class LeagueTests(unittest.TestCase):
             homes = Counter(home for games in rounds for home, _ in games)
             self.assertLessEqual(max(homes.values()) - min(homes.values()), 2)
 
+    def test_cup_draw_keeps_champion_and_vice_apart_and_byes_go_to_the_best(self):
+        for size in range(4, 17):
+            teams = [f"t{n}" for n in range(size)]  # na ordem do Pintos: t0 campeão, t1 vice
+            for seed in range(40):
+                games = league._copa_draw(teams, random.Random(seed))
+                placed = [team for game in games for team in game if team]
+                self.assertEqual(sorted(placed), sorted(teams))
+                top = {team for game in games[: len(games) // 2] for team in game if team}
+                self.assertNotEqual("t0" in top, "t1" in top)
+                byes = [home for home, away in games if away is None]
+                self.assertEqual(sorted(byes), sorted(teams[: len(byes)]))
+
     def test_needs_four_complete_teams(self):
         self.teams(3)
         with self.assertRaises(league.LeagueError):
@@ -85,7 +97,7 @@ class LeagueTests(unittest.TestCase):
 
     def test_only_16_play_and_the_rest_go_first_next_time(self):
         users = self.teams(18)
-        edition = league.start_edition(555, users, self.db, now=NOW, rng=random.Random(1))
+        edition = league.start_edition(555, users, self.db, now=NOW)
         entries = league.entries(edition["id"], self.db)
         playing = [e["discord_user_id"] for e in entries if not e["waitlisted"]]
         waiting = [e["discord_user_id"] for e in entries if e["waitlisted"]]
@@ -94,8 +106,9 @@ class LeagueTests(unittest.TestCase):
         self.play_edition()
         nxt = league.current_edition(555, self.db)
         self.assertEqual(nxt["number"], 2)
-        # A próxima não começa no dia da final, só no seguinte.
-        final_day = NOW + timedelta(days=15)
+        # 15 rodadas + a final do Pintos (dia 16) + 4 fases da Copa (dias 17 a 20). A próxima
+        # não começa no dia da final da Copa, só no seguinte.
+        final_day = NOW + timedelta(days=19)
         with self.assertRaises(league.LeagueError):
             league.start_edition(555, users, self.db, now=final_day)
         second = league.start_edition(555, users, self.db, now=final_day + timedelta(days=1))
@@ -105,26 +118,38 @@ class LeagueTests(unittest.TestCase):
     def test_full_edition_schedule_cup_final_and_prizes(self):
         users = self.teams(6)
         before = {user: get_wallet(int(user), self.db)["memilets"] for user in users}
-        league.start_edition(555, users, self.db, now=NOW, rng=random.Random(2))
+        league.start_edition(555, users, self.db, now=NOW)
         log = self.play_edition()
-        # 6 times: 5 rodadas + a final no dia 6.
-        self.assertEqual(len(log), 6)
+        # 6 times: 5 rodadas, a final do Pintos no dia 6 e a Copa (chave de 8) nos dias 7 a 9.
+        self.assertEqual(len(log), 9)
         edition = league.history(555, self.db)[0]
         games = league.fixtures(edition["id"], self.db)
         copa = [g for g in games if g["competition"] == "copa"]
-        # Chave de 8: 2 folgas nas quartas, depois semi e final.
-        self.assertEqual([g["stage"] for g in copa].count("quartas"), 4)
-        self.assertEqual(sum(g["walkover"] == "folga" for g in copa), 2)
-        self.assertEqual([g["day"] for g in copa if g["stage"] == "final"], [3])
         final = next(g for g in games if g["competition"] == "pintos" and g["stage"] == "final")
+        self.assertEqual(final["day"], 6)
+        self.assertTrue(all(g["day"] > final["day"] for g in copa))  # a Copa vem depois
+        # Chave de 8: campeão e vice do Pintos passam direto nas quartas, um em cada lado.
+        quarters = sorted((g for g in copa if g["stage"] == "quartas"), key=lambda g: g["slot"])
+        self.assertEqual(len(quarters), 4)
+        vice = (
+            final["away_user_id"]
+            if final["winner_user_id"] == final["home_user_id"]
+            else final["home_user_id"]
+        )
+        byes = [g["home_user_id"] for g in quarters if g["walkover"] == "folga"]
+        self.assertEqual(set(byes), {final["winner_user_id"], vice})
+        top_half = {u for g in quarters[:2] for u in (g["home_user_id"], g["away_user_id"])}
+        self.assertNotEqual(final["winner_user_id"] in top_half, vice in top_half)
+        self.assertEqual([g["day"] for g in copa if g["stage"] == "final"], [9])
         top = league.standings(edition["id"], self.db)[:2]
         self.assertEqual(
             {final["home_user_id"], final["away_user_id"]}, {t["discord_user_id"] for t in top}
         )
         self.assertEqual(final["home_user_id"], top[0]["discord_user_id"])  # 1º manda a final
         self.assertTrue(final["winner_user_id"])
-        self.assertEqual(log[2]["copa_champion"], copa[-1]["winner_user_id"])
-        self.assertEqual(log[-1]["pintos_champion"], final["winner_user_id"])
+        self.assertEqual(log[5]["pintos_champion"], final["winner_user_id"])
+        self.assertTrue(log[5]["copa_draw"])
+        self.assertEqual(log[-1]["copa_champion"], copa[-1]["winner_user_id"])
         with connect(self.db) as connection:
             prizes = {
                 (row["competition"], row["discord_user_id"]): row["memilets"]
@@ -154,7 +179,7 @@ class LeagueTests(unittest.TestCase):
 
     def test_stats_count_league_games_and_titles(self):
         users = self.teams(4)
-        league.start_edition(555, users, self.db, now=NOW, rng=random.Random(3))
+        league.start_edition(555, users, self.db, now=NOW)
         self.play_edition()
         edition = league.history(555, self.db)[0]
         champion = edition_champion = next(
@@ -170,7 +195,7 @@ class LeagueTests(unittest.TestCase):
 
     def test_team_without_lineup_loses_by_walkover(self):
         users = self.teams(4)
-        edition = league.start_edition(555, users, self.db, now=NOW, rng=random.Random(4))
+        edition = league.start_edition(555, users, self.db, now=NOW)
         with connect(self.db) as connection:
             connection.execute("DELETE FROM team_lineups WHERE discord_user_id = ?", (users[0],))
         for fixture in league.due_fixtures(edition, NOW, self.db):
@@ -227,11 +252,9 @@ class LeagueTests(unittest.TestCase):
         fakes = {"narrate": narrated, "score_file": AsyncMock(return_value=None)}
         with patch.dict(LeagueCog.run_day.__globals__, fakes):
             asyncio.run(cog.run_day(guild, send, manual=True))
-            # 4 times: 2 semis da Copa + 2 jogos da rodada 1, todos narrados.
-            self.assertEqual(narrated.await_count, 4)
+            # 4 times: os 2 jogos da rodada 1, narrados (a Copa só vem depois do Pintos).
             titles = [call.kwargs["title"] for call in narrated.await_args_list]
-            self.assertEqual(titles[:2], ["Copa IOS · Semifinal"] * 2)
-            self.assertEqual(titles[2:], ["Pintos Corridos · Rodada 1"] * 2)
+            self.assertEqual(titles, ["Pintos Corridos · Rodada 1"] * 2)
             asyncio.run(cog.run_day(guild, send, manual=True))  # nada mais para hoje
         embeds = [item["embed"].title for item in sent if item.get("embed")]
         self.assertIn("🏁 Começou a edição 1!", embeds)
