@@ -291,15 +291,28 @@ def day_number(edition: dict, now: datetime | None = None) -> int:
 
 
 def pull_forward(
-    edition: dict, database_path: str | Path = DATABASE_PATH, *, now: datetime | None = None
+    edition: dict,
+    database_path: str | Path = DATABASE_PATH,
+    *,
+    now: datetime | None = None,
+    competition: str | None = None,
 ) -> dict:
     """Traz o próximo dia de jogos para hoje: o calendário inteiro anda um dia para trás.
 
     Assim a rodada seguinte cai hoje e as outras continuam uma por dia, sem dia vazio. Só
-    adianta se hoje já não tiver jogo pendente."""
-    if edition["status"] != "playing" or due_fixtures(edition, now, database_path):
+    adianta se hoje já não tiver jogo pendente. Com `competition` ("pintos" ou "copa"), recusa
+    se a próxima coisa a jogar for da outra competição."""
+    if edition["status"] != "playing":
         return edition
-    pending = [g["day"] for g in fixtures(edition["id"], database_path) if g["played_at"] is None]
+    games = [g for g in fixtures(edition["id"], database_path) if g["played_at"] is None]
+    if competition:
+        # Antes de tudo: o pedido é da competição certa (a Copa só vem depois do Pintos).
+        if not any(g["competition"] == competition for g in games):
+            raise LeagueError(_no_games_message(competition, edition, database_path))
+        games = [g for g in games if g["competition"] == competition]
+    if due_fixtures(edition, now, database_path):
+        return edition
+    pending = [g["day"] for g in games]
     if not pending:
         return edition
     shift = min(pending) - day_number(edition, now)
@@ -602,9 +615,7 @@ def advance(
         news["prizes"]["pintos"] = _pay_pintos(edition["id"], final, database_path)
         champion = final["winner_user_id"]
         news["pintos_champion"] = champion
-        vice = final["away_user_id"] if champion == final["home_user_id"] else final["home_user_id"]
-        table = [team["discord_user_id"] for team in standings(edition["id"], database_path)]
-        seeded = [champion, vice] + [user for user in table if user not in (champion, vice)]
+        seeded = _copa_seeds(edition["id"], final, database_path)
         with connect(database_path) as connection:
             _insert_copa(connection, edition["id"], seeded, final["day"] + 1, generator)
         news["copa_draw"] = True
@@ -885,3 +896,238 @@ def lineup_problems(edition: dict, database_path: str | Path = DATABASE_PATH) ->
         except (TeamError, LookupError):
             problems.append(entry["discord_user_id"])
     return problems
+
+
+# Gerência por competição (`mm!pintos` e `mm!copa`) -------------------------------------------
+
+
+def _no_games_message(competition: str, edition: dict, database_path) -> str:
+    games = fixtures(edition["id"], database_path)
+    if competition == "copa":
+        if any(g["competition"] == "copa" for g in games):
+            return "A Copa IOS desta edição já terminou."
+        return "A Copa IOS só começa depois da final do Pintos Corridos."
+    return "O Pintos Corridos desta edição já terminou; agora é a vez da Copa IOS."
+
+
+def _copa_seeds(edition_id: int, final: dict, database_path) -> list[str]:
+    """Ordem do Pintos para a Copa: campeão, vice e o resto pela tabela."""
+    champion = final["winner_user_id"]
+    vice = final["away_user_id"] if champion == final["home_user_id"] else final["home_user_id"]
+    table = [team["discord_user_id"] for team in standings(edition_id, database_path)]
+    return [champion, vice] + [user for user in table if user not in (champion, vice)]
+
+
+def round_games(edition_id: int, number: int, database_path=DATABASE_PATH) -> list[dict]:
+    """Os jogos de uma rodada do Pintos (a final é a rodada `rounds_total + 1`)."""
+    stage = f"rodada {number}"
+    games = [
+        g
+        for g in fixtures(edition_id, database_path)
+        if g["competition"] == "pintos" and g["stage"] == stage
+    ]
+    if not games and number == rounds_total(edition_id, database_path) + 1:
+        games = [
+            g
+            for g in fixtures(edition_id, database_path)
+            if g["competition"] == "pintos" and g["stage"] == "final"
+        ]
+    return games
+
+
+def current_round(edition_id: int, database_path=DATABASE_PATH) -> int:
+    """A última rodada do Pintos já jogada (0 se nenhuma)."""
+    played = [
+        int(g["stage"].split()[1])
+        for g in fixtures(edition_id, database_path)
+        if g["competition"] == "pintos" and g["stage"] != "final" and g["played_at"]
+    ]
+    return max(played, default=0)
+
+
+def end_pintos(
+    edition: dict, database_path: str | Path = DATABASE_PATH, *, now: datetime | None = None
+) -> dict:
+    """Encerra a fase de pontos corridos agora: as rodadas que faltam somem (a tabela fica
+    como está) e a final entre os 2 primeiros vai para o próximo dia de jogos.
+
+    Devolve a final criada."""
+    if edition["status"] != "playing":
+        raise LeagueError("Não há edição em andamento.")
+    games = [g for g in fixtures(edition["id"], database_path) if g["competition"] == "pintos"]
+    if any(g["stage"] == "final" for g in games):
+        raise LeagueError("A fase de pontos corridos já acabou: a final já está marcada.")
+    played = [g for g in games if g["played_at"]]
+    if not played:
+        raise LeagueError("Jogue pelo menos uma rodada antes de encerrar o Pintos.")
+    unplayed = [g["id"] for g in games if g["played_at"] is None]
+    marks = ", ".join("?" * len(unplayed))
+    with connect(database_path) as connection:
+        if unplayed:
+            connection.execute(f"DELETE FROM league_fixtures WHERE id IN ({marks})", unplayed)
+    advance(edition, database_path, now=now)  # cria a final (dia seguinte à última rodada)
+    final = next(
+        g
+        for g in fixtures(edition["id"], database_path)
+        if g["competition"] == "pintos" and g["stage"] == "final"
+    )
+    # A final é no próximo dia de jogos: se o dia dela já passou, vem para hoje.
+    day = max(final["day"], day_number(edition, now))
+    if day != final["day"]:
+        with connect(database_path) as connection:
+            connection.execute(
+                "UPDATE league_fixtures SET day = ? WHERE id = ?", (day, final["id"])
+            )
+        final = {**final, "day": day}
+    return final
+
+
+def replayable(edition: dict, user_id: int | str, database_path=DATABASE_PATH, *, now=None):
+    """O jogo de hoje da pessoa que ainda dá para refazer, ou o motivo de não dar.
+
+    Só jogos do dia; não dá para refazer final (já pagou prêmio) nem jogo da Copa cuja fase
+    seguinte já começou."""
+    user, day = str(user_id), day_number(edition, now)
+    games = fixtures(edition["id"], database_path)
+    mine = [
+        g
+        for g in games
+        if g["played_at"]
+        and g["day"] == day
+        and g["walkover"] != "folga"
+        and user in (g["home_user_id"], g["away_user_id"])
+    ]
+    if not mine:
+        raise LeagueError("Essa pessoa não jogou nenhum jogo do campeonato hoje.")
+    game = mine[-1]
+    if game["stage"] == "final":
+        raise LeagueError("Final não dá para refazer: os prêmios já foram pagos.")
+    if game["competition"] == "copa":
+        nxt = _next_copa_game(game, games)
+        if nxt is not None and nxt["played_at"]:
+            raise LeagueError("A fase seguinte da Copa já foi jogada; não dá para refazer.")
+    return game
+
+
+def _next_copa_game(game: dict, games: list[dict]) -> dict | None:
+    stages = list(COPA_STAGES[_copa_size([g for g in games if g["competition"] == "copa"])])
+    index = stages.index(game["stage"])
+    if index + 1 >= len(stages):
+        return None
+    return next(
+        (
+            g
+            for g in games
+            if g["competition"] == "copa"
+            and g["stage"] == stages[index + 1]
+            and g["slot"] == game["slot"] // 2
+        ),
+        None,
+    )
+
+
+def reset_fixture(game: dict, database_path=DATABASE_PATH) -> dict:
+    """Desfaz um jogo (placar, bilheteria) para ele ser jogado de novo."""
+    events = json.loads(game["events_json"] or "{}")
+    with connect(database_path) as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        for side, amount in (events.get("box_office") or {}).items():
+            if amount:
+                connection.execute(
+                    "UPDATE game_users SET box_office = MAX(0, box_office - ?) "
+                    "WHERE discord_user_id = ?",
+                    (int(amount), game[f"{side}_user_id"]),
+                )
+        connection.execute(
+            """
+            UPDATE league_fixtures
+            SET home_goals = NULL, away_goals = NULL, home_penalties = NULL,
+                away_penalties = NULL, winner_user_id = NULL, walkover = NULL,
+                events_json = NULL, played_at = NULL
+            WHERE id = ?
+            """,
+            (game["id"],),
+        )
+        row = connection.execute("SELECT * FROM league_fixtures WHERE id = ?", (game["id"],))
+        return dict(row.fetchone())
+
+
+def sync_copa_winner(game: dict, database_path=DATABASE_PATH) -> None:
+    """Depois de refazer um jogo da Copa, põe o vencedor novo na vaga da fase seguinte."""
+    games = fixtures(game["edition_id"], database_path)
+    nxt = _next_copa_game(game, games)
+    if nxt is None or nxt["played_at"]:
+        return
+    column = "home_user_id" if game["slot"] % 2 == 0 else "away_user_id"
+    with connect(database_path) as connection:
+        connection.execute(
+            f"UPDATE league_fixtures SET {column} = ? WHERE id = ?",
+            (game["winner_user_id"], nxt["id"]),
+        )
+
+
+def redraw_copa(
+    edition: dict, database_path: str | Path = DATABASE_PATH, *, rng: random.Random | None = None
+) -> None:
+    """Sorteia a chave da Copa de novo (só antes de a primeira fase ser jogada)."""
+    games = fixtures(edition["id"], database_path)
+    copa = [g for g in games if g["competition"] == "copa"]
+    if not copa:
+        raise LeagueError("A Copa IOS só é sorteada depois da final do Pintos.")
+    if any(g["played_at"] and g["walkover"] != "folga" for g in copa):
+        raise LeagueError("A Copa já começou; não dá para sortear de novo.")
+    final = next(g for g in games if g["competition"] == "pintos" and g["stage"] == "final")
+    day = min(g["day"] for g in copa)
+    with connect(database_path) as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        connection.execute(
+            "DELETE FROM league_fixtures WHERE edition_id = ? AND competition = 'copa'",
+            (edition["id"],),
+        )
+        _insert_copa(
+            connection,
+            edition["id"],
+            _copa_seeds(edition["id"], final, database_path),
+            day,
+            rng or random.SystemRandom(),
+        )
+
+
+def copa_walkover(
+    edition: dict, user_id: int | str, database_path: str | Path = DATABASE_PATH
+) -> dict:
+    """W.O. no próximo jogo da Copa da pessoa: o adversário passa (3 × 0)."""
+    user = str(user_id)
+    games = [
+        g
+        for g in fixtures(edition["id"], database_path)
+        if g["competition"] == "copa"
+        and g["played_at"] is None
+        and user in (g["home_user_id"], g["away_user_id"])
+    ]
+    if not games:
+        raise LeagueError("Essa pessoa não tem jogo da Copa marcado.")
+    game = games[0]
+    home_out = game["home_user_id"] == user
+    winner = game["away_user_id"] if home_out else game["home_user_id"]
+    events = {"walkover": "mandante" if home_out else "visitante"}
+    with connect(database_path) as connection:
+        connection.execute(
+            """
+            UPDATE league_fixtures
+            SET home_goals = ?, away_goals = ?, winner_user_id = ?, walkover = ?,
+                events_json = ?, played_at = ?
+            WHERE id = ? AND played_at IS NULL
+            """,
+            (
+                0 if home_out else WALKOVER_GOALS,
+                WALKOVER_GOALS if home_out else 0,
+                winner,
+                events["walkover"],
+                json.dumps(events),
+                datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                game["id"],
+            ),
+        )
+        row = connection.execute("SELECT * FROM league_fixtures WHERE id = ?", (game["id"],))
+        return dict(row.fetchone())

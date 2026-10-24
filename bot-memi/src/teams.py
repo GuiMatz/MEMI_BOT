@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from collections import Counter
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 from src.db import DATABASE_PATH, connect
 from src.game import register_user
@@ -636,6 +636,52 @@ def best_assignment(scores: list[list[float | None]]) -> list[tuple[int, int]]:
     return pairs
 
 
+def best_lineup(
+    roster: Iterable[tuple[int, str | None, int]],
+    formation: str,
+    current: dict[int, int] | None = None,
+    preferred: set[int] | frozenset[int] = frozenset(),
+) -> dict[int, tuple[int, str]]:
+    """A escalação de maior soma para `formation` com o elenco `roster` (id, posição, overall).
+
+    Desempates (nunca mudam a soma): quem já está na vaga (`current`, vaga -> jogador) e quem
+    está em `preferred`. Devolve vaga -> (jogador, posição)."""
+    current = current or {}
+    slots = list(enumerate(FORMATIONS[formation], start=1))
+    # Só os 8 melhores de cada vaga entram na conta: o resultado é o mesmo e fica rápido.
+    pool: dict[int, tuple[str, int]] = {}
+    for _, position in slots:
+        ranked = sorted(
+            (
+                (slot_rating(rating, natural, position), player_id, natural, rating)
+                for player_id, natural, rating in roster
+                if fit(natural, position)
+            ),
+            reverse=True,
+        )
+        for _, player_id, natural, rating in ranked[:8]:
+            pool[player_id] = (natural, rating)
+    players = sorted(pool)
+    scores = [
+        [
+            (
+                slot_rating(pool[player_id][1], pool[player_id][0], position)
+                + (0.01 if current.get(slot) == player_id else 0.0)
+                + (0.02 if player_id in preferred else 0.0)
+                if fit(pool[player_id][0], position)
+                else None
+            )
+            for player_id in players
+        ]
+        for slot, position in slots
+    ]
+    best: dict[int, tuple[int, str]] = {}
+    for row, column in best_assignment(scores):
+        slot, position = slots[row]
+        best[slot] = (players[column], position)
+    return best
+
+
 def auto_fill_lineup(
     discord_user_id: int | str,
     database_path: str | Path = DATABASE_PATH,
@@ -677,37 +723,7 @@ def auto_fill_lineup(
                 (user_id,),
             )
         ]
-        slots = list(enumerate(FORMATIONS[team["formation"]], start=1))
-        # Só os 8 melhores de cada vaga entram na conta: o resultado é o mesmo e fica rápido.
-        pool: dict[int, tuple[str, int]] = {}
-        for _, position in slots:
-            ranked = sorted(
-                (
-                    (slot_rating(rating, natural, position), player_id, natural, rating)
-                    for player_id, natural, rating in roster
-                    if fit(natural, position)
-                ),
-                reverse=True,
-            )
-            for _, player_id, natural, rating in ranked[:8]:
-                pool[player_id] = (natural, rating)
-        players = sorted(pool)
-        scores = [
-            [
-                (
-                    slot_rating(pool[player_id][1], pool[player_id][0], position)
-                    + (0.01 if current.get(slot) == player_id else 0.0)
-                    if fit(pool[player_id][0], position)
-                    else None
-                )
-                for player_id in players
-            ]
-            for slot, position in slots
-        ]
-        best: dict[int, tuple[int, str]] = {}
-        for row, column in best_assignment(scores):
-            slot, position = slots[row]
-            best[slot] = (players[column], position)
+        best = best_lineup(roster, team["formation"], current)
         changed = len({player_id for player_id, _ in best.values()} - set(current.values()))
         connection.execute("DELETE FROM team_lineups WHERE discord_user_id = ?", (user_id,))
         connection.executemany(

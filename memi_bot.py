@@ -3871,8 +3871,10 @@ AJUDA_JOGO = [
             ("mm!campeonato", "Pintos Corridos e Copa IOS: quem tem time completo entra sozinho"),
             ("mm!tabela", "tabela do Pintos Corridos; os 2 primeiros fazem a final"),
             ("mm!campeonato agenda [@pessoa]", "próximos jogos (todo dia às 19h)"),
-            ("mm!campeonato copa", "chave da Copa IOS, uma fase por dia"),
+            ("mm!pintos rodada [N]", "os jogos de uma rodada do Pintos Corridos"),
+            ("mm!copa", "chave da Copa IOS, uma fase por dia"),
             ("mm!campeoes", "campeões de cada edição"),
+            ("mm!grupo", "suas contas num grupo: melhor XI na principal, venda em massa, mover"),
             ("mm!futae", "mostra só os comandos do FUT.AE"),
         ],
     ),
@@ -4039,6 +4041,7 @@ class MeMiBot(commands.Bot):
         from src.cogs.club import ClubCog
         from src.cogs.economy import EconomyCog
         from src.cogs.game import GameCog
+        from src.cogs.groups import GroupsCog
         from src.cogs.league import LeagueCog
         from src.cogs.matches import MatchesCog
         from src.cogs.rolls import RollsCog
@@ -4059,6 +4062,7 @@ class MeMiBot(commands.Bot):
             ClubCog,
             AdminCog,
             CasinoCog,
+            GroupsCog,
         ):
             await self.add_cog(cog(self))
         try:

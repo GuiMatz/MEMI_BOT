@@ -199,6 +199,45 @@ COMMAND_HELP: dict[str, tuple[str, str, tuple[str, ...]]] = {
         "o pote.",
         ("mm!penaltis @Ana", "mm!penaltis @Ana 2000"),
     ),
+    "campeonato": (
+        "mm!campeonato [tabela | agenda [@pessoa] | copa | historico]",
+        "Painel do Pintos Corridos e da Copa IOS com botões (Resumo, Tabela, Agenda, Copa, "
+        "Campeões). Quem tem o time completo entra sozinho; os jogos são todo dia no horário do "
+        "servidor. Admins: `status`, `jogar`, `adiantar`, `pausar`, `retomar`, `horario`, "
+        "`remover`, `cancelar`.",
+        ("mm!campeonato", "mm!campeonato agenda @Ana", "mm!campeonato status"),
+    ),
+    "pintos": (
+        "mm!pintos [rodada N]",
+        "Pintos Corridos: a tabela com o seu próximo jogo, e os jogos de qualquer rodada. Os 2 "
+        "primeiros fazem a final. Admins: `adiantar` (joga já a próxima rodada), `encerrar "
+        "confirmar` (acaba os pontos corridos e marca a final) e `refazer @pessoa` (refaz o jogo "
+        "de hoje).",
+        ("mm!pintos", "mm!pintos rodada 3", "mm!pintos adiantar"),
+    ),
+    "copa": (
+        "mm!copa",
+        "Copa IOS: a chave com o seu próximo jogo. Começa depois da final do Pintos, uma fase "
+        "por dia. Admins: `adiantar` (joga já a próxima fase), `sortear` (sorteia de novo antes "
+        "de começar), `wo @pessoa` (W.O. no próximo jogo) e `refazer @pessoa`.",
+        ("mm!copa", "mm!copa adiantar", "mm!copa wo @Ana"),
+    ),
+    "grupo": (
+        "mm!grupo [criar | convidar | aceitar | otimizar | mover | vender | escalar | elenco]",
+        "Grupo de clubes: junte as suas contas (cada uma segue com o seu clube e joga por si) e "
+        "gerencie todas pela Principal. `otimizar` põe o melhor XI possível na Principal, o que "
+        "sobra na Secundária e assim por diante, mostrando o plano antes. `mover <jogador> "
+        "<conta>`, `vender [conta] [filtro]` (venda em massa em todas as contas), `escalar` e "
+        "`elenco`. A conta convidada aceita com `mm!grupo aceitar` e pode sair quando quiser. "
+        "Transferências travam 15 min antes dos jogos do campeonato.",
+        (
+            "mm!grupo criar Grupo Lurram",
+            "mm!grupo convidar @conta2",
+            "mm!grupo otimizar",
+            "mm!grupo mover Vinícius 2",
+            "mm!grupo vender abaixo 70",
+        ),
+    ),
 }
 
 

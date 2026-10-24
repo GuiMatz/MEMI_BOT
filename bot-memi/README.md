@@ -437,8 +437,36 @@ O FUT.AE é um módulo do MeMi BOT, não um bot separado. O menu geral continua 
       perderiam por W.O.;
     - `remover @pessoa`: tira um time da edição; os jogos que faltam dele viram W.O.;
     - `cancelar confirmar`: encerra a edição sem prêmios e abre a próxima.
+  - `mm!pintos`: a tabela com o seu próximo jogo; `mm!pintos rodada N` mostra os jogos de
+    qualquer rodada (sem número, a última jogada). Admins: `adiantar` (joga já a próxima
+    rodada), `encerrar confirmar` (as rodadas que faltam somem, a tabela fica como está e a
+    final dos 2 primeiros vai para o próximo dia de jogos) e `refazer @pessoa` (refaz o jogo de
+    hoje da pessoa; final não).
+  - `mm!copa`: a chave com o seu próximo jogo. Admins: `adiantar` (joga já a próxima fase),
+    `sortear` (novo sorteio, só antes da primeira fase), `wo @pessoa` (W.O. no próximo jogo da
+    pessoa; o adversário passa) e `refazer @pessoa` (refaz o jogo de hoje, se a fase seguinte
+    ainda não foi jogada; o vencedor novo entra na vaga dela).
   - O antigo campeonato diário e a temporada mensal saíram; os jogos deles continuam
     contando no `mm!stats` e nas rivalidades.
+- `mm!grupo`: **grupo de clubes**, para quem tem várias contas. Cada conta segue com o seu
+  clube (jogam entre si e no campeonato normalmente); o dono gerencia todas pela Principal.
+  - `criar <nome>`, `convidar @conta` (a conta só entra com `mm!grupo aceitar`; `recusar`),
+    `sair`, `remover @conta`, `ordem @a @b @c`, `nome <nome>`, `desfazer confirmar`.
+  - `mm!grupo`: painel com as contas na ordem (XI, formação, elenco, Memilets), os
+    "reforços parados" (quem está numa conta e seria titular numa conta acima) e os botões
+    Otimizar, Escalar todas e Vender (escolhe a conta e abre o painel de venda dela).
+  - `otimizar`: junta os jogadores do grupo, monta o melhor XI da Principal na formação dela,
+    com o que sobra o da Secundária, e assim por diante (o mesmo cálculo do `mm!escalar`
+    automático). Mostra o plano antes; só muda de conta quem vira titular.
+  - `mover <jogador> <conta>` (a conta é `@conta`, `1`, `2`, `principal`, `secundaria`…; se
+    ele for melhor que um titular, já entra no time), `escalar` (refaz a escalação de todas) e
+    `elenco [posição]` (os melhores do grupo, com a conta de cada um).
+  - `vender <conta>` abre o painel de venda da conta; `vender [conta] abaixo 70|base|posicao
+    ZAG` é a venda em massa em todas as contas (ou na citada), sem quem seria titular em outra.
+  - Trava: mover e otimizar param 15 min antes do horário do campeonato quando alguma conta
+    do grupo joga no dia, e voltam depois dos jogos. Carta de pacote travada não sai da conta;
+    jogador 🔒 pode mudar de conta (continua protegido).
+  - Ao contratar no roll, o bot avisa se o jogador seria titular em outra conta do grupo.
 - `mm!admin` (só admins: o dono, lurram e quem estiver em `MEMI_ADMIN_IDS`, separado por
   vírgula):
   - `dar @pessoa 5000` / `tirar @pessoa 5000`: Memilets (o saldo não fica negativo);

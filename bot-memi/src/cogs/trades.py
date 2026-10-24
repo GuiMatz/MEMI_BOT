@@ -214,6 +214,21 @@ def sale_embed(quote: dict[str, Any]) -> discord.Embed:
     return embed
 
 
+def quick_filter(text: str) -> dict[str, Any] | None:
+    """`base`, `abaixo 70` ou `posicao ZAG`; None se o texto é nome de jogador."""
+    words = normalize_player_name(text).split()
+    if not words:
+        return None
+    tiers = {normalize_player_name(tier[0]): tier[0] for tier in RARITY_TIERS}
+    if len(words) == 1 and words[0] in tiers:
+        return {"rarity": tiers[words[0]]}
+    if len(words) == 2 and words[0] in {"abaixo", "menor", "menores"} and words[1].isdigit():
+        return {"below": int(words[1])}
+    if len(words) == 2 and words[0] in {"posicao", "pos"}:
+        return {"position": words[1].upper()}
+    return None
+
+
 async def _finish_sale(interaction: discord.Interaction, user_id: int, ids, database_path):
     try:
         total = sell_players(user_id, ids, database_path)
@@ -239,9 +254,21 @@ class SalePanelView(OwnerView):
     filtro, mesmo passando de 25; a cotação embaixo mostra total e saldo antes de vender.
     """
 
-    def __init__(self, owner_id: int, database_path, *, preselect: Iterable[int] = ()):
+    def __init__(
+        self,
+        owner_id: int,
+        database_path,
+        *,
+        preselect: Iterable[int] = (),
+        account_id: int | str | None = None,
+        account_label: str = "",
+    ):
         super().__init__(owner_id)
         self.database_path = database_path
+        # Conta cujo elenco o painel mostra: a de quem abriu ou, no `mm!grupo vender`, outra
+        # conta do grupo (quem usa os botões continua sendo só `owner_id`).
+        self.account_id = account_id or owner_id
+        self.account_label = account_label
         self.mode = "sell"
         self.rarity: int | None = None
         self.position: str | None = None
@@ -256,9 +283,11 @@ class SalePanelView(OwnerView):
     # Dados
 
     def _load(self) -> None:
-        owned = list_owned_players(self.owner_id, self.database_path, limit=5000, sort_by="overall")
+        owned = list_owned_players(
+            self.account_id, self.database_path, limit=5000, sort_by="overall"
+        )
         owned.reverse()  # mais fracos primeiro: é quem costuma ir embora
-        starters = {int(player["id"]) for player in get_lineup(self.owner_id, self.database_path)}
+        starters = {int(player["id"]) for player in get_lineup(self.account_id, self.database_path)}
         for player in owned:
             player["starter"] = int(player["id"]) in starters
         self.owned = owned
@@ -266,7 +295,7 @@ class SalePanelView(OwnerView):
         sellable = [p for p in owned if not p.get("locked")]
         self.values: dict[int, int] = {}
         if sellable:
-            quote = sale_quote(self.owner_id, [p["id"] for p in sellable], self.database_path)
+            quote = sale_quote(self.account_id, [p["id"] for p in sellable], self.database_path)
             self.values = {int(p["id"]): p["value"] for p in quote["players"]}
 
     def pool(self) -> list[dict[str, Any]]:
@@ -453,7 +482,7 @@ class SalePanelView(OwnerView):
                 color=discord.Color.dark_teal(),
             )
         elif self.selected:
-            embed = sale_embed(sale_quote(self.owner_id, self.selected, self.database_path))
+            embed = sale_embed(sale_quote(self.account_id, self.selected, self.database_path))
             embed.description = f"{shown}\n\n{embed.description}"
         else:
             hidden = []
@@ -471,6 +500,8 @@ class SalePanelView(OwnerView):
                 ),
                 color=discord.Color.orange(),
             )
+        if self.account_label:
+            embed.title = f"{embed.title} · {self.account_label}"[:256]
         if self.notice:
             embed.add_field(name="​", value=self.notice, inline=False)
         return embed
@@ -560,14 +591,14 @@ class SalePanelView(OwnerView):
     # Ações
 
     async def _lock(self, interaction: discord.Interaction) -> None:
-        changed = set_protection(self.owner_id, self.selected, True, self.database_path)
+        changed = set_protection(self.account_id, self.selected, True, self.database_path)
         self.selected.clear()
         self._load()
         self.notice = f"🔒 {changed} jogador(es) protegido(s): saíram da lista de venda."
         await self._refresh(interaction)
 
     async def _unlock(self, interaction: discord.Interaction) -> None:
-        changed = set_protection(self.owner_id, self.selected, False, self.database_path)
+        changed = set_protection(self.account_id, self.selected, False, self.database_path)
         self.selected.clear()
         self._load()
         self.notice = f"🔓 {changed} jogador(es) sem proteção: voltaram para a venda."
@@ -575,7 +606,7 @@ class SalePanelView(OwnerView):
 
     async def _sell(self, interaction: discord.Interaction) -> None:
         self.stop()
-        await _finish_sale(interaction, self.owner_id, list(self.selected), self.database_path)
+        await _finish_sale(interaction, self.account_id, list(self.selected), self.database_path)
 
     async def _close(self, interaction: discord.Interaction) -> None:
         self.stop()
@@ -1161,18 +1192,7 @@ class TradesCog(commands.Cog):
         await self._resolve(context, query, self._owned(context.author.id), confirm)
 
     def _quick_filter(self, text: str) -> dict[str, Any] | None:
-        """`base`, `abaixo 70` ou `posicao ZAG`; None se o texto é nome de jogador."""
-        words = normalize_player_name(text).split()
-        if not words:
-            return None
-        tiers = {normalize_player_name(tier[0]): tier[0] for tier in RARITY_TIERS}
-        if len(words) == 1 and words[0] in tiers:
-            return {"rarity": tiers[words[0]]}
-        if len(words) == 2 and words[0] in {"abaixo", "menor", "menores"} and words[1].isdigit():
-            return {"below": int(words[1])}
-        if len(words) == 2 and words[0] in {"posicao", "pos"}:
-            return {"position": words[1].upper()}
-        return None
+        return quick_filter(text)
 
     async def _quick_sale(self, context, query: str, filters: dict[str, Any]) -> None:
         ids = quick_sale_ids(context.author.id, self.database_path, **filters)
