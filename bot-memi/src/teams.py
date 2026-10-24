@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import re
 from collections import Counter
 from pathlib import Path
@@ -392,90 +391,19 @@ def get_team_statistics(
     discord_user_id: int | str,
     database_path: str | Path = DATABASE_PATH,
 ) -> dict[str, Any]:
-    user_id = str(discord_user_id)
-    with connect(database_path) as connection:
-        fixtures = [
-            dict(row)
-            for row in connection.execute(
-                """
-                SELECT f.*, c.status AS championship_status
-                FROM championship_fixtures AS f
-                JOIN championships AS c ON c.id = f.championship_id
-                WHERE c.status = 'completed'
-                  AND (f.home_user_id = ? OR f.away_user_id = ?)
-                  AND f.home_goals IS NOT NULL
-                ORDER BY f.played_at DESC
-                """,
-                (user_id, user_id),
-            )
-        ]
-        trophies = int(
-            connection.execute(
-                """
-                SELECT COUNT(*) FROM championship_fixtures AS f
-                JOIN championships AS c ON c.id = f.championship_id
-                WHERE c.status = 'completed' AND f.is_final = 1
-                  AND f.winner_user_id = ?
-                """,
-                (user_id,),
-            ).fetchone()[0]
-        )
-    player_goals: Counter[int] = Counter()
-    player_appearances: Counter[int] = Counter()
-    player_names: dict[int, str] = {}
-    form: list[str] = []
-    for fixture in fixtures:
-        is_home = fixture["home_user_id"] == user_id
-        own_goals = int(fixture["home_goals"] if is_home else fixture["away_goals"])
-        opponent_goals = int(fixture["away_goals"] if is_home else fixture["home_goals"])
-        if fixture["is_final"] and fixture["winner_user_id"]:
-            outcome = "V" if fixture["winner_user_id"] == user_id else "D"
-        else:
-            outcome = (
-                "V" if own_goals > opponent_goals else ("D" if own_goals < opponent_goals else "E")
-            )
-        form.append(outcome)
-        events = json.loads(fixture["events_json"] or "{}")
-        player_names.update(
-            {int(player_id): name for player_id, name in events.get("player_names", {}).items()}
-        )
-        lineup_key = "home_lineup" if is_home else "away_lineup"
-        player_appearances.update(int(player_id) for player_id in events.get(lineup_key, []))
-        for goal in events.get("goals", []):
-            if goal["side"] == ("home" if is_home else "away") and goal.get("play") != "contra":
-                player_id = int(goal["scorer_id"])
-                player_goals[player_id] += 1
-                player_names[player_id] = goal["scorer_name"]
-    top_scorer_id = min(
-        player_goals,
-        key=lambda player_id: (-player_goals[player_id], player_names[player_id].casefold()),
-        default=None,
-    )
-    most_used_id = min(
-        player_appearances,
-        key=lambda player_id: (
-            -player_appearances[player_id],
-            player_names.get(player_id, "").casefold(),
-        ),
-        default=None,
-    )
+    """Forma (últimos 5), títulos, jogos e artilheiro para o cartão do clube.
+
+    Usa a mesma conta do `mm!stats` (`src.team_stats`): amistosos, o antigo campeonato
+    diário, Pintos Corridos e Copa IOS. Antes só o campeonato diário contava, e a forma
+    ignorava os jogos novos."""
+    from src.team_stats import compute_stats, match_records
+
+    stats = compute_stats(match_records(discord_user_id, database_path))
     return {
-        "matches": len(fixtures),
-        "form": form[:5],
-        "trophies": trophies,
-        "top_scorer": (
-            (player_names[top_scorer_id], player_goals[top_scorer_id])
-            if top_scorer_id is not None
-            else None
-        ),
-        "most_appearances": (
-            (
-                player_names.get(most_used_id, f"Jogador {most_used_id}"),
-                player_appearances[most_used_id],
-            )
-            if most_used_id is not None
-            else None
-        ),
+        "matches": stats.matches,
+        "form": stats.form,
+        "trophies": stats.titles,
+        "top_scorer": stats.top_scorers[0] if stats.top_scorers else None,
     }
 
 

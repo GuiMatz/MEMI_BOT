@@ -245,6 +245,17 @@ class LeagueTests(unittest.TestCase):
         stages = {g["stage"] for g in league.due_fixtures(moved, tomorrow, self.db)}
         self.assertEqual(stages, {"rodada 3"})
 
+    def test_club_card_form_counts_league_games_including_draws(self):
+        from src.teams import get_team_statistics
+
+        users = self.teams(4)
+        edition = league.start_edition(555, users, self.db, now=NOW)
+        for fixture in league.due_fixtures(edition, NOW, self.db):
+            league.play_fixture(fixture, random.Random(2), self.db)
+        table = {t["discord_user_id"]: t["form"] for t in league.standings(edition["id"], self.db)}
+        for user in users:
+            self.assertEqual(get_team_statistics(user, self.db)["form"], table[user])
+
     def test_titles_and_scores_for_the_channel(self):
         game = {
             "competition": "copa",
