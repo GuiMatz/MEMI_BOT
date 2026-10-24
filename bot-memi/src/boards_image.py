@@ -128,11 +128,12 @@ def render_missions(rows: list[dict[str, Any]], owner: str) -> BytesIO:
 
 
 FINALIST = (88, 196, 132)
+FORM_GAMES = 4  # bolinhas da coluna ÚLT. da tabela
 
 
 def render_league_table(table: list[dict[str, Any]], title: str, subtitle: str) -> BytesIO:
     """Tabela do Pintos Corridos: todos os times (até 16), os dois primeiros em verde
-    (vão para a final), com jogos, V-E-D, saldo, pontos e os últimos resultados."""
+    (vão para a final), com jogos, V-E-D, saldo, pontos e os últimos 4 resultados."""
     width = 1000
     row_height = 60
     height = 160 + 40 + row_height * max(1, len(table)) + 30
@@ -172,8 +173,9 @@ def render_league_table(table: list[dict[str, Any]], title: str, subtitle: str) 
         )
         for (x, _), value in zip(columns, values):
             text_center(draw, (x, middle), value, 24, True, (205, 212, 222))
-        for index, outcome in enumerate(team.get("form", [])[-3:]):
-            x = 826 + index * 24
+        # Os últimos 4 jogos, do mais antigo (esquerda) ao mais recente (direita).
+        for index, outcome in enumerate(team.get("form", [])[-FORM_GAMES:]):
+            x = 814 + index * 24
             draw.ellipse((x - 8, middle - 8, x + 8, middle + 8), fill=form_colors[outcome])
         text_center(draw, (940, middle), str(team["points"]), 30, True, "white")
         y += row_height
