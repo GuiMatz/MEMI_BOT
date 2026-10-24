@@ -454,10 +454,12 @@ SECOND_YELLOW_CHANCE = 0.15  # quem já tem amarelo se cuida; nem toda falta vir
 
 # Dinâmica do jogo.
 HOME_ADVANTAGE = (1.07, 0.95)  # chances do mandante e do visitante
-# Aos 70' o técnico de quem perde se lança: ataque total até o fim. Quem ganha não troca
-# (já administra, `LEADING_DAMPING`): com retranca automática o fim do jogo esfriava e as
-# reações caíam. Assim saem mais gols depois dos 70' e um pouco mais de viradas e empates.
+# Aos 70' o técnico de quem perde por 2 gols ou mais se lança: ataque total até o fim.
+# Perdendo por 1, o time segue no seu estilo (ainda dá para empatar sem se expor). Quem ganha
+# não troca (já administra, `LEADING_DAMPING`): com retranca automática o fim do jogo
+# esfriava e as reações caíam.
 TACTICAL_SWITCH_MINUTE = 70
+TACTICAL_SWITCH_DEFICIT = 2  # só quem perde por 2 gols ou mais se lança
 TACTIC_LINES = {
     "attack": "🔄 **Mudança tática!** O {team} vai para o tudo ou nada: ataque total.",
 }
@@ -728,9 +730,11 @@ def simulate_match(
         add(minute, stoppage, "red", text, side, _name(player))
 
     def switch_tactics(minute: int) -> None:
-        """Aos 70', quem está perdendo vai para o ataque total."""
+        """Aos 70', quem perde por 2 gols ou mais vai para o ataque total (perdendo por 1, o
+        time ainda acredita no próprio jeito de jogar)."""
         for side, other in (("home", "away"), ("away", "home")):
-            if score[side] >= score[other] or style_names[side] == "attack":
+            behind = score[other] - score[side]
+            if behind < TACTICAL_SWITCH_DEFICIT or style_names[side] == "attack":
                 continue
             style_names[side], styles[side] = "attack", STYLES["attack"]
             text = TACTIC_LINES["attack"].format(team=names[side])

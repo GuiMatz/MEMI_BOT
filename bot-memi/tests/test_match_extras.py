@@ -49,7 +49,7 @@ class LegendStyleTests(unittest.TestCase):
 
 
 class LateTacticTests(unittest.TestCase):
-    def test_team_losing_at_70_goes_all_out_and_says_so(self):
+    def test_team_losing_by_two_at_70_goes_all_out_and_says_so(self):
         rng = random.Random(1)
         switched = 0
         for _ in range(300):
@@ -61,8 +61,9 @@ class LateTacticTests(unittest.TestCase):
                 self.assertEqual(item.minute, 70)
                 losing = item.home_goals < item.away_goals
                 self.assertEqual(item.side, "home" if losing else "away")
+                self.assertGreaterEqual(abs(item.home_goals - item.away_goals), 2)
                 self.assertIn("ataque total", _line(asdict(item), DOTS))
-        self.assertGreater(switched, 50)
+        self.assertGreater(switched, 10)
 
 
 class MatchPenaltyTests(unittest.TestCase):
