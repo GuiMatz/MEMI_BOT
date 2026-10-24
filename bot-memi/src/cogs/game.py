@@ -290,7 +290,8 @@ FUTAE_SECTIONS = (
         "`mm!comparar @pessoa` — seu time e o da pessoa lado a lado, com prognóstico\n"
         "`mm!desafio` — partidas contra times lendários: escada, chefões e desafio livre\n"
         "`mm!campeonato` — Pintos Corridos e Copa IOS, jogos todo dia às 19h\n"
-        "`mm!pintos` · `mm!pintos rodada N` · `mm!copa` · `mm!campeonato agenda` · `mm!campeoes`",
+        "`mm!pintos` · `mm!pintos rodada N` · `mm!copa` · `mm!campeonato agenda` · `mm!campeoes`\n"
+        "`mm!grupo` — várias contas suas: melhor XI na principal, mover e vender em massa",
     ),
 )
 

@@ -77,6 +77,7 @@ class DiscordBotSetupTests(unittest.IsolatedAsyncioTestCase):
                         "temporadas",
                         "pintos",
                         "copa",
+                        "grupo",
                         "rt",
                         "testeimagem",
                     },

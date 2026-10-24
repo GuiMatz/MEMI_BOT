@@ -601,6 +601,24 @@ CREATE TABLE IF NOT EXISTS league_prizes (
     items TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (edition_id, competition, discord_user_id)
 );
+
+-- Grupo de clubes (`src.club_groups`): contas do mesmo dono, cada uma com o seu clube. O
+-- dono gerencia o elenco de todas; cada conta só entra aceitando o convite.
+CREATE TABLE IF NOT EXISTS club_groups (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    owner_user_id TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS club_group_members (
+    group_id INTEGER NOT NULL REFERENCES club_groups(id) ON DELETE CASCADE,
+    discord_user_id TEXT NOT NULL UNIQUE,
+    rank INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'member' CHECK (status IN ('invited', 'member')),
+    joined_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (group_id, discord_user_id)
+);
 """
 
 

@@ -222,6 +222,22 @@ COMMAND_HELP: dict[str, tuple[str, str, tuple[str, ...]]] = {
         "de começar), `wo @pessoa` (W.O. no próximo jogo) e `refazer @pessoa`.",
         ("mm!copa", "mm!copa adiantar", "mm!copa wo @Ana"),
     ),
+    "grupo": (
+        "mm!grupo [criar | convidar | aceitar | otimizar | mover | vender | escalar | elenco]",
+        "Grupo de clubes: junte as suas contas (cada uma segue com o seu clube e joga por si) e "
+        "gerencie todas pela Principal. `otimizar` põe o melhor XI possível na Principal, o que "
+        "sobra na Secundária e assim por diante, mostrando o plano antes. `mover <jogador> "
+        "<conta>`, `vender [conta] [filtro]` (venda em massa em todas as contas), `escalar` e "
+        "`elenco`. A conta convidada aceita com `mm!grupo aceitar` e pode sair quando quiser. "
+        "Transferências travam 15 min antes dos jogos do campeonato.",
+        (
+            "mm!grupo criar Grupo Lurram",
+            "mm!grupo convidar @conta2",
+            "mm!grupo otimizar",
+            "mm!grupo mover Vinícius 2",
+            "mm!grupo vender abaixo 70",
+        ),
+    ),
 }
 
 

@@ -3874,6 +3874,7 @@ AJUDA_JOGO = [
             ("mm!pintos rodada [N]", "os jogos de uma rodada do Pintos Corridos"),
             ("mm!copa", "chave da Copa IOS, uma fase por dia"),
             ("mm!campeoes", "campeões de cada edição"),
+            ("mm!grupo", "suas contas num grupo: melhor XI na principal, venda em massa, mover"),
             ("mm!futae", "mostra só os comandos do FUT.AE"),
         ],
     ),
@@ -4040,6 +4041,7 @@ class MeMiBot(commands.Bot):
         from src.cogs.club import ClubCog
         from src.cogs.economy import EconomyCog
         from src.cogs.game import GameCog
+        from src.cogs.groups import GroupsCog
         from src.cogs.league import LeagueCog
         from src.cogs.matches import MatchesCog
         from src.cogs.rolls import RollsCog
@@ -4060,6 +4062,7 @@ class MeMiBot(commands.Bot):
             ClubCog,
             AdminCog,
             CasinoCog,
+            GroupsCog,
         ):
             await self.add_cog(cog(self))
         try:

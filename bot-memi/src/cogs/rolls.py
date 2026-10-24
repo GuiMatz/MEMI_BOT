@@ -18,6 +18,7 @@ from discord.ext import commands
 from src import icons
 from src.accents import rarity_color
 from src.clock import brasilia_time
+from src.club_groups import promotion_hint, rank_label
 from src.cogs.common import card_file, followup_sender
 from src.db import DATABASE_PATH
 from src.economy import EconomyError, ROLLS_PER_BONUS_CLAIM, activate_rolls, get_account_status
@@ -198,6 +199,22 @@ class RollLayout(discord.ui.LayoutView):
                 out = equipped["replaces"]
                 equipped_text = f"\n⬆️ Entrou no time como **{equipped['position']}**" + (
                     f" no lugar de {out.get('display_name') or out['name']}." if out else "."
+                )
+            # Grupo de clubes: avisa se ele seria titular numa conta acima (ou em outra,
+            # quando não entrou no time de quem contratou).
+            hint = await asyncio.to_thread(
+                promotion_hint,
+                interaction.user.id,
+                int(self.result.player["id"]),
+                bool(equipped),
+                self.database_path,
+            )
+            if hint:
+                member = hint["member"]
+                equipped_text += (
+                    f"\n🤝 Seria titular na **{rank_label(member['rank'])}** "
+                    f"({member.get('team_name') or 'outra conta'}) como **{hint['position']}**: "
+                    f"{hint['old']} → {hint['new']}. `mm!grupo otimizar` leva ele."
                 )
             bonus = (
                 f" Centro de Treinamento: +{icons.memilets(outcome.reward_amount)} Memilets."
