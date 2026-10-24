@@ -9,10 +9,9 @@ import discord
 from discord.ext import commands
 
 from src import icons
-from src.boards_image import render_missions, render_season
+from src.boards_image import render_missions
 from src.cosmetic_card import render_cosmetic_card
 from src.missions import board, claim_rewards
-from src.season import current_month, month_label, parse_month, season_history, season_table
 from src.tower_image import render_tower
 from src.cogs.common import ConfirmView, intro_embed
 from src.cosmetics import (
@@ -55,8 +54,8 @@ INCOME_INTRO = (
     "vê quanto seu time já arrecadou."
 )
 BOX_OFFICE_INTRO = (
-    "A bilheteria é o caixa do andar 5 do Centro de Treinamento: cada jogo do campeonato "
-    "diário guarda Memilets numa reserva, e a vitória guarda o dobro. O dinheiro fica "
+    "A bilheteria é o caixa do andar 5 do Centro de Treinamento: cada jogo do Pintos "
+    "Corridos e da Copa IOS guarda Memilets numa reserva, e a vitória guarda o dobro. O dinheiro fica "
     "guardado até o limite e você coleta quando quiser."
 )
 COSMETICS_INTRO = (
@@ -68,11 +67,6 @@ MISSIONS_INTRO = (
     "Missões dão Memilets por coisas que você já faz no jogo: rolar, contratar, jogar e abrir "
     "crates. São 3 diárias, que viram à meia-noite, e 2 semanais, que viram na segunda. O "
     "progresso conta sozinho; quando a barra encher, resgate no botão."
-)
-SEASON_INTRO = (
-    "A temporada soma todos os campeonatos diários do mês: 3 pontos por vitória e 1 por "
-    "empate, com os títulos como primeiro desempate. Use `mm!temporada 9/2026` para ver um "
-    "mês anterior."
 )
 REMOVE_WORDS = {"remover", "tirar", "nenhum", "nenhuma", "limpar"}
 
@@ -450,7 +444,7 @@ class ClubCog(commands.Cog):
         embed = intro_embed("🎟️ Bilheteria", BOX_OFFICE_INTRO, color=discord.Color.dark_gold())
         embed.description += (
             f"\n\n• {BOX_OFFICE_PER_GAME} por jogo e {BOX_OFFICE_PER_WIN} por vitória "
-            "no campeonato diário\n"
+            "no Pintos Corridos e na Copa IOS\n"
             f"• Limite da reserva: **{_thousands(status.cap)}** (sobe com `mm!upgrade bilheteria`)"
         )
         if not status.active:
@@ -473,7 +467,7 @@ class ClubCog(commands.Cog):
         )
         await context.reply(embed=embed, mention_author=False)
 
-    # Missões e temporada ------------------------------------------------------------------
+    # Missões ------------------------------------------------------------------
 
     async def missions_message(self, user) -> tuple[discord.Embed, discord.File]:
         rows = board(user.id, self.database_path)
@@ -502,56 +496,6 @@ class ClubCog(commands.Cog):
         embed.description = notice + embed.description
         await context.reply(
             embed=embed, file=file, view=MissionsView(self, context.author), mention_author=False
-        )
-
-    @commands.command(name="temporadas", aliases=["seasons", "historico"])
-    async def seasons(self, context: commands.Context) -> None:
-        if context.guild is None:
-            await context.reply("A temporada é de cada servidor.", mention_author=False)
-            return
-        history = season_history(context.guild.id, self.database_path)
-        embed = intro_embed("🗓️ Temporadas", SEASON_INTRO, color=discord.Color.gold())
-        if not history:
-            embed.description += "\n\nNenhuma temporada com campeonato terminado ainda."
-        current = current_month()
-        lines = []
-        for entry in history[:24]:
-            leader = entry["leader"]
-            status = "em andamento" if entry["month"] == current else "campeão"
-            lines.append(
-                f"**{month_label(entry['month'])}** · {status}: **{leader['team_name']}** "
-                f"({leader['points']} pts, {leader['titles']} título(s)) · {entry['teams']} times"
-            )
-        if lines:
-            embed.description += "\n\n" + "\n".join(lines)
-        embed.set_footer(
-            text="mm!temporada <mês> mostra a tabela completa, ex.: mm!temporada 9/2026"
-        )
-        await context.reply(embed=embed, mention_author=False)
-
-    @commands.command(name="temporada", aliases=["season"])
-    async def season(self, context: commands.Context, *, month: str | None = None) -> None:
-        if context.guild is None:
-            await context.reply("A temporada é de cada servidor.", mention_author=False)
-            return
-        try:
-            chosen = parse_month(month)
-        except ValueError as error:
-            await context.reply(str(error), mention_author=False)
-            return
-        table = season_table(context.guild.id, chosen, self.database_path)
-        title = month_label(chosen)
-        image = await asyncio.to_thread(render_season, table, title)
-        embed = intro_embed(f"🗓️ Temporada · {title}", SEASON_INTRO, color=discord.Color.gold())
-        if table:
-            leader = table[0]
-            embed.description += (
-                f"\n\nLíder: **{leader['team_name']}** com {leader['points']} pontos "
-                f"e {leader['titles']} título(s)."
-            )
-        embed.set_image(url="attachment://temporada.png")
-        await context.reply(
-            embed=embed, file=discord.File(image, filename="temporada.png"), mention_author=False
         )
 
     # Cosméticos ---------------------------------------------------------------------------

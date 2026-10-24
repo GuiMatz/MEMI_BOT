@@ -1,6 +1,7 @@
 """Estatísticas dos times (`mm!stats`), juntando campeonato e amistosos.
 
-O campeonato já guarda cada jogo em `championship_fixtures`. Os amistosos passam a ser
+O campeonato guarda cada jogo em `league_fixtures` (Pintos Corridos e Copa IOS; o antigo
+campeonato diário, em `championship_fixtures`). Os amistosos passam a ser
 guardados em `friendly_matches` (`record_friendly`) a partir desta versão; os jogados
 antes não têm registro. Os filtros são por tipo (campeonato/amistoso), período e
 adversário (confronto direto).
@@ -135,6 +136,15 @@ def match_records(
             "SELECT * FROM friendly_matches WHERE home_user_id = ? OR away_user_id = ?",
             (user_id, user_id),
         ).fetchall()
+        # Pintos Corridos e Copa IOS (sem as folgas da Copa, que não têm adversário).
+        league_games = connection.execute(
+            """
+            SELECT * FROM league_fixtures
+            WHERE (home_user_id = ? OR away_user_id = ?) AND played_at IS NOT NULL
+              AND home_user_id IS NOT NULL AND away_user_id IS NOT NULL
+            """,
+            (user_id, user_id),
+        ).fetchall()
     for row in fixtures:
         home = row["home_user_id"] == user_id
         own, other = (row["home_goals"], row["away_goals"])[:: 1 if home else -1]
@@ -193,6 +203,39 @@ def match_records(
                 outcome,
                 tuple(penalties) if penalties else None,
                 False,
+                scorers,
+                highlights,
+            )
+        )
+    for row in league_games:
+        home = row["home_user_id"] == user_id
+        own, other = (row["home_goals"], row["away_goals"])[:: 1 if home else -1]
+        penalties = None
+        if row["home_penalties"] is not None:
+            penalties = (row["home_penalties"], row["away_penalties"])[:: 1 if home else -1]
+        if row["walkover"] == "ambos":
+            outcome = "D"
+        elif row["winner_user_id"]:  # mata-mata e W.O.
+            outcome = "V" if row["winner_user_id"] == user_id else "D"
+        else:
+            outcome = "V" if own > other else "D" if own < other else "E"
+        events = json.loads(row["events_json"] or "{}")
+        scorers, highlights = _side_details(
+            events.get("goals", []),
+            (events.get("stats") or {}).get("highlights", []),
+            "home" if home else "away",
+            team_name,
+        )
+        records.append(
+            MatchRecord(
+                "championship",
+                _moment(row["played_at"]),
+                row["away_user_id"] if home else row["home_user_id"],
+                int(own),
+                int(other),
+                outcome,
+                tuple(penalties) if penalties else None,
+                row["stage"] == "final",
                 scorers,
                 highlights,
             )

@@ -289,8 +289,8 @@ FUTAE_SECTIONS = (
         "`mm!penaltis @pessoa [aposta]` — disputa de pênaltis escolhendo o canto\n"
         "`mm!comparar @pessoa` — seu time e o da pessoa lado a lado, com prognóstico\n"
         "`mm!desafio` — partidas contra times lendários: escada, chefões e desafio livre\n"
-        "`mm!campeonato` — campeonato diário; o campeão leva 500 Memilets\n"
-        "`mm!temporada [mês]` — tabela do mês · `mm!temporadas` — campeão de cada mês",
+        "`mm!campeonato` — Pintos Corridos e Copa IOS, jogos todo dia às 19h\n"
+        "`mm!tabela` · `mm!campeonato agenda` · `mm!campeonato copa` · `mm!campeoes`",
     ),
 )
 

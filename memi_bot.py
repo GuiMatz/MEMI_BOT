@@ -3773,10 +3773,11 @@ AJUDA_JOGO = [
             ("mm!penaltis @pessoa [aposta]", "disputa de pênaltis: escolha o canto e o pulo"),
             ("mm!comparar @pessoa", "seu time e o da pessoa lado a lado, com prognóstico"),
             ("mm!desafio", "partidas contra times lendários: escada, chefões e desafio livre"),
-            ("mm!campeonato inscrever", "inscreve seu time no campeonato diário"),
-            ("mm!campeonato iniciar", "joga o campeonato; o campeão ganha 500 Memilets"),
-            ("mm!temporada [mês]", "tabela do mês somando todos os campeonatos diários"),
-            ("mm!temporadas", "histórico: o campeão de cada mês"),
+            ("mm!campeonato", "Pintos Corridos e Copa IOS: quem tem time completo entra sozinho"),
+            ("mm!tabela", "tabela do Pintos Corridos; os 2 primeiros fazem a final"),
+            ("mm!campeonato agenda [@pessoa]", "próximos jogos (todo dia às 19h)"),
+            ("mm!campeonato copa", "chave da Copa IOS, uma fase por dia"),
+            ("mm!campeoes", "campeões de cada edição"),
             ("mm!futae", "mostra só os comandos do FUT.AE"),
         ],
     ),
@@ -3936,6 +3937,7 @@ class MeMiBot(commands.Bot):
         from src.cogs.club import ClubCog
         from src.cogs.economy import EconomyCog
         from src.cogs.game import GameCog
+        from src.cogs.league import LeagueCog
         from src.cogs.matches import MatchesCog
         from src.cogs.rolls import RollsCog
         from src.cogs.team import TeamCog
@@ -3951,6 +3953,7 @@ class MeMiBot(commands.Bot):
             TradesCog,
             TeamCog,
             MatchesCog,
+            LeagueCog,
             ClubCog,
             AdminCog,
             CasinoCog,

@@ -74,6 +74,7 @@ class MemiBot(commands.Bot):
         await self.load_extension("src.cogs.trades")
         await self.load_extension("src.cogs.team")
         await self.load_extension("src.cogs.matches")
+        await self.load_extension("src.cogs.league")
         await self.load_extension("src.cogs.club")
         await self.load_extension("src.cogs.admin")
         await self.load_extension("src.cogs.casino")
