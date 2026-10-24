@@ -40,9 +40,9 @@ transferências protegidos por transações SQLite.
 O schema v9 adiciona as tabelas de economia, upgrades, wishes, equipes,
 escalações, táticas, trocas e campeonatos. As migrações v7–v9 preservam as
 contas/posses anteriores e expandem o limite de ciclos sem apagar dados. O
-campeonato automático das 19h de Brasília é opt-in: requer
-`MEMI_CHAMPIONSHIP_SCHEDULER=1`, canal configurado e ativação administrativa
-por servidor. O padrão é desligado.
+campeonato automático das 19h de Brasília é opt-in por servidor: requer canal
+configurado e ativação administrativa (`mm!campeonato ativar`).
+`MEMI_CHAMPIONSHIP_SCHEDULER=0` desliga o agendador em todos.
 
 As imagens locais opcionais são lidas de `data/assets/brasfoot/`; `data/` é
 ignorada pelo Git. Não publique uniformes, escudos, bancos locais ou segredos.

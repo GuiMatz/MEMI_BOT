@@ -182,7 +182,11 @@ class LeagueCog(commands.Cog):
         self.bot = bot
         self.database_path = getattr(bot, "database_path", DATABASE_PATH)
         self.locks: dict[str, asyncio.Lock] = {}
-        self.scheduler_enabled = os.getenv("MEMI_CHAMPIONSHIP_SCHEDULER") == "1"
+        # Ligado por padrão: o bot principal (`memi_bot.py`) não lê `.env`, e cada servidor já
+        # precisa de `mm!campeonato ativar`. `MEMI_CHAMPIONSHIP_SCHEDULER=0` desliga tudo.
+        self.scheduler_enabled = os.getenv("MEMI_CHAMPIONSHIP_SCHEDULER", "1").strip() != "0"
+
+    async def cog_load(self) -> None:
         if self.scheduler_enabled:
             self.daily_games.start()
 
@@ -741,7 +745,8 @@ class LeagueCog(commands.Cog):
             return
         if not self.scheduler_enabled:
             await context.reply(
-                "O agendador está desligado. Defina `MEMI_CHAMPIONSHIP_SCHEDULER=1` e reinicie o bot.",
+                "O agendador foi desligado com `MEMI_CHAMPIONSHIP_SCHEDULER=0`. Tire essa "
+                "variável (ou troque para 1) e reinicie o bot.",
                 mention_author=False,
             )
             return

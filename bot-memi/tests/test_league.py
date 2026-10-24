@@ -215,6 +215,16 @@ class LeagueTests(unittest.TestCase):
         table = {t["discord_user_id"]: t for t in league.standings(edition["id"], self.db)}
         self.assertEqual(table[users[0]]["points"], 0)
 
+    def test_scheduler_is_on_unless_explicitly_turned_off(self):
+        bot = SimpleNamespace(database_path=self.db)
+        with patch.dict("os.environ", {}, clear=False) as env:
+            env.pop("MEMI_CHAMPIONSHIP_SCHEDULER", None)
+            self.assertTrue(LeagueCog(bot).scheduler_enabled)  # o bot principal não lê .env
+            env["MEMI_CHAMPIONSHIP_SCHEDULER"] = "0"
+            self.assertFalse(LeagueCog(bot).scheduler_enabled)
+            env["MEMI_CHAMPIONSHIP_SCHEDULER"] = "1"
+            self.assertTrue(LeagueCog(bot).scheduler_enabled)
+
     def test_titles_and_scores_for_the_channel(self):
         game = {
             "competition": "copa",
