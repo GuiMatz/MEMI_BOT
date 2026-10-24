@@ -30,7 +30,7 @@ from src.game import register_user
 from src.inventory import give
 from src.positions import fit, slot_rating
 from src.ratings import GAME_OVERALL_SQL, POOL_SQL, game_overall
-from src.teams import FORMATIONS, best_assignment
+from src.teams import FORMATIONS, STYLE_LABELS, best_assignment
 
 # Degraus fáceis do começo da escada: (nome, overall alvo).
 WARMUP_TEAMS = (
@@ -62,6 +62,34 @@ NATION_BONUS = 0.0
 WORLD_BONUS = 0.0
 DAILY_BOSS_BONUS = 0.01
 WEEKLY_BOSS_BONUS = 0.01
+# O jeito de jogar de cada lenda (o que ficou na memória de cada time). Com o ciclo das
+# táticas, vale olhar o estilo do adversário e escolher o que vence ele. Os degraus de
+# treino jogam no equilibrado.
+LEGEND_STYLES = {
+    "clube:flamengo": "attack",
+    "clube:santos": "attack",
+    "clube:palmeiras": "press",
+    "clube:atlético-mg": "press",
+    "clube:cruzeiro": "balanced",
+    "clube:são paulo": "balanced",
+    "clube:fluminense": "balanced",
+    "clube:vasco da gama": "balanced",
+    "clube:grêmio": "counter",
+    "clube:internacional": "counter",
+    "clube:botafogo": "counter",
+    "clube:corinthians": "park",
+    "selecao:brasil": "attack",
+    "selecao:inglaterra": "attack",
+    "selecao:holanda": "press",
+    "selecao:alemanha": "press",
+    "selecao:argentina": "balanced",
+    "selecao:espanha": "balanced",
+    "selecao:frança": "counter",
+    "selecao:portugal": "counter",
+    "selecao:itália": "park",
+    "selecao:uruguai": "park",
+    "mundial": "attack",
+}
 IMPROVISED = 0.6  # peso, na escolha, de quem jogaria fora de posição (só se não houver outro)
 DAILY_BOSS_TRIES = 1
 WEEKLY_BOSS_TRIES = 3
@@ -98,16 +126,24 @@ class PveTeam:
         return f"{self.emoji} {self.name}"
 
     @property
+    def style(self) -> str:
+        """Estilo de jogo (chefões jogam como o time original: a chave tem um sufixo)."""
+        kind, _, rest = self.key.partition(":")
+        base = f"{kind}:{rest.split(':', 1)[0]}" if rest else kind
+        return LEGEND_STYLES.get(base, "balanced")
+
+    @property
     def power(self) -> str:
-        """Força para mostrar: o overall do time e o bônus de lenda ("94 +10%")."""
-        return f"{self.strength}" + (f" +{round(self.bonus * 100)}%" if self.bonus else "")
+        """Força e estilo para mostrar: overall, bônus de lenda e tática ("94 +1% · retranca")."""
+        bonus = f" +{round(self.bonus * 100)}%" if self.bonus else ""
+        return f"{self.strength}{bonus} · {STYLE_LABELS[self.style]}"
 
     def as_team(self) -> dict[str, Any]:
         """O dicionário de time que a simulação e o placar esperam (com capitão e bônus)."""
         captain = max(self.players, key=lambda player: player["overall"])
         return {
             "team_name": self.name,
-            "style": "balanced",
+            "style": self.style,
             "formation": self.formation,
             "captain_player_id": captain["id"],
             "strength_bonus": self.bonus,

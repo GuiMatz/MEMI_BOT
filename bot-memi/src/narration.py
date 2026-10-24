@@ -20,6 +20,7 @@ from typing import Any
 import discord
 
 from src.accents import LIVE, NEUTRAL, team_color
+from src.commentary import match_commentary, star_lines
 from src.simulation import penalty_phrase
 
 # Segundos entre lances; gols e intervalo esperam o dobro. O Discord aceita
@@ -98,6 +99,13 @@ def _line(event: dict[str, Any], dots: dict[str, str]) -> str | None:
         text = f"🏁 **Fim de jogo** · {score}"
     elif kind == "penalties":
         text = "🎯 **Disputa de pênaltis!**"
+    elif event.get("shot") and player and kind in {"goal", "save", "miracle", "post", "miss"}:
+        # Pênalti no jogo, com o que aconteceu na cobrança.
+        scored = kind == "goal"
+        phrase = penalty_phrase(scored, event["shot"], event.get("detail"))
+        late = " ⏱️" if scored and event["minute"] >= 88 else ""
+        head = "⚽ **GOL DE PÊNALTI**" if scored else "❌ **Pênalti perdido**"
+        text = f"{dot} {head} · {player} {phrase} · {score}{late}"
     elif kind == "goal" and player:
         assist = f" · assistência de {event['detail']}" if event.get("detail") else ""
         late = " ⏱️" if event["minute"] >= 88 else ""
@@ -112,9 +120,7 @@ def _line(event: dict[str, Any], dots: dict[str, str]) -> str | None:
         text = f"{dot} 🟥 **{player} expulso** · time com um a menos"
     elif kind == "offside" and player:
         text = f"{dot} 🚩 Gol anulado · {player} impedido"
-    elif kind == "feat":
-        text = f"{dot} {event['text']}"
-    elif kind == "pressure":
+    elif kind in {"feat", "pressure", "tactic"}:
         text = f"{dot} {event['text']}"
     elif kind == "save" and player:
         keeper = event.get("detail")
@@ -319,6 +325,10 @@ def match_embed(
         best = _best_from_stats(stats, regular, dots) if stats else _best_player(regular)
         if best:
             embed.add_field(name="⭐ Melhor em campo", value=best, inline=False)
+        analysis = [match_commentary(events, home_name, away_name), *star_lines(regular)]
+        if any(analysis):
+            text = "\n".join(f"*{line}*" for line in analysis if line)
+            embed.add_field(name="🎙️ Análise", value=text[:1024], inline=False)
         if penalties:
             embed.set_footer(text=f"Decidido nos pênaltis: {penalties[0]} × {penalties[1]}")
         return embed
@@ -351,7 +361,7 @@ async def narrate(
     message = await send(match_embed(home_name, away_name, shown, title=title, **colors))
     for event in timeline[1:]:
         shown.append(event)
-        if event["kind"] in QUIET_EVENTS:
+        if event["kind"] in QUIET_EVENTS and not event.get("shot"):  # pênalti perdido aparece
             continue  # não aparece no ao vivo: não gasta uma edição
         await asyncio.sleep(pause * (2 if event["kind"] in SLOW_EVENTS else 1))
         try:

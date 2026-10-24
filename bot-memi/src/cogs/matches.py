@@ -547,7 +547,7 @@ class MatchesCog(commands.Cog):
             away["team_name"],
             list(team.players),
             home_style=home["style"],
-            away_style="balanced",
+            away_style=team.style,
             home_tactics=home,
             away_tactics=away,
             home_advantage=True,
@@ -695,7 +695,7 @@ class MatchesCog(commands.Cog):
             home_advantage=True,
         )
         timeline = list(result.events)
-        penalties = None
+        penalties, kicks = None, []
         if shootout(result):
             kicks = penalty_shootout_kicks(
                 home_players,
@@ -727,6 +727,7 @@ class MatchesCog(commands.Cog):
                 title=title,
                 venue=venue_name(home),
                 penalties=penalties,
+                kicks=kicks,
             )
         )
         for user_id in (home_id, away_id):
@@ -1057,6 +1058,7 @@ class MatchesCog(commands.Cog):
                 events.get("goals", []),
                 title="Final do campeonato",
                 penalties=penalties,
+                kicks=events.get("penalty_kicks") or (),
             )
         )
         if final.get("winner_user_id"):
