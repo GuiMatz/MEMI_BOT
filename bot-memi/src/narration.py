@@ -20,6 +20,7 @@ from typing import Any
 import discord
 
 from src.accents import LIVE, NEUTRAL, team_color
+from src.simulation import penalty_phrase
 
 # Segundos entre lances; gols e intervalo esperam o dobro. O Discord aceita
 # cerca de 5 edições a cada 5 segundos por canal, então não use menos que 1.
@@ -131,9 +132,10 @@ def _line(event: dict[str, Any], dots: dict[str, str]) -> str | None:
     elif kind == "card" and player:
         text = f"{dot} 🟨 {player} leva amarelo"
     elif kind == "penalty" and player:
-        mark = "✅" if event.get("scored", True) else "❌"
-        verb = "converte" if event.get("scored", True) else "perde"
-        text = f"{dot} {mark} {player} {verb} · {score}"
+        scored = event.get("scored", True)
+        mark = "✅" if scored else "❌"
+        phrase = penalty_phrase(scored, event.get("play"), event.get("detail"))
+        text = f"{dot} {mark} {player} {phrase} · {score}"
     else:
         # Lances gravados antes deste formato: usa a frase original.
         text = event["text"]

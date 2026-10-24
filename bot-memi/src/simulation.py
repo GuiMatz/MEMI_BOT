@@ -199,6 +199,18 @@ class PenaltyKick:
     scored: bool
     home_score: int
     away_score: int
+    play: str | None = None  # como foi: "angulo", "isolou", "milagre"... (veja PENALTY_PLAYS)
+    keeper_name: str | None = None
+
+
+# Como cada cobrança acontece, com o peso de cada jeito, seguindo estudos de pênaltis na
+# Champions/Liga Europa e na Dinamarca: ~1/4 dos gols vai no alto, a maioria rasteiro no
+# canto, poucos no meio e cavadinha é rara. Dos erros, ~3/4 são defesas; o resto sai, quase
+# sempre por cima (isolou), ou bate na trave.
+PENALTY_PLAYS = {
+    True: {"angulo": 22, "canto": 38, "deslocou": 24, "meio": 14, "cavadinha": 2},
+    False: {"defendeu": 60, "milagre": 14, "isolou": 12, "trave": 6, "fora": 8},
+}
 
 
 def _effective_overall(player: dict[str, Any]) -> int:
@@ -968,6 +980,10 @@ def penalty_shootout_kicks(
                     player for player in sorted_players if player["id"] != taker_id
                 ]
         kickers.append(sorted_players)
+    keepers = [
+        next((_name(p) for p in players if p.get("position") == "GOL"), None)
+        for players in (home_players, away_players)
+    ]
 
     def kick(side: int, kicker: dict[str, Any]) -> None:
         probability = home_probability if side == 0 else away_probability
@@ -977,9 +993,17 @@ def penalty_shootout_kicks(
         scored = generator.random() < probability
         if scored:
             scores[side] += 1
+        plays = PENALTY_PLAYS[scored]
+        play = generator.choices(list(plays), weights=list(plays.values()))[0]
         kicks.append(
             PenaltyKick(
-                "home" if side == 0 else "away", _name(kicker), scored, scores[0], scores[1]
+                "home" if side == 0 else "away",
+                _name(kicker),
+                scored,
+                scores[0],
+                scores[1],
+                play,
+                keepers[1 - side],
             )
         )
 
@@ -1016,6 +1040,25 @@ def penalty_shootout(
     return kicks[-1].home_score, kicks[-1].away_score
 
 
+def penalty_phrase(scored: bool, play: str | None, keeper: str | None = None) -> str:
+    """O que aconteceu na cobrança, para vir depois do nome de quem bateu."""
+    goalkeeper = keeper or "o goleiro"
+    phrases = {
+        "angulo": "acerta o ângulo 🎯",
+        "deslocou": "desloca o goleiro e converte",
+        "canto": "bate rasteiro no canto",
+        "meio": "enche o pé no meio do gol",
+        "cavadinha": "converte de cavadinha 😎",
+        "defendeu": f"para em {goalkeeper} 🧤",
+        "milagre": f"para em defesa inacreditável de {goalkeeper}! 🧤",
+        "isolou": "isola por cima do gol 🚀",
+        "trave": "carimba a trave 🥅",
+        "fora": "bate para fora",
+    }
+    # Cobranças gravadas antes de terem o "como foi".
+    return phrases.get(play or "", "converte" if scored else "perde a cobrança")
+
+
 def penalty_events(
     kicks: Sequence[PenaltyKick | dict[str, Any]],
     home_name: str,
@@ -1036,11 +1079,9 @@ def penalty_events(
     for kick in kicks:
         data = asdict(kick) if isinstance(kick, PenaltyKick) else kick
         team = home_name if data["side"] == "home" else away_name
-        text = (
-            f"✅ {data['kicker_name']} ({team}) converte!"
-            if data["scored"]
-            else f"❌ {data['kicker_name']} ({team}) perde a cobrança!"
-        )
+        phrase = penalty_phrase(data["scored"], data.get("play"), data.get("keeper_name"))
+        mark = "✅" if data["scored"] else "❌"
+        text = f"{mark} {data['kicker_name']} ({team}) {phrase}!"
         events.append(
             {
                 "minute": 90,
@@ -1049,6 +1090,8 @@ def penalty_events(
                 "side": data["side"],
                 "player": data["kicker_name"],
                 "scored": data["scored"],
+                "play": data.get("play"),
+                "detail": data.get("keeper_name"),
                 "home_goals": data["home_score"],
                 "away_goals": data["away_score"],
                 "text": f"{text} Pênaltis: {data['home_score']} × {data['away_score']}",
