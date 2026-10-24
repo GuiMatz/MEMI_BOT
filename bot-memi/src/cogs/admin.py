@@ -146,6 +146,166 @@ async def _play_final(send, home: tuple[str, int], away: tuple[str, int], rng, t
     return home[0] if result.home_goals > result.away_goals else away[0]
 
 
+# Painel do `mm!admin` -------------------------------------------------------------------------
+# Cada página: (rótulo do botão, emoji, cor, descrição, [(como usar, o que faz)]).
+ADMIN_PAGES: dict[str, tuple[str, str, int, str, list[tuple[str, str]]]] = {
+    "inicio": (
+        "Visão geral",
+        "🛠️",
+        0xC0392B,
+        "Comandos só para admins do bot: o dono, lurram e quem estiver em `MEMI_ADMIN_IDS`. "
+        "Os de campeonato também aceitam quem tem **Gerenciar servidor**.\n\n"
+        "Escolha uma categoria nos botões.",
+        [
+            ("👤 Contas", "Memilets, itens, jogadores, rolls e claim"),
+            ("🏆 Campeonato", "jogar, adiantar, pausar, horário, status, remover, cancelar"),
+            ("🤖 Bot", "status, backup, reiniciar e leitura do histórico"),
+            ("🧪 Testes", "partidas e campeonatos de mentira, imagens e duplicados"),
+        ],
+    ),
+    "contas": (
+        "Contas",
+        "👤",
+        0x2E86C1,
+        "Mexem direto no banco, sem as regras do jogo: para compensar alguém, premiar um "
+        "evento ou corrigir um erro.",
+        [
+            ("mm!admin dar @pessoa 5000", "Dá Memilets."),
+            ("mm!admin tirar @pessoa 5000", "Tira Memilets (o saldo não fica negativo)."),
+            (
+                "mm!admin item @pessoa caixa_epica 2",
+                "Dá itens: caixa, caixa_epica, pacote, pacote_epico. Número negativo tira.",
+            ),
+            (
+                "mm!admin jogador @pessoa <nome ou ID> [forçar]",
+                "Entrega um jogador livre. Com `forçar` no fim, tira de quem já tem (e do time "
+                "dele). Se o nome servir para mais de um, mostra os IDs.",
+            ),
+            (
+                "mm!admin resetar @pessoa rolls|claim|tudo",
+                "Devolve os rolls do ciclo e/ou libera o claim na hora.",
+            ),
+        ],
+    ),
+    "campeonato": (
+        "Campeonato",
+        "🏆",
+        0xE8B84A,
+        "Pintos Corridos e Copa IOS do servidor.",
+        [
+            ("mm!campeonato status", "Tudo o que decide se os jogos saem, numa mensagem só."),
+            ("mm!campeonato canal [#canal]", "Canal onde os jogos são narrados."),
+            ("mm!campeonato ativar", "Liga os jogos diários no servidor."),
+            ("mm!campeonato jogar", "Começa a edição (se estiver esperando) e joga o dia agora."),
+            (
+                "mm!campeonato adiantar",
+                "Joga já a próxima rodada (ou fase da Copa) e adianta o calendário um dia.",
+            ),
+            (
+                "mm!campeonato pausar · retomar",
+                "Para e volta os jogos; ao retomar, o calendário anda os dias parados.",
+            ),
+            ("mm!campeonato horario 21:00", "Horário dos jogos (Brasília; padrão 19h)."),
+            (
+                "mm!campeonato remover @pessoa",
+                "Tira um time da edição; os jogos que faltam dele viram W.O.",
+            ),
+            (
+                "mm!campeonato cancelar confirmar",
+                "Encerra a edição sem prêmios e abre a próxima.",
+            ),
+        ],
+    ),
+    "bot": (
+        "Bot",
+        "🤖",
+        0x5865F2,
+        "Manutenção do bot. Os da segunda parte são do bot principal (MeMi BOT).",
+        [
+            ("mm!admin status", "Versão (commit) rodando, tempo ligado, ping, banco e backup."),
+            ("mm!admin backup", "Cópia do banco do jogo agora (guarda as 10 últimas)."),
+            (
+                "mm!reiniciar",
+                "Fecha o bot com calma e abre de novo (também: reiniciar.bat ou o ícone).",
+            ),
+            ("mm!read [tudo | #canal]", "Lê o histórico dos canais (músicas e atividade)."),
+            ("mm!scan", "Leitura completa de todos os canais."),
+            ("mm!exportar", "Manda tudo o que o bot guardou em planilhas CSV."),
+            ("mm!give @pessoa TAG[, TAG...]", "Dá títulos (tags) de perfil."),
+            ("mm!mudaedump", "Exporta mensagens do Mudae em JSON (calibração)."),
+        ],
+    ),
+    "testes": (
+        "Testes",
+        "🧪",
+        0x8E44AD,
+        "Não mexem nos times de verdade.",
+        [
+            ("mm!testeamistoso", "Partida de teste narrada (empate vai aos pênaltis)."),
+            ("mm!testecampeonato <n>", "Campeonato de teste com n times e final narrada."),
+            ("mm!testeimagem", "A escalação em embed, anexo e Components V2."),
+            ("mm!admin duplicados", "Procura e remove jogadores duplicados (com confirmação)."),
+        ],
+    ),
+}
+
+
+def admin_page(key: str) -> discord.Embed:
+    label, emoji, color, description, rows = ADMIN_PAGES[key]
+    title = "🛠️ Admin do MEMI" if key == "inicio" else f"{emoji} Admin · {label}"
+    embed = discord.Embed(title=title, description=description, color=color)
+    for usage, detail in rows:
+        name = usage if key == "inicio" else f"`{usage}`"
+        embed.add_field(name=name, value=detail, inline=False)
+    embed.set_footer(text="Só admins do bot usam esses comandos.")
+    return embed
+
+
+class AdminPanel(discord.ui.View):
+    """Botões do `mm!admin`: cada um troca a página na mesma mensagem."""
+
+    def __init__(self, owner, page: str = "inicio"):
+        super().__init__(timeout=300)
+        self.owner = owner
+        self.message: discord.Message | None = None
+        for key, (label, emoji, *_rest) in ADMIN_PAGES.items():
+            button = discord.ui.Button(
+                label=label,
+                emoji=emoji,
+                style=discord.ButtonStyle.primary if key == page else discord.ButtonStyle.secondary,
+                custom_id=f"admin:{key}",
+            )
+            button.callback = self._switch(key)
+            self.add_item(button)
+
+    def _switch(self, page: str):
+        async def callback(interaction: discord.Interaction) -> None:
+            if interaction.user.id != self.owner.id:
+                await interaction.response.send_message(
+                    "Esse painel é de quem abriu.", ephemeral=True
+                )
+                return
+            for item in self.children:
+                if isinstance(item, discord.ui.Button):
+                    active = item.custom_id == f"admin:{page}"
+                    item.style = (
+                        discord.ButtonStyle.primary if active else discord.ButtonStyle.secondary
+                    )
+            await interaction.response.edit_message(embed=admin_page(page), view=self)
+
+        return callback
+
+    async def on_timeout(self) -> None:
+        if self.message is None:
+            return
+        for item in self.children:
+            item.disabled = True
+        try:
+            await self.message.edit(view=self)
+        except discord.HTTPException:
+            pass
+
+
 class ConfirmDedupeView(discord.ui.View):
     def __init__(self, owner_id: int, database_path):
         super().__init__(timeout=120)
@@ -189,27 +349,11 @@ class AdminCog(commands.Cog):
 
     @commands.group(name="admin", invoke_without_command=True, case_insensitive=True)
     async def admin(self, context: commands.Context) -> None:
-        embed = discord.Embed(
-            title="MEMI Admin",
-            description=(
-                "`mm!testeamistoso` — partida de teste narrada (empate vai aos pênaltis)\n"
-                "`mm!testecampeonato <n>` — campeonato de teste com final narrada\n"
-                "`mm!testeimagem` — a escalação em embed, anexo e Components V2\n"
-                "`mm!admin duplicados` — procura e remove jogadores duplicados\n\n"
-                "**Contas**\n"
-                "`mm!admin dar @pessoa 5000` · `mm!admin tirar @pessoa 5000` — Memilets\n"
-                "`mm!admin item @pessoa caixa_epica 2` — itens (número negativo tira)\n"
-                "`mm!admin jogador @pessoa <nome ou ID> [forçar]` — entrega um jogador\n"
-                "`mm!admin resetar @pessoa rolls|claim|tudo` — devolve rolls ou libera o claim\n\n"
-                "**Bot**\n"
-                "`mm!admin status` — versão, tempo ligado, ping, banco e último backup\n"
-                "`mm!admin backup` — cópia do banco agora\n\n"
-                "**Campeonato**: `mm!campeonato status · jogar · adiantar · pausar · retomar · "
-                "horario · remover · cancelar`"
-            ),
-            color=discord.Color.red(),
+        """Painel dos comandos de admin, com um botão por categoria."""
+        view = AdminPanel(context.author)
+        view.message = await context.reply(
+            embed=admin_page("inicio"), view=view, mention_author=False
         )
-        await context.reply(embed=embed, mention_author=False)
 
     @admin.command(name="testeamistoso")
     async def test_friendly(self, context: commands.Context) -> None:
